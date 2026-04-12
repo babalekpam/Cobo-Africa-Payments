@@ -12,6 +12,7 @@ import beneficiariesRouter from "./beneficiariesRoute";
 import notificationsRouter from "./notificationsRoute";
 import paymentLinksRouter from "./paymentLinksRoute";
 import kycRouter from "./kycRoute";
+import exportsRouter from "./exports";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(beneficiariesRouter);
 router.use(notificationsRouter);
 router.use(paymentLinksRouter);
 router.use(kycRouter);
+router.use(exportsRouter);
 
 export default router;

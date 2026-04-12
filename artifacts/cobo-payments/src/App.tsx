@@ -1,5 +1,6 @@
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { LangProvider } from "./i18n/translations";
 import { useEffect } from "react";
 import "./index.css";
 
@@ -17,14 +18,21 @@ import Notifications from "./pages/Notifications";
 import Developer from "./pages/Developer";
 import Admin from "./pages/Admin";
 import Settings from "./pages/Settings";
+import AuditLog from "./pages/AuditLog";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
+import Terms from "./pages/Terms";
+import Privacy from "./pages/Privacy";
 import NotFound from "./pages/not-found";
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const [location, setLocation] = useLocation();
 
+  const publicPaths = ["/login", "/register", "/forgot-password", "/reset-password", "/terms", "/privacy"];
+
   useEffect(() => {
-    if (!loading && !user && location !== "/login" && location !== "/register") {
+    if (!loading && !user && !publicPaths.some(p => location.startsWith(p))) {
       setLocation("/login");
     }
     if (!loading && user && (location === "/login" || location === "/register")) {
@@ -55,28 +63,35 @@ function IndexRedirect() {
 
 function AppRouter() {
   return (
-    <AuthProvider>
-      <AuthGuard>
-        <Switch>
-          <Route path="/" component={IndexRedirect} />
-          <Route path="/login" component={Login} />
-          <Route path="/register" component={Register} />
-          <Route path="/dashboard" component={Dashboard} />
-          <Route path="/wallets" component={Wallets} />
-          <Route path="/send" component={SendMoney} />
-          <Route path="/transactions" component={Transactions} />
-          <Route path="/exchange" component={Exchange} />
-          <Route path="/payment-links" component={PaymentLinks} />
-          <Route path="/beneficiaries" component={Beneficiaries} />
-          <Route path="/verification" component={Verification} />
-          <Route path="/notifications" component={Notifications} />
-          <Route path="/developer" component={Developer} />
-          <Route path="/admin" component={Admin} />
-          <Route path="/settings" component={Settings} />
-          <Route component={NotFound} />
-        </Switch>
-      </AuthGuard>
-    </AuthProvider>
+    <LangProvider>
+      <AuthProvider>
+        <AuthGuard>
+          <Switch>
+            <Route path="/" component={IndexRedirect} />
+            <Route path="/login" component={Login} />
+            <Route path="/register" component={Register} />
+            <Route path="/forgot-password" component={ForgotPassword} />
+            <Route path="/reset-password" component={ResetPassword} />
+            <Route path="/terms" component={Terms} />
+            <Route path="/privacy" component={Privacy} />
+            <Route path="/dashboard" component={Dashboard} />
+            <Route path="/wallets" component={Wallets} />
+            <Route path="/send" component={SendMoney} />
+            <Route path="/transactions" component={Transactions} />
+            <Route path="/exchange" component={Exchange} />
+            <Route path="/payment-links" component={PaymentLinks} />
+            <Route path="/beneficiaries" component={Beneficiaries} />
+            <Route path="/verification" component={Verification} />
+            <Route path="/notifications" component={Notifications} />
+            <Route path="/developer" component={Developer} />
+            <Route path="/admin" component={Admin} />
+            <Route path="/settings" component={Settings} />
+            <Route path="/activity-log" component={AuditLog} />
+            <Route component={NotFound} />
+          </Switch>
+        </AuthGuard>
+      </AuthProvider>
+    </LangProvider>
   );
 }
 

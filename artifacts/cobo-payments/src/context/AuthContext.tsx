@@ -31,7 +31,7 @@ interface AuthContextType {
   user: User | null;
   wallets: Wallet[];
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, totp_code?: string) => Promise<void>;
   register: (data: any) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
@@ -60,8 +60,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { loadUser(); }, []);
 
-  const login = async (email: string, password: string) => {
-    const { data } = await api.post("/auth/login", { email, password });
+  const login = async (email: string, password: string, totp_code?: string) => {
+    const { data } = await api.post("/auth/login", { email, password, totp_code });
+    if (data.requires_2fa) {
+      const err: any = new Error("2FA required");
+      err.response = { data };
+      throw err;
+    }
     localStorage.setItem("cobo_token", data.token);
     setUser(data.user);
     setWallets(data.wallets || []);

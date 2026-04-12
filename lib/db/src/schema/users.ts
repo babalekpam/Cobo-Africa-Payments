@@ -18,6 +18,10 @@ export const usersTable = pgTable("users", {
   kycStatus: text("kyc_status").default("pending"),
   kycLevel: text("kyc_level").default("0"),
   isActive: text("is_active").default("true"),
+  twoFaSecret: text("two_fa_secret"),
+  twoFaEnabled: text("two_fa_enabled").default("false"),
+  passwordResetToken: text("password_reset_token"),
+  passwordResetExpires: timestamp("password_reset_expires", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

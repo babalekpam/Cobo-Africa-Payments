@@ -21,6 +21,8 @@ Full-stack fintech wallet platform for managing payments, wallets, FX exchange, 
 - **Frontend**: React + Vite, custom CSS (no Tailwind/shadcn)
 - **Auth**: JWT (stored in localStorage as `cobo_token`)
 - **HTTP client**: custom api.ts fetch wrapper with auto-injected Bearer token
+- **2FA**: speakeasy (TOTP) + qrcode
+- **Email**: nodemailer (graceful no-op when SMTP not configured)
 
 ## Architecture
 
@@ -42,12 +44,12 @@ lib/
 
 ## Frontend Pages
 
-- `/login` — Login page with dark gold theme
+- `/login` — Login with "Forgot password?" link, Terms/Privacy links, 2FA code field
 - `/register` — Registration with first/last name, country, phone, business
 - `/dashboard` — Stats cards, wallet overview, recent transactions
 - `/wallets` — Multi-currency wallet management (add wallets, set default)
 - `/send` — Send money via bank transfer, mobile money, or internal COBO transfer
-- `/transactions` — Transaction history with status/type filters
+- `/transactions` — Transaction history with filters, Export CSV button, receipt buttons
 - `/exchange` — FX exchange with rate quotes and currency swap
 - `/payment-links` — Create and manage payment link pages
 - `/beneficiaries` — Saved recipients for quick transfers
@@ -55,24 +57,42 @@ lib/
 - `/notifications` — Notification center with read/unread management
 - `/developer` — API documentation and key management
 - `/admin` — Admin panel (admin role only) with user management
-- `/settings` — Profile editing and password change
+- `/settings` — Profile editing, password change, 2FA setup/disable (Security tab)
+- `/forgot-password` — Password reset request (public)
+- `/reset-password` — Set new password with token (public)
+- `/terms` — Terms of Service (public or with sidebar when logged in)
+- `/privacy` — Privacy Policy (public or with sidebar when logged in)
+- `/activity-log` — Audit log of user actions
+
+## i18n (Multi-language)
+
+- Languages: English (en), French (fr), Portuguese (pt), Arabic (ar), Swahili (sw)
+- LangProvider wraps app, language stored as `cobo_lang` in localStorage
+- LanguageSwitcher select in sidebar footer
+- All sidebar nav labels use `t()` translation function
 
 ## Backend API Routes
 
 All prefixed with `/api`:
-- `POST /api/auth/login` — Login, returns JWT + user + wallets
+- `POST /api/auth/login` — Login, returns JWT + user + wallets (supports `totp_code` for 2FA)
 - `POST /api/auth/register` — Register new user with wallets
 - `GET /api/auth/me` — Current user + wallets
 - `PUT /api/auth/profile` — Update profile
 - `POST /api/auth/change-password` — Change password
 - `GET /api/auth/dashboard` — Dashboard stats + recent transactions
+- `POST /api/auth/forgot-password` — Request password reset email
+- `POST /api/auth/reset-password` — Reset password with hashed token
+- `POST /api/auth/2fa/setup` — Generate 2FA secret + QR code
+- `POST /api/auth/2fa/verify` — Verify TOTP code and enable 2FA
+- `POST /api/auth/2fa/disable` — Disable 2FA (requires password)
+- `GET /api/auth/audit-log` — Get user's audit log entries
 - `GET /api/wallets` — List user wallets
 - `POST /api/wallets` — Create wallet
 - `PUT /api/wallets/:id/default` — Set default wallet
 - `POST /api/wallets/fund` — Fund wallet (sandbox)
-- `POST /api/transfers/bank` — Bank transfer
-- `POST /api/transfers/mobile` — Mobile money transfer
-- `POST /api/transfers/internal` — Internal COBO user transfer
+- `POST /api/transfers/bank` — Bank transfer (KYC daily limits enforced)
+- `POST /api/transfers/mobile` — Mobile money transfer (KYC daily limits enforced)
+- `POST /api/transfers/internal` — Internal COBO user transfer (KYC daily limits enforced)
 - `GET /api/exchange/rates` — FX rates
 - `POST /api/exchange/convert` — Get conversion quote
 - `POST /api/exchange/swap` — Execute currency swap
@@ -88,12 +108,31 @@ All prefixed with `/api`:
 - `GET /api/kyc/documents` — List KYC documents
 - `POST /api/kyc/submit` — Submit KYC document
 - `GET /api/transactions` — List transactions
+- `GET /api/exports/transactions.csv` — CSV export (auth via query token)
+- `GET /api/exports/transactions.json` — JSON export (auth via query token)
+- `GET /api/exports/receipt/:txId` — Printable receipt HTML (auth via query token)
+
+## Security Features
+
+- **2FA (TOTP)**: Setup via QR code, verify with authenticator app, disable with password
+- **Password reset**: Hashed tokens (SHA-256), 1-hour expiry
+- **KYC daily limits**: Level 0 = $100/day, Level 1 = $5,000/day, Level 2 = $50,000/day
+- **Audit logging**: All auth events, transfers, settings changes logged
+- **Export auth**: Separate `requireAuthOrQueryToken` middleware only for export endpoints
+- **HTML escaping**: All dynamic fields in receipt HTML are escaped to prevent XSS
 
 ## Database
 
-PostgreSQL with tables: `users`, `merchants`, `transactions`, `wallets`, `beneficiaries`, `notifications`, `payment_links`, `kyc_documents`
-- Users table extended with: firstName, lastName, businessName, businessType, kycStatus, kycLevel, isActive
+PostgreSQL with tables: `users`, `merchants`, `transactions`, `wallets`, `beneficiaries`, `notifications`, `payment_links`, `kyc_documents`, `audit_logs`
+- Users table extended with: firstName, lastName, businessName, businessType, kycStatus, kycLevel, isActive, twoFaSecret, twoFaEnabled, passwordResetToken, passwordResetExpires
+- Audit logs table: userId, action, ip, meta (jsonb), createdAt
 - Seeded with: admin user (Abel Nkawula) with 4 wallets (USD, NGN, XOF, GHS), merchants, and sample transactions
+
+## Email Service
+
+- Uses nodemailer, configured via SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS env vars
+- Graceful no-op: logs to console when no SMTP configured (SMTP_HOST required)
+- Sends: welcome emails, password reset links, password changed confirmations, transfer notifications
 
 ## Key Commands
 

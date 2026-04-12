@@ -7,6 +7,8 @@ export default function Login() {
   const [, setLocation] = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [totpCode, setTotpCode] = useState("");
+  const [needs2FA, setNeeds2FA] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -15,10 +17,16 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      await login(email, password);
+      await login(email, password, totpCode || undefined);
       setLocation("/dashboard");
     } catch (err: any) {
-      setError(err.response?.data?.message || "Login failed");
+      const data = err.response?.data;
+      if (data?.requires_2fa) {
+        setNeeds2FA(true);
+        setError("");
+      } else {
+        setError(data?.message || "Login failed");
+      }
     }
     setLoading(false);
   };
@@ -45,6 +53,21 @@ export default function Login() {
             <input className="input" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required />
           </div>
 
+          {needs2FA && (
+            <div className="input-group">
+              <label className="input-label">2FA Code</label>
+              <input className="input" type="text" inputMode="numeric" maxLength={6} value={totpCode}
+                onChange={e => setTotpCode(e.target.value.replace(/\D/g, ""))}
+                placeholder="Enter 6-digit code from your authenticator"
+                style={{ letterSpacing: 4, textAlign: "center", fontSize: 18 }}
+                autoFocus />
+            </div>
+          )}
+
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <a href="#" onClick={e => { e.preventDefault(); setLocation("/forgot-password"); }} style={{ color: "var(--gold)", fontSize: 13, textDecoration: "none", fontWeight: 500 }}>Forgot password?</a>
+          </div>
+
           <button type="submit" className="btn btn-primary btn-lg btn-full" disabled={loading}>
             {loading ? <span className="spinner" /> : "Sign In"}
           </button>
@@ -54,6 +77,12 @@ export default function Login() {
             <a href="#" onClick={e => { e.preventDefault(); setLocation("/register"); }} style={{ color: "var(--gold)", fontWeight: 600 }}>Register</a>
           </p>
         </form>
+
+        <div style={{ textAlign: "center", marginTop: 20, fontSize: 12, color: "var(--text-dim)" }}>
+          <a href="#" onClick={e => { e.preventDefault(); setLocation("/terms"); }} style={{ color: "var(--text-dim)", textDecoration: "none" }}>Terms of Service</a>
+          {" · "}
+          <a href="#" onClick={e => { e.preventDefault(); setLocation("/privacy"); }} style={{ color: "var(--text-dim)", textDecoration: "none" }}>Privacy Policy</a>
+        </div>
       </div>
     </div>
   );

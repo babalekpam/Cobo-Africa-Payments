@@ -1,20 +1,22 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "../context/AuthContext";
 import { useState, useEffect } from "react";
+import { LanguageSwitcher, useTranslation } from "../i18n/translations";
 import api from "../lib/api";
 
-const NAV = [
-  { path: "/dashboard", label: "Dashboard", icon: "📊" },
-  { path: "/wallets", label: "Wallets", icon: "💰" },
-  { path: "/send", label: "Send Money", icon: "💸" },
-  { path: "/transactions", label: "Transactions", icon: "📜" },
-  { path: "/exchange", label: "FX Exchange", icon: "💱" },
-  { path: "/payment-links", label: "Payment Links", icon: "🔗" },
-  { path: "/beneficiaries", label: "Beneficiaries", icon: "👥" },
-  { path: "/verification", label: "Verification", icon: "🛡️" },
-  { path: "/notifications", label: "Notifications", icon: "🔔" },
-  { path: "/developer", label: "Developer", icon: "⚙️" },
-  { path: "/settings", label: "Settings", icon: "🔧" },
+const NAV_KEYS = [
+  { path: "/dashboard", key: "dashboard", icon: "📊" },
+  { path: "/wallets", key: "wallets", icon: "💰" },
+  { path: "/send", key: "send_money", icon: "💸" },
+  { path: "/transactions", key: "transactions", icon: "📜" },
+  { path: "/exchange", key: "fx_exchange", icon: "💱" },
+  { path: "/payment-links", key: "payment_links", icon: "🔗" },
+  { path: "/beneficiaries", key: "beneficiaries", icon: "👥" },
+  { path: "/verification", key: "verification", icon: "🛡️" },
+  { path: "/notifications", key: "notifications", icon: "🔔" },
+  { path: "/developer", key: "developer", icon: "⚙️" },
+  { path: "/activity-log", key: "activity_log", icon: "📋" },
+  { path: "/settings", key: "settings", icon: "🔧" },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -22,6 +24,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [unread, setUnread] = useState(0);
+  const { t } = useTranslation();
 
   useEffect(() => {
     api.get("/notifications/unread-count").then(({ data }) => setUnread(data.count || 0)).catch(() => {});
@@ -29,9 +32,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const initials = user ? `${(user.first_name || "")[0] || ""}${(user.last_name || "")[0] || ""}`.toUpperCase() : "?";
   const usdWallet = wallets.find(w => w.currency === "USD");
+
   const allNav = user?.role === "admin"
-    ? [...NAV.slice(0, -1), { path: "/admin", label: "Admin Panel", icon: "🏛️" }, NAV[NAV.length - 1]]
-    : NAV;
+    ? [...NAV_KEYS.slice(0, -1), { path: "/admin", key: "admin_panel", icon: "🏛️" }, NAV_KEYS[NAV_KEYS.length - 1]]
+    : NAV_KEYS;
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
@@ -61,12 +65,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-            {user?.kyc_status === "verified" && <span className="badge badge-success" style={{ fontSize: 10 }}>✓ Verified</span>}
+            {user?.kyc_status === "verified" && <span className="badge badge-success" style={{ fontSize: 10 }}>✓ {t("verified")}</span>}
             {user?.role === "admin" && <span className="badge badge-warning" style={{ fontSize: 10 }}>Admin</span>}
           </div>
           {usdWallet && (
             <div style={{ marginTop: 12, padding: "10px 12px", background: "var(--sidebar-surface)", borderRadius: "var(--radius-sm)", border: "1px solid var(--sidebar-border)" }}>
-              <div style={{ fontSize: 11, color: "var(--sidebar-text-dim)", textTransform: "uppercase", letterSpacing: 0.5 }}>USD Balance</div>
+              <div style={{ fontSize: 11, color: "var(--sidebar-text-dim)", textTransform: "uppercase", letterSpacing: 0.5 }}>USD {t("balance")}</div>
               <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 20, color: "var(--gold-light)", marginTop: 2 }}>
                 ${usdWallet.balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}
               </div>
@@ -77,6 +81,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <nav style={{ flex: 1, padding: "8px", overflowY: "auto" }}>
           {allNav.map(item => {
             const active = location === item.path || location.startsWith(item.path + "/");
+            const label = t(item.key);
             return (
               <Link key={item.path} href={item.path}>
                 <div
@@ -92,8 +97,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--sidebar-text-dim)"; } }}
                 >
                   <span style={{ fontSize: 16, width: 22, textAlign: "center" }}>{item.icon}</span>
-                  <span>{item.label}</span>
-                  {item.label === "Notifications" && unread > 0 && (
+                  <span>{label}</span>
+                  {item.key === "notifications" && unread > 0 && (
                     <span style={{
                       marginLeft: "auto", background: "var(--red)", color: "#fff", fontSize: 10, fontWeight: 700,
                       padding: "1px 6px", borderRadius: 99, minWidth: 18, textAlign: "center",
@@ -105,9 +110,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div style={{ padding: "12px", borderTop: "1px solid var(--sidebar-border)" }}>
+        <div style={{ padding: "8px 12px", borderTop: "1px solid var(--sidebar-border)" }}>
+          <LanguageSwitcher style={{ width: "100%", background: "var(--sidebar-surface)", color: "var(--sidebar-text)", border: "1px solid var(--sidebar-border)", fontSize: 12, padding: "6px 8px" }} />
+        </div>
+
+        <div style={{ padding: "8px 12px 12px" }}>
           <button onClick={logout} className="btn" style={{ width: "100%", justifyContent: "flex-start", gap: 10, color: "#F55353", background: "rgba(245,83,83,0.08)", border: "none" }}>
-            🚪 Logout
+            🚪 {t("logout")}
           </button>
         </div>
       </aside>

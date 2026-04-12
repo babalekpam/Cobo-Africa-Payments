@@ -1,15 +1,44 @@
 import { Router, type IRouter } from "express";
-import { eq, and } from "drizzle-orm";
-import { db, walletsTable, transactionsTable, usersTable, notificationsTable } from "@workspace/db";
+import { eq, and, gte } from "drizzle-orm";
+import { db, walletsTable, transactionsTable, usersTable, notificationsTable, auditLogsTable } from "@workspace/db";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
+import { emailService } from "../services/email";
 
 const router: IRouter = Router();
 const FEE_RATE = 0.009;
 const MIN_FEE = 0.5;
+const KYC_LIMITS: Record<number, number> = { 0: 100, 1: 5000, 2: 50000 };
 
 function calcFee(amount: number, type: string) {
   if (type === "internal") return 0;
   return Math.max(amount * FEE_RATE, MIN_FEE);
+}
+
+async function checkDailyLimit(userId: number, kycLevel: number, amountUSD: number) {
+  const limit = KYC_LIMITS[kycLevel] || 100;
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const todayTxs = await db.select().from(transactionsTable).where(
+    and(
+      eq(transactionsTable.customerId, userId),
+      eq(transactionsTable.type, "send"),
+      gte(transactionsTable.createdAt, todayStart)
+    )
+  );
+  const sentToday = todayTxs.filter(t => t.status !== "failed").reduce((s, t) => s + Number(t.amount || 0), 0);
+
+  if (sentToday + amountUSD > limit) {
+    const remaining = Math.max(0, limit - sentToday);
+    return {
+      allowed: false,
+      message: `Daily limit: $${limit.toLocaleString()}. Sent today: $${sentToday.toLocaleString()}. Remaining: $${remaining.toLocaleString()}.${kycLevel < 2 ? " Complete KYC to increase your limit." : ""}`,
+      code: "LIMIT_EXCEEDED",
+      limit,
+      sent_today: sentToday,
+    };
+  }
+  return { allowed: true, limit, sent_today: sentToday };
 }
 
 async function getWallet(userId: number, walletId?: number, currency?: string) {
@@ -28,12 +57,33 @@ router.get("/transfers/fee", requireAuth, async (req: AuthenticatedRequest, res)
   const amount = parseFloat(String(req.query.amount)) || 0;
   const type = String(req.query.type || "bank");
   const fee = calcFee(amount, type);
-  res.json({ success: true, amount, fee, fee_percent: type === "internal" ? 0 : FEE_RATE * 100, total: amount + fee });
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id));
+  const kycLevel = Number(user?.kycLevel || 0);
+  const limit = KYC_LIMITS[kycLevel] || 100;
+
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayTxs = await db.select().from(transactionsTable).where(
+    and(eq(transactionsTable.customerId, req.user!.id), eq(transactionsTable.type, "send"), gte(transactionsTable.createdAt, todayStart))
+  );
+  const sentToday = todayTxs.filter(t => t.status !== "failed").reduce((s, t) => s + Number(t.amount || 0), 0);
+
+  res.json({
+    success: true, amount, fee, fee_percent: type === "internal" ? 0 : FEE_RATE * 100,
+    total: amount + fee, daily_limit: limit, today_sent: sentToday,
+    daily_remaining: Math.max(0, limit - sentToday), kyc_level: kycLevel,
+  });
 });
 
 router.post("/transfers/bank", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
   const { wallet_id, currency, amount, account_number, bank_name, account_name, description } = req.body;
   if (!amount || amount <= 0) { res.status(400).json({ success: false, message: "Invalid amount" }); return; }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id));
+  const kycLevel = Number(user?.kycLevel || 0);
+  const limitCheck = await checkDailyLimit(req.user!.id, kycLevel, Number(amount));
+  if (!limitCheck.allowed) { res.status(403).json({ success: false, ...limitCheck }); return; }
+
   const wallet = await getWallet(req.user!.id, wallet_id, currency);
   if (!wallet) { res.status(404).json({ success: false, message: "Wallet not found" }); return; }
   const fee = calcFee(Number(amount), "bank");
@@ -46,12 +96,23 @@ router.post("/transfers/bank", requireAuth, async (req: AuthenticatedRequest, re
     customerId: req.user!.id, description: description || `Bank transfer to ${account_name || bank_name}`,
     paymentMethod: "bank",
   });
+  await db.insert(notificationsTable).values({
+    userId: req.user!.id, title: "Transfer Sent", message: `${wallet.currency} ${Number(amount).toLocaleString()} sent to ${account_name || bank_name}`, type: "success",
+  });
+  await db.insert(auditLogsTable).values({ userId: req.user!.id, action: "transfer_bank", ip: req.ip || "unknown", meta: { amount, currency: wallet.currency, ref } });
+  emailService.sendTransferSentEmail(user, { amount: Number(amount), currency: wallet.currency, recipient: account_name || bank_name, reference: ref, fee }).catch(() => {});
   res.json({ success: true, message: "Transfer sent", reference: ref, fee, net_amount: Number(amount) });
 });
 
 router.post("/transfers/mobile", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
   const { wallet_id, currency, amount, phone, provider, recipient_name, description } = req.body;
   if (!amount || amount <= 0) { res.status(400).json({ success: false, message: "Invalid amount" }); return; }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id));
+  const kycLevel = Number(user?.kycLevel || 0);
+  const limitCheck = await checkDailyLimit(req.user!.id, kycLevel, Number(amount));
+  if (!limitCheck.allowed) { res.status(403).json({ success: false, ...limitCheck }); return; }
+
   const wallet = await getWallet(req.user!.id, wallet_id, currency);
   if (!wallet) { res.status(404).json({ success: false, message: "Wallet not found" }); return; }
   const fee = calcFee(Number(amount), "mobile");
@@ -64,6 +125,11 @@ router.post("/transfers/mobile", requireAuth, async (req: AuthenticatedRequest, 
     customerId: req.user!.id, description: description || `Mobile money to ${recipient_name || phone}`,
     paymentMethod: provider || "mobile_money",
   });
+  await db.insert(notificationsTable).values({
+    userId: req.user!.id, title: "Mobile Money Sent", message: `${wallet.currency} ${Number(amount).toLocaleString()} sent via ${provider} to ${phone}`, type: "success",
+  });
+  await db.insert(auditLogsTable).values({ userId: req.user!.id, action: "transfer_mobile_money", ip: req.ip || "unknown", meta: { amount, currency: wallet.currency, ref } });
+  emailService.sendTransferSentEmail(user, { amount: Number(amount), currency: wallet.currency, recipient: recipient_name || phone, reference: ref, fee }).catch(() => {});
   res.json({ success: true, message: "Transfer sent", reference: ref, fee });
 });
 
@@ -86,7 +152,12 @@ router.post("/transfers/internal", requireAuth, async (req: AuthenticatedRequest
   const desc = note || description || `Internal transfer to ${recipient.email}`;
   await db.insert(transactionsTable).values({ reference: ref, amount: String(amount), currency: senderWallet.currency, status: "completed", type: "send", customerId: req.user!.id, description: desc, paymentMethod: "internal" });
   await db.insert(transactionsTable).values({ reference: ref + "-R", amount: String(amount), currency: senderWallet.currency, status: "completed", type: "deposit", customerId: recipient.id, description: `Internal transfer from ${req.user!.email}`, paymentMethod: "internal" });
-  await db.insert(notificationsTable).values({ userId: recipient.id, title: "Money Received! 💰", message: `${senderWallet.currency} ${amount} received`, type: "success" });
+  await db.insert(notificationsTable).values({ userId: recipient.id, title: "Money Received!", message: `${senderWallet.currency} ${amount} received`, type: "success" });
+  const [senderUser] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id));
+  const sName = `${senderUser.firstName} ${senderUser.lastName}`;
+  const rName = `${recipient.firstName} ${recipient.lastName}`;
+  emailService.sendTransferSentEmail(senderUser, { amount: Number(amount), currency: senderWallet.currency, recipient: rName, reference: ref, fee: 0 }).catch(() => {});
+  emailService.sendTransferReceivedEmail(recipient, { amount: Number(amount), currency: senderWallet.currency, sender: sName, reference: ref }).catch(() => {});
   res.json({ success: true, message: "Transfer sent (free)", reference: ref });
 });
 

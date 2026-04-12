@@ -17,12 +17,30 @@ export default function Transactions() {
     }).catch(() => {}).finally(() => setLoading(false));
   }, [filter]);
 
+  const exportCSV = () => {
+    const token = localStorage.getItem("cobo_token");
+    const params = new URLSearchParams();
+    if (filter.status) params.set("status", filter.status);
+    if (filter.type) params.set("type", filter.type);
+    window.open(`/api/exports/transactions.csv?${params}&token=${token}`, "_blank");
+  };
+
+  const viewReceipt = (txId: number) => {
+    const token = localStorage.getItem("cobo_token");
+    window.open(`/api/exports/receipt/${txId}?token=${token}`, "_blank");
+  };
+
   return (
     <Layout>
       <div className="page fade-in">
-        <div className="page-header">
-          <h1 className="page-title">Transactions</h1>
-          <p className="page-subtitle">View all your transaction history</p>
+        <div className="page-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
+          <div>
+            <h1 className="page-title">Transactions</h1>
+            <p className="page-subtitle">View all your transaction history</p>
+          </div>
+          <button className="btn btn-ghost" onClick={exportCSV} style={{ gap: 6 }}>
+            📥 Export CSV
+          </button>
         </div>
 
         <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
@@ -49,7 +67,7 @@ export default function Transactions() {
           ) : (
             <div className="table-wrap">
               <table>
-                <thead><tr><th>Reference</th><th>Type</th><th>Amount</th><th>Status</th><th>Method</th><th>Date</th></tr></thead>
+                <thead><tr><th>Reference</th><th>Type</th><th>Amount</th><th>Status</th><th>Method</th><th>Date</th><th></th></tr></thead>
                 <tbody>
                   {txs.map((tx: any) => (
                     <tr key={tx.id}>
@@ -59,6 +77,11 @@ export default function Transactions() {
                       <td><span className={`badge ${tx.status === "completed" || tx.status === "success" ? "badge-success" : tx.status === "failed" ? "badge-error" : "badge-warning"}`}>{tx.status}</span></td>
                       <td style={{ color: "var(--text-dim)" }}>{tx.paymentMethod || "—"}</td>
                       <td style={{ color: "var(--text-dim)", fontSize: 13 }}>{new Date(tx.createdAt).toLocaleDateString()}</td>
+                      <td>
+                        <button className="btn btn-ghost btn-sm" onClick={() => viewReceipt(tx.id)} title="View Receipt" style={{ padding: "4px 8px", fontSize: 12 }}>
+                          🧾
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

@@ -6,3 +6,4 @@ export * from "./beneficiaries";
 export * from "./notifications";
 export * from "./paymentLinks";
 export * from "./kycDocuments";
+export * from "./auditLogs";
