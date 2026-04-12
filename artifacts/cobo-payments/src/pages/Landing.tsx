@@ -62,17 +62,8 @@ export default function Landing() {
         padding: "0 40px",
       }}>
         <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", height: 72 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{
-              width: 40, height: 40, borderRadius: 12,
-              background: "linear-gradient(135deg, #0F2B4C, #143A5C)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              color: "#E8A940", fontFamily: "var(--font-heading)", fontWeight: 800, fontSize: 16,
-              boxShadow: "0 2px 8px rgba(15,43,76,0.3)",
-            }}>C</div>
-            <span style={{ fontFamily: "var(--font-heading)", fontWeight: 800, fontSize: 22, color: "#0F2B4C", letterSpacing: "-0.03em" }}>
-              COBO<span style={{ color: "#C98A1A" }}> Africa</span>
-            </span>
+          <div style={{ display: "flex", alignItems: "center" }}>
+            <img src={`${import.meta.env.BASE_URL}cobo-brand-logo.png`} alt="COBO Africa Payments" style={{ height: 52, borderRadius: 8 }} />
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <button onClick={() => setLocation("/login")} className="btn btn-ghost" style={{ fontSize: 14, fontWeight: 500 }}>Sign In</button>
@@ -286,15 +277,7 @@ export default function Landing() {
           <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 40, marginBottom: 48 }}>
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-                <div style={{
-                  width: 36, height: 36, borderRadius: 10,
-                  background: "linear-gradient(135deg, #143A5C, #1A4A6E)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  color: "#E8A940", fontFamily: "var(--font-heading)", fontWeight: 800, fontSize: 14,
-                }}>C</div>
-                <span style={{ fontFamily: "var(--font-heading)", fontWeight: 800, fontSize: 18, color: "#FFFFFF" }}>
-                  COBO Africa
-                </span>
+                <img src={`${import.meta.env.BASE_URL}cobo-brand-logo.png`} alt="COBO Africa Payments" style={{ height: 40, borderRadius: 8 }} />
               </div>
               <p style={{ fontSize: 14, lineHeight: 1.7, maxWidth: 280 }}>
                 Pan-African payments infrastructure connecting businesses and people across the continent.

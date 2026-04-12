@@ -35,7 +35,7 @@ export default function Login() {
     <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div className="fade-in" style={{ width: "100%", maxWidth: 420 }}>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <img src={`${import.meta.env.BASE_URL}cobo-logo.png`} alt="COBO Africa" style={{ height: 48, borderRadius: 8, margin: "0 auto 16px" }} />
+          <img src={`${import.meta.env.BASE_URL}cobo-brand-logo.png`} alt="COBO Africa Payments" style={{ height: 48, borderRadius: 8, margin: "0 auto 16px" }} />
           <h1 style={{ fontFamily: "var(--font-heading)", fontSize: 28, fontWeight: 700, color: "var(--text)" }}>Welcome Back</h1>
           <p style={{ color: "var(--text-dim)", fontSize: 14, marginTop: 4 }}>Sign in to your COBO account</p>
         </div>
