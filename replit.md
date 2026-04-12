@@ -49,7 +49,7 @@ lib/
 - `/register` — Registration with first/last name, country, phone, business
 - `/dashboard` — Stats cards (clickable), wallet breakdown bar chart, monthly transaction activity chart, quick-action buttons (Send/Deposit/Exchange/Payment Link), recent transactions (clickable rows → detail)
 - `/wallets` — Multi-currency wallet management (add wallets, set default)
-- `/send` — Send money with multi-currency support, 53 African countries, FX conversion, country-specific mobile money providers
+- `/send` — Send money globally: US, Canada, 16 European countries, and 53 African countries with FX conversion, bank transfers, mobile money
 - `/deposit` — Deposit/receive money with 3 methods: Bank Transfer (account details), Card Top-Up (form), Mobile Money (collection number); wallet selector; sandbox fund endpoint
 - `/transactions` — Transaction history with filters, Export CSV button, receipt buttons, clickable rows → detail page
 - `/transactions/:id` — Full transaction detail view with reference, amount, status badge, copy reference, view receipt buttons

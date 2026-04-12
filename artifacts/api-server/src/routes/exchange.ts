@@ -15,7 +15,8 @@ const RATES: Record<string, Record<string, number>> = {
     SCR: 14.2, MUR: 45.5, MGA: 4520, KMF: 460, DJF: 177.7,
     ERN: 15, SOS: 571, SSP: 1320, BIF: 2870, LSL: 18.9, SZL: 18.9, NAD: 18.9,
     LRD: 192, MRU: 39.7,
-    EUR: 0.92, GBP: 0.79,
+    EUR: 0.92, GBP: 0.79, CAD: 1.36, CHF: 0.88, SEK: 10.85, NOK: 10.65,
+    DKK: 6.88, PLN: 4.02, CZK: 23.2,
   },
 };
 function getRate(from: string, to: string): number | null {

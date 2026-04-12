@@ -5,60 +5,78 @@ import api from "../lib/api";
 
 type Tab = "bank" | "mobile" | "internal";
 
-const AFRICAN_COUNTRIES = [
-  { code: "NG", name: "Nigeria", currency: "NGN", flag: "🇳🇬", dialCode: "+234" },
-  { code: "GH", name: "Ghana", currency: "GHS", flag: "🇬🇭", dialCode: "+233" },
-  { code: "KE", name: "Kenya", currency: "KES", flag: "🇰🇪", dialCode: "+254" },
-  { code: "ZA", name: "South Africa", currency: "ZAR", flag: "🇿🇦", dialCode: "+27" },
-  { code: "TZ", name: "Tanzania", currency: "TZS", flag: "🇹🇿", dialCode: "+255" },
-  { code: "UG", name: "Uganda", currency: "UGX", flag: "🇺🇬", dialCode: "+256" },
-  { code: "SN", name: "Senegal", currency: "XOF", flag: "🇸🇳", dialCode: "+221" },
-  { code: "CI", name: "Côte d'Ivoire", currency: "XOF", flag: "🇨🇮", dialCode: "+225" },
-  { code: "CM", name: "Cameroon", currency: "XAF", flag: "🇨🇲", dialCode: "+237" },
-  { code: "RW", name: "Rwanda", currency: "RWF", flag: "🇷🇼", dialCode: "+250" },
-  { code: "ET", name: "Ethiopia", currency: "ETB", flag: "🇪🇹", dialCode: "+251" },
-  { code: "EG", name: "Egypt", currency: "EGP", flag: "🇪🇬", dialCode: "+20" },
-  { code: "MA", name: "Morocco", currency: "MAD", flag: "🇲🇦", dialCode: "+212" },
-  { code: "TN", name: "Tunisia", currency: "TND", flag: "🇹🇳", dialCode: "+216" },
-  { code: "DZ", name: "Algeria", currency: "DZD", flag: "🇩🇿", dialCode: "+213" },
-  { code: "CD", name: "DR Congo", currency: "CDF", flag: "🇨🇩", dialCode: "+243" },
-  { code: "AO", name: "Angola", currency: "AOA", flag: "🇦🇴", dialCode: "+244" },
-  { code: "MZ", name: "Mozambique", currency: "MZN", flag: "🇲🇿", dialCode: "+258" },
-  { code: "ZM", name: "Zambia", currency: "ZMW", flag: "🇿🇲", dialCode: "+260" },
-  { code: "MW", name: "Malawi", currency: "MWK", flag: "🇲🇼", dialCode: "+265" },
-  { code: "BW", name: "Botswana", currency: "BWP", flag: "🇧🇼", dialCode: "+267" },
-  { code: "GM", name: "Gambia", currency: "GMD", flag: "🇬🇲", dialCode: "+220" },
-  { code: "SL", name: "Sierra Leone", currency: "SLL", flag: "🇸🇱", dialCode: "+232" },
-  { code: "GN", name: "Guinea", currency: "GNF", flag: "🇬🇳", dialCode: "+224" },
-  { code: "ML", name: "Mali", currency: "XOF", flag: "🇲🇱", dialCode: "+223" },
-  { code: "BF", name: "Burkina Faso", currency: "XOF", flag: "🇧🇫", dialCode: "+226" },
-  { code: "NE", name: "Niger", currency: "XOF", flag: "🇳🇪", dialCode: "+227" },
-  { code: "TG", name: "Togo", currency: "XOF", flag: "🇹🇬", dialCode: "+228" },
-  { code: "BJ", name: "Benin", currency: "XOF", flag: "🇧🇯", dialCode: "+229" },
-  { code: "GW", name: "Guinea-Bissau", currency: "XOF", flag: "🇬🇼", dialCode: "+245" },
-  { code: "GA", name: "Gabon", currency: "XAF", flag: "🇬🇦", dialCode: "+241" },
-  { code: "TD", name: "Chad", currency: "XAF", flag: "🇹🇩", dialCode: "+235" },
-  { code: "CG", name: "Congo", currency: "XAF", flag: "🇨🇬", dialCode: "+242" },
-  { code: "CF", name: "Central African Republic", currency: "XAF", flag: "🇨🇫", dialCode: "+236" },
-  { code: "GQ", name: "Equatorial Guinea", currency: "XAF", flag: "🇬🇶", dialCode: "+240" },
-  { code: "MG", name: "Madagascar", currency: "MGA", flag: "🇲🇬", dialCode: "+261" },
-  { code: "MU", name: "Mauritius", currency: "MUR", flag: "🇲🇺", dialCode: "+230" },
-  { code: "SC", name: "Seychelles", currency: "SCR", flag: "🇸🇨", dialCode: "+248" },
-  { code: "DJ", name: "Djibouti", currency: "DJF", flag: "🇩🇯", dialCode: "+253" },
-  { code: "SO", name: "Somalia", currency: "SOS", flag: "🇸🇴", dialCode: "+252" },
-  { code: "SD", name: "Sudan", currency: "SDG", flag: "🇸🇩", dialCode: "+249" },
-  { code: "SS", name: "South Sudan", currency: "SSP", flag: "🇸🇸", dialCode: "+211" },
-  { code: "ER", name: "Eritrea", currency: "ERN", flag: "🇪🇷", dialCode: "+291" },
-  { code: "BI", name: "Burundi", currency: "BIF", flag: "🇧🇮", dialCode: "+257" },
-  { code: "LS", name: "Lesotho", currency: "LSL", flag: "🇱🇸", dialCode: "+266" },
-  { code: "SZ", name: "Eswatini", currency: "SZL", flag: "🇸🇿", dialCode: "+268" },
-  { code: "NA", name: "Namibia", currency: "NAD", flag: "🇳🇦", dialCode: "+264" },
-  { code: "LR", name: "Liberia", currency: "LRD", flag: "🇱🇷", dialCode: "+231" },
-  { code: "MR", name: "Mauritania", currency: "MRU", flag: "🇲🇷", dialCode: "+222" },
-  { code: "LY", name: "Libya", currency: "LYD", flag: "🇱🇾", dialCode: "+218" },
-  { code: "CV", name: "Cape Verde", currency: "CVE", flag: "🇨🇻", dialCode: "+238" },
-  { code: "ST", name: "São Tomé", currency: "STN", flag: "🇸🇹", dialCode: "+239" },
-  { code: "KM", name: "Comoros", currency: "KMF", flag: "🇰🇲", dialCode: "+269" },
+const ALL_COUNTRIES = [
+  { code: "US", name: "United States", currency: "USD", flag: "🇺🇸", dialCode: "+1", region: "americas" },
+  { code: "CA", name: "Canada", currency: "CAD", flag: "🇨🇦", dialCode: "+1", region: "americas" },
+  { code: "GB", name: "United Kingdom", currency: "GBP", flag: "🇬🇧", dialCode: "+44", region: "europe" },
+  { code: "FR", name: "France", currency: "EUR", flag: "🇫🇷", dialCode: "+33", region: "europe" },
+  { code: "DE", name: "Germany", currency: "EUR", flag: "🇩🇪", dialCode: "+49", region: "europe" },
+  { code: "NL", name: "Netherlands", currency: "EUR", flag: "🇳🇱", dialCode: "+31", region: "europe" },
+  { code: "BE", name: "Belgium", currency: "EUR", flag: "🇧🇪", dialCode: "+32", region: "europe" },
+  { code: "IT", name: "Italy", currency: "EUR", flag: "🇮🇹", dialCode: "+39", region: "europe" },
+  { code: "ES", name: "Spain", currency: "EUR", flag: "🇪🇸", dialCode: "+34", region: "europe" },
+  { code: "PT", name: "Portugal", currency: "EUR", flag: "🇵🇹", dialCode: "+351", region: "europe" },
+  { code: "CH", name: "Switzerland", currency: "CHF", flag: "🇨🇭", dialCode: "+41", region: "europe" },
+  { code: "SE", name: "Sweden", currency: "SEK", flag: "🇸🇪", dialCode: "+46", region: "europe" },
+  { code: "NO", name: "Norway", currency: "NOK", flag: "🇳🇴", dialCode: "+47", region: "europe" },
+  { code: "DK", name: "Denmark", currency: "DKK", flag: "🇩🇰", dialCode: "+45", region: "europe" },
+  { code: "IE", name: "Ireland", currency: "EUR", flag: "🇮🇪", dialCode: "+353", region: "europe" },
+  { code: "AT", name: "Austria", currency: "EUR", flag: "🇦🇹", dialCode: "+43", region: "europe" },
+  { code: "PL", name: "Poland", currency: "PLN", flag: "🇵🇱", dialCode: "+48", region: "europe" },
+  { code: "CZ", name: "Czech Republic", currency: "CZK", flag: "🇨🇿", dialCode: "+420", region: "europe" },
+  { code: "NG", name: "Nigeria", currency: "NGN", flag: "🇳🇬", dialCode: "+234", region: "africa" },
+  { code: "GH", name: "Ghana", currency: "GHS", flag: "🇬🇭", dialCode: "+233", region: "africa" },
+  { code: "KE", name: "Kenya", currency: "KES", flag: "🇰🇪", dialCode: "+254", region: "africa" },
+  { code: "ZA", name: "South Africa", currency: "ZAR", flag: "🇿🇦", dialCode: "+27", region: "africa" },
+  { code: "TZ", name: "Tanzania", currency: "TZS", flag: "🇹🇿", dialCode: "+255", region: "africa" },
+  { code: "UG", name: "Uganda", currency: "UGX", flag: "🇺🇬", dialCode: "+256", region: "africa" },
+  { code: "SN", name: "Senegal", currency: "XOF", flag: "🇸🇳", dialCode: "+221", region: "africa" },
+  { code: "CI", name: "Côte d'Ivoire", currency: "XOF", flag: "🇨🇮", dialCode: "+225", region: "africa" },
+  { code: "CM", name: "Cameroon", currency: "XAF", flag: "🇨🇲", dialCode: "+237", region: "africa" },
+  { code: "RW", name: "Rwanda", currency: "RWF", flag: "🇷🇼", dialCode: "+250", region: "africa" },
+  { code: "ET", name: "Ethiopia", currency: "ETB", flag: "🇪🇹", dialCode: "+251", region: "africa" },
+  { code: "EG", name: "Egypt", currency: "EGP", flag: "🇪🇬", dialCode: "+20", region: "africa" },
+  { code: "MA", name: "Morocco", currency: "MAD", flag: "🇲🇦", dialCode: "+212", region: "africa" },
+  { code: "TN", name: "Tunisia", currency: "TND", flag: "🇹🇳", dialCode: "+216", region: "africa" },
+  { code: "DZ", name: "Algeria", currency: "DZD", flag: "🇩🇿", dialCode: "+213", region: "africa" },
+  { code: "CD", name: "DR Congo", currency: "CDF", flag: "🇨🇩", dialCode: "+243", region: "africa" },
+  { code: "AO", name: "Angola", currency: "AOA", flag: "🇦🇴", dialCode: "+244", region: "africa" },
+  { code: "MZ", name: "Mozambique", currency: "MZN", flag: "🇲🇿", dialCode: "+258", region: "africa" },
+  { code: "ZM", name: "Zambia", currency: "ZMW", flag: "🇿🇲", dialCode: "+260", region: "africa" },
+  { code: "MW", name: "Malawi", currency: "MWK", flag: "🇲🇼", dialCode: "+265", region: "africa" },
+  { code: "BW", name: "Botswana", currency: "BWP", flag: "🇧🇼", dialCode: "+267", region: "africa" },
+  { code: "GM", name: "Gambia", currency: "GMD", flag: "🇬🇲", dialCode: "+220", region: "africa" },
+  { code: "SL", name: "Sierra Leone", currency: "SLL", flag: "🇸🇱", dialCode: "+232", region: "africa" },
+  { code: "GN", name: "Guinea", currency: "GNF", flag: "🇬🇳", dialCode: "+224", region: "africa" },
+  { code: "ML", name: "Mali", currency: "XOF", flag: "🇲🇱", dialCode: "+223", region: "africa" },
+  { code: "BF", name: "Burkina Faso", currency: "XOF", flag: "🇧🇫", dialCode: "+226", region: "africa" },
+  { code: "NE", name: "Niger", currency: "XOF", flag: "🇳🇪", dialCode: "+227", region: "africa" },
+  { code: "TG", name: "Togo", currency: "XOF", flag: "🇹🇬", dialCode: "+228", region: "africa" },
+  { code: "BJ", name: "Benin", currency: "XOF", flag: "🇧🇯", dialCode: "+229", region: "africa" },
+  { code: "GW", name: "Guinea-Bissau", currency: "XOF", flag: "🇬🇼", dialCode: "+245", region: "africa" },
+  { code: "GA", name: "Gabon", currency: "XAF", flag: "🇬🇦", dialCode: "+241", region: "africa" },
+  { code: "TD", name: "Chad", currency: "XAF", flag: "🇹🇩", dialCode: "+235", region: "africa" },
+  { code: "CG", name: "Congo", currency: "XAF", flag: "🇨🇬", dialCode: "+242", region: "africa" },
+  { code: "CF", name: "Central African Republic", currency: "XAF", flag: "🇨🇫", dialCode: "+236", region: "africa" },
+  { code: "GQ", name: "Equatorial Guinea", currency: "XAF", flag: "🇬🇶", dialCode: "+240", region: "africa" },
+  { code: "MG", name: "Madagascar", currency: "MGA", flag: "🇲🇬", dialCode: "+261", region: "africa" },
+  { code: "MU", name: "Mauritius", currency: "MUR", flag: "🇲🇺", dialCode: "+230", region: "africa" },
+  { code: "SC", name: "Seychelles", currency: "SCR", flag: "🇸🇨", dialCode: "+248", region: "africa" },
+  { code: "DJ", name: "Djibouti", currency: "DJF", flag: "🇩🇯", dialCode: "+253", region: "africa" },
+  { code: "SO", name: "Somalia", currency: "SOS", flag: "🇸🇴", dialCode: "+252", region: "africa" },
+  { code: "SD", name: "Sudan", currency: "SDG", flag: "🇸🇩", dialCode: "+249", region: "africa" },
+  { code: "SS", name: "South Sudan", currency: "SSP", flag: "🇸🇸", dialCode: "+211", region: "africa" },
+  { code: "ER", name: "Eritrea", currency: "ERN", flag: "🇪🇷", dialCode: "+291", region: "africa" },
+  { code: "BI", name: "Burundi", currency: "BIF", flag: "🇧🇮", dialCode: "+257", region: "africa" },
+  { code: "LS", name: "Lesotho", currency: "LSL", flag: "🇱🇸", dialCode: "+266", region: "africa" },
+  { code: "SZ", name: "Eswatini", currency: "SZL", flag: "🇸🇿", dialCode: "+268", region: "africa" },
+  { code: "NA", name: "Namibia", currency: "NAD", flag: "🇳🇦", dialCode: "+264", region: "africa" },
+  { code: "LR", name: "Liberia", currency: "LRD", flag: "🇱🇷", dialCode: "+231", region: "africa" },
+  { code: "MR", name: "Mauritania", currency: "MRU", flag: "🇲🇷", dialCode: "+222", region: "africa" },
+  { code: "LY", name: "Libya", currency: "LYD", flag: "🇱🇾", dialCode: "+218", region: "africa" },
+  { code: "CV", name: "Cape Verde", currency: "CVE", flag: "🇨🇻", dialCode: "+238", region: "africa" },
+  { code: "ST", name: "São Tomé", currency: "STN", flag: "🇸🇹", dialCode: "+239", region: "africa" },
+  { code: "KM", name: "Comoros", currency: "KMF", flag: "🇰🇲", dialCode: "+269", region: "africa" },
 ];
 
 const MOBILE_PROVIDERS: Record<string, { name: string; logo: string }[]> = {
@@ -117,10 +135,19 @@ const MOBILE_PROVIDERS: Record<string, { name: string; logo: string }[]> = {
   SC: [{ name: "Airtel Money", logo: "📱" }, { name: "MCB Mobile", logo: "📱" }],
 };
 
+const DEFAULT_PROVIDERS = [{ name: "Bank Transfer", logo: "🏦" }];
+
 const ALL_CURRENCIES = [
   { code: "USD", name: "US Dollar", symbol: "$" },
   { code: "EUR", name: "Euro", symbol: "€" },
   { code: "GBP", name: "British Pound", symbol: "£" },
+  { code: "CAD", name: "Canadian Dollar", symbol: "C$" },
+  { code: "CHF", name: "Swiss Franc", symbol: "CHF" },
+  { code: "SEK", name: "Swedish Krona", symbol: "kr" },
+  { code: "NOK", name: "Norwegian Krone", symbol: "kr" },
+  { code: "DKK", name: "Danish Krone", symbol: "kr" },
+  { code: "PLN", name: "Polish Zloty", symbol: "zł" },
+  { code: "CZK", name: "Czech Koruna", symbol: "Kč" },
   { code: "NGN", name: "Nigerian Naira", symbol: "₦" },
   { code: "GHS", name: "Ghanaian Cedi", symbol: "GH₵" },
   { code: "KES", name: "Kenyan Shilling", symbol: "KSh" },
@@ -168,6 +195,13 @@ const CURRENCY_INFO: Record<string, { flag: string; name: string; symbol: string
   USD: { flag: "🇺🇸", name: "US Dollar", symbol: "$" },
   EUR: { flag: "🇪🇺", name: "Euro", symbol: "€" },
   GBP: { flag: "🇬🇧", name: "British Pound", symbol: "£" },
+  CAD: { flag: "🇨🇦", name: "Canadian Dollar", symbol: "C$" },
+  CHF: { flag: "🇨🇭", name: "Swiss Franc", symbol: "CHF" },
+  SEK: { flag: "🇸🇪", name: "Swedish Krona", symbol: "kr" },
+  NOK: { flag: "🇳🇴", name: "Norwegian Krone", symbol: "kr" },
+  DKK: { flag: "🇩🇰", name: "Danish Krone", symbol: "kr" },
+  PLN: { flag: "🇵🇱", name: "Polish Zloty", symbol: "zł" },
+  CZK: { flag: "🇨🇿", name: "Czech Koruna", symbol: "Kč" },
   NGN: { flag: "🇳🇬", name: "Nigerian Naira", symbol: "₦" },
   GHS: { flag: "🇬🇭", name: "Ghanaian Cedi", symbol: "GH₵" },
   KES: { flag: "🇰🇪", name: "Kenyan Shilling", symbol: "KSh" },
@@ -241,7 +275,7 @@ export default function SendMoney() {
   }, [wallets]);
 
   useEffect(() => {
-    const country = AFRICAN_COUNTRIES.find(c => c.code === form.recipientCountry);
+    const country = ALL_COUNTRIES.find(c => c.code === form.recipientCountry);
     if (country) {
       setForm((p: any) => ({ ...p, recipientCurrency: country.currency }));
       const providers = MOBILE_PROVIDERS[country.code] || DEFAULT_PROVIDERS;
@@ -299,7 +333,7 @@ export default function SendMoney() {
   const set = (k: string, v: string) => setForm((p: any) => ({ ...p, [k]: v }));
   const selectedWallet = wallets.find(w => w.id === Number(form.walletId));
   const fee = tab === "internal" ? 0 : Math.max(0.5, Number(form.amount || 0) * 0.009);
-  const selectedCountry = AFRICAN_COUNTRIES.find(c => c.code === form.recipientCountry);
+  const selectedCountry = ALL_COUNTRIES.find(c => c.code === form.recipientCountry);
   const providers = MOBILE_PROVIDERS[form.recipientCountry] || DEFAULT_PROVIDERS;
   const isCrossCurrency = form.senderCurrency !== form.recipientCurrency && tab !== "internal";
 
@@ -350,7 +384,7 @@ export default function SendMoney() {
       <div className="page fade-in">
         <div className="page-header">
           <h1 className="page-title">Send Money</h1>
-          <p className="page-subtitle">Transfer funds to any currency and wallet across Africa</p>
+          <p className="page-subtitle">Transfer funds worldwide — send from the US, Europe, or across Africa</p>
         </div>
 
         <div style={{ display: "flex", gap: 10, marginBottom: 24, flexWrap: "wrap" }}>
@@ -456,9 +490,21 @@ export default function SendMoney() {
                   <div className="input-group" style={{ marginBottom: 16 }}>
                     <label className="input-label">Recipient Country</label>
                     <select className="select" value={form.recipientCountry} onChange={e => set("recipientCountry", e.target.value)}>
-                      {AFRICAN_COUNTRIES.map(c => (
-                        <option key={c.code} value={c.code}>{c.flag} {c.name} ({c.currency})</option>
-                      ))}
+                      <optgroup label="Americas">
+                        {ALL_COUNTRIES.filter(c => c.region === "americas").map(c => (
+                          <option key={c.code} value={c.code}>{c.flag} {c.name} ({c.currency})</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Europe">
+                        {ALL_COUNTRIES.filter(c => c.region === "europe").map(c => (
+                          <option key={c.code} value={c.code}>{c.flag} {c.name} ({c.currency})</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Africa">
+                        {ALL_COUNTRIES.filter(c => c.region === "africa").map(c => (
+                          <option key={c.code} value={c.code}>{c.flag} {c.name} ({c.currency})</option>
+                        ))}
+                      </optgroup>
                     </select>
                   </div>
 

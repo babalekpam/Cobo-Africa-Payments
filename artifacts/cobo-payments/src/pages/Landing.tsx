@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import { useEffect, useState } from "react";
 
 const CURRENCIES = [
+  "USD","EUR","GBP","CAD","CHF","SEK","NOK","DKK","PLN","CZK",
   "NGN","KES","ZAR","GHS","UGX","TZS","ETB","EGP","MAD","XOF",
   "XAF","AOA","MZN","ZMW","BWP","MWK","RWF","BIF","DJF","ERN",
   "GMD","GNF","LRD","LSL","LYD","MGA","MRU","MUR","NAD","SLL",
@@ -12,7 +13,7 @@ const CURRENCIES = [
 
 const FEATURES = [
   { icon: "💳", title: "Multi-Currency Wallets", desc: "Hold and manage 44 African currencies in one place. Instant internal transfers with zero fees." },
-  { icon: "⚡", title: "Instant Transfers", desc: "Send money across Africa in seconds. Bank transfers, mobile money, and wallet-to-wallet payments." },
+  { icon: "⚡", title: "Instant Transfers", desc: "Send money from the US, Europe, or Canada to Africa in seconds. Bank transfers, mobile money, and wallet-to-wallet." },
   { icon: "🔄", title: "FX Exchange", desc: "Real-time exchange rates between any African currency pair. Transparent fees, no hidden charges." },
   { icon: "🔗", title: "Payment Links", desc: "Create shareable payment links for invoices, subscriptions, and one-time payments. No code required." },
   { icon: "🏪", title: "Merchant Tools", desc: "Accept payments from customers across Africa. Dashboard analytics, transaction reports, and payouts." },
@@ -20,8 +21,8 @@ const FEATURES = [
 ];
 
 const STATS = [
-  { value: "44", label: "African Currencies" },
-  { value: "54", label: "Countries Covered" },
+  { value: "44+", label: "Currencies Supported" },
+  { value: "70+", label: "Countries Covered" },
   { value: "<1s", label: "Transfer Speed" },
   { value: "99.9%", label: "Uptime SLA" },
 ];
@@ -103,19 +104,19 @@ export default function Landing() {
               background: "rgba(201,138,26,0.1)", borderRadius: 99, marginBottom: 24,
               fontSize: 13, fontWeight: 600, color: "#C98A1A",
             }}>
-              <span>🌍</span> Pan-African Payments Infrastructure
+              <span>🌍</span> Global-to-Africa Payments Infrastructure
             </div>
             <h1 style={{
               fontFamily: "var(--font-heading)", fontSize: 56, fontWeight: 800,
               lineHeight: 1.1, letterSpacing: "-0.04em", color: "#0F2B4C", marginBottom: 24,
             }}>
-              Move money across Africa,{" "}
+              Send money to Africa,{" "}
               <span style={{ background: "linear-gradient(135deg, #C98A1A, #E8A940)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-                effortlessly
+                from anywhere
               </span>
             </h1>
             <p style={{ fontSize: 20, lineHeight: 1.6, color: "#5A5044", maxWidth: 560, marginBottom: 40, fontWeight: 400 }}>
-              Send, receive, and exchange across 44 African currencies. Built for businesses, developers, and individuals who need fast, reliable cross-border payments.
+              Send from the US, Europe, or Canada to 44 African currencies. Built for diaspora communities, businesses, and developers who need fast, reliable cross-border payments.
             </p>
             <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
               <button onClick={() => setLocation("/register")} className="btn btn-primary btn-lg" style={{ fontSize: 16, padding: "16px 36px" }}>
@@ -174,9 +175,9 @@ export default function Landing() {
         <div style={{ maxWidth: 1200, margin: "0 auto" }}>
           <div style={{ textAlign: "center", marginBottom: 48 }}>
             <h2 style={{ fontFamily: "var(--font-heading)", fontSize: 36, fontWeight: 800, color: "#0F2B4C", letterSpacing: "-0.03em", marginBottom: 12 }}>
-              44 African currencies, one wallet
+              Send from USD, EUR, GBP to 44 African currencies
             </h2>
-            <p style={{ fontSize: 16, color: "#7A6E58" }}>Covering every major and emerging African currency</p>
+            <p style={{ fontSize: 16, color: "#7A6E58" }}>From the US, UK, and Europe — directly into any African wallet</p>
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 10 }}>
             {CURRENCIES.map(c => (
@@ -249,7 +250,7 @@ export default function Landing() {
             Ready to move money across Africa?
           </h2>
           <p style={{ fontSize: 18, color: "rgba(255,255,255,0.6)", marginBottom: 40, lineHeight: 1.6 }}>
-            Join thousands of businesses and individuals using COBO for fast, secure cross-border payments across the continent.
+            Join thousands of businesses and diaspora communities using COBO for fast, secure payments from the US, Europe, and across Africa.
           </p>
           <div style={{ display: "flex", justifyContent: "center", gap: 16 }}>
             <button onClick={() => setLocation("/register")} style={{
