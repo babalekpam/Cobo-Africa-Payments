@@ -11,7 +11,10 @@ export default function Transactions() {
     const params = new URLSearchParams();
     if (filter.status) params.set("status", filter.status);
     if (filter.type) params.set("type", filter.type);
-    api.get(`/transactions?${params}`).then(({ data }) => setTxs(data.transactions || data || [])).catch(() => {}).finally(() => setLoading(false));
+    api.get(`/transactions?${params}`).then(({ data }) => {
+      const list = Array.isArray(data) ? data : (data.data || data.transactions || []);
+      setTxs(list);
+    }).catch(() => {}).finally(() => setLoading(false));
   }, [filter]);
 
   return (
