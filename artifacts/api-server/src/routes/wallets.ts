@@ -5,7 +5,13 @@ import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAu
 
 const router: IRouter = Router();
 
-const ALLOWED_CURRENCIES = ['USD','NGN','GHS','XOF','XAF','KES','ZAR','EGP','MAD','TZS','UGX','ETB','RWF','EUR','GBP'];
+const ALLOWED_CURRENCIES = [
+  'USD', 'EUR', 'GBP',
+  'NGN', 'GHS', 'KES', 'XOF', 'XAF', 'ZAR', 'EGP', 'MAD', 'TZS', 'UGX', 'ETB', 'RWF',
+  'CDF', 'AOA', 'MZN', 'BWP', 'MWK', 'ZMW', 'SDG', 'TND', 'DZD', 'LYD',
+  'GMD', 'SLL', 'GNF', 'CVE', 'STN', 'SCR', 'MUR', 'MGA', 'KMF', 'DJF',
+  'ERN', 'SOS', 'SSP', 'BIF', 'LSL', 'SZL', 'NAD', 'LRD', 'MRU',
+];
 
 router.get("/wallets", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
   const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, req.user!.id));
