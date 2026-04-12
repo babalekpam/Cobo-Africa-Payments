@@ -1,64 +1,105 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
-import { useGetMe } from "@workspace/api-client-react";
-import type { User } from "@workspace/api-client-react/src/generated/api.schemas";
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import api from "../lib/api";
 
-type AuthContextType = {
+interface User {
+  id: number;
+  email: string;
+  name: string;
+  first_name: string;
+  last_name: string;
+  role: string;
+  status: string;
+  phone: string | null;
+  country: string | null;
+  business_name: string | null;
+  business_type: string | null;
+  kyc_status: string;
+  kyc_level: number;
+  is_active: boolean;
+}
+
+interface Wallet {
+  id: number;
+  userId: number;
+  currency: string;
+  balance: number;
+  lockedBalance: number;
+  isDefault: boolean;
+}
+
+interface AuthContextType {
   user: User | null;
-  isLoading: boolean;
-  login: (token: string) => void;
+  wallets: Wallet[];
+  loading: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  register: (data: any) => Promise<void>;
   logout: () => void;
-  isAuthenticated: boolean;
-};
+  refreshUser: () => Promise<void>;
+  refreshWallets: () => Promise<void>;
+}
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType | null>(null);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [token, setToken] = useState<string | null>(() => {
-    return localStorage.getItem("cobo_token");
-  });
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [wallets, setWallets] = useState<Wallet[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const { data: user, isLoading, error } = useGetMe({
-    query: {
-      enabled: !!token,
-      retry: false,
+  const loadUser = async () => {
+    const token = localStorage.getItem("cobo_token");
+    if (!token) { setLoading(false); return; }
+    try {
+      const { data } = await api.get("/auth/me");
+      setUser(data.user);
+      setWallets(data.wallets || []);
+    } catch {
+      localStorage.removeItem("cobo_token");
     }
-  });
-
-  const handleLogin = (newToken: string) => {
-    localStorage.setItem("cobo_token", newToken);
-    setToken(newToken);
+    setLoading(false);
   };
 
-  const handleLogout = () => {
+  useEffect(() => { loadUser(); }, []);
+
+  const login = async (email: string, password: string) => {
+    const { data } = await api.post("/auth/login", { email, password });
+    localStorage.setItem("cobo_token", data.token);
+    setUser(data.user);
+    setWallets(data.wallets || []);
+  };
+
+  const register = async (formData: any) => {
+    const { data } = await api.post("/auth/register", formData);
+    localStorage.setItem("cobo_token", data.token);
+    setUser(data.user);
+    setWallets(data.wallets || []);
+  };
+
+  const logout = () => {
     localStorage.removeItem("cobo_token");
-    setToken(null);
+    setUser(null);
+    setWallets([]);
   };
 
-  useEffect(() => {
-    if (error) {
-      handleLogout();
-    }
-  }, [error]);
+  const refreshUser = async () => {
+    const { data } = await api.get("/auth/me");
+    setUser(data.user);
+    setWallets(data.wallets || []);
+  };
+
+  const refreshWallets = async () => {
+    const { data } = await api.get("/wallets");
+    setWallets(data.wallets || []);
+  };
 
   return (
-    <AuthContext.Provider
-      value={{
-        user: user || null,
-        isLoading: isLoading && !!token,
-        login: handleLogin,
-        logout: handleLogout,
-        isAuthenticated: !!token && !!user,
-      }}
-    >
+    <AuthContext.Provider value={{ user, wallets, loading, login, register, logout, refreshUser, refreshWallets }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be inside AuthProvider");
+  return ctx;
 }

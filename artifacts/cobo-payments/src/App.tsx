@@ -1,47 +1,44 @@
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider, useAuth } from "@/context/AuthContext";
-import NotFound from "@/pages/not-found";
-import Login from "@/pages/Login";
-import Dashboard from "@/pages/Dashboard";
-import Transactions from "@/pages/Transactions";
-import TransactionDetail from "@/pages/TransactionDetail";
-import Merchants from "@/pages/Merchants";
-import MerchantDetail from "@/pages/MerchantDetail";
-import Users from "@/pages/Users";
-import Settings from "@/pages/Settings";
-import Reports from "@/pages/Reports";
-import ActivityLog from "@/pages/ActivityLog";
+import { AuthProvider, useAuth } from "./context/AuthContext";
 import { useEffect } from "react";
+import "./index.css";
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1,
-      staleTime: 30_000,
-    },
-  },
-});
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import Dashboard from "./pages/Dashboard";
+import Wallets from "./pages/Wallets";
+import SendMoney from "./pages/SendMoney";
+import Transactions from "./pages/Transactions";
+import Exchange from "./pages/Exchange";
+import PaymentLinks from "./pages/PaymentLinks";
+import Beneficiaries from "./pages/Beneficiaries";
+import Verification from "./pages/Verification";
+import Notifications from "./pages/Notifications";
+import Developer from "./pages/Developer";
+import Admin from "./pages/Admin";
+import Settings from "./pages/Settings";
+import NotFound from "./pages/not-found";
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { user, loading } = useAuth();
   const [location, setLocation] = useLocation();
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated && location !== "/login") {
+    if (!loading && !user && location !== "/login" && location !== "/register") {
       setLocation("/login");
     }
-    if (!isLoading && isAuthenticated && location === "/login") {
+    if (!loading && user && (location === "/login" || location === "/register")) {
       setLocation("/dashboard");
     }
-  }, [isAuthenticated, isLoading, location]);
+  }, [user, loading, location]);
 
-  if (isLoading) {
+  if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-muted-foreground text-sm">Loading...</div>
+      <div style={{ minHeight: "100vh", background: "var(--dark)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ textAlign: "center" }}>
+          <div className="spinner" style={{ width: 32, height: 32, marginBottom: 12 }} />
+          <div style={{ color: "var(--text-dim)", fontSize: 14 }}>Loading COBO...</div>
+        </div>
       </div>
     );
   }
@@ -50,29 +47,31 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 }
 
 function IndexRedirect() {
-  const { isAuthenticated } = useAuth();
+  const { user } = useAuth();
   const [, setLocation] = useLocation();
-  useEffect(() => {
-    setLocation(isAuthenticated ? "/dashboard" : "/login");
-  }, [isAuthenticated]);
+  useEffect(() => { setLocation(user ? "/dashboard" : "/login"); }, [user]);
   return null;
 }
 
-function Router() {
+function AppRouter() {
   return (
     <AuthProvider>
       <AuthGuard>
         <Switch>
           <Route path="/" component={IndexRedirect} />
           <Route path="/login" component={Login} />
+          <Route path="/register" component={Register} />
           <Route path="/dashboard" component={Dashboard} />
+          <Route path="/wallets" component={Wallets} />
+          <Route path="/send" component={SendMoney} />
           <Route path="/transactions" component={Transactions} />
-          <Route path="/transactions/:id" component={TransactionDetail} />
-          <Route path="/merchants" component={Merchants} />
-          <Route path="/merchants/:id" component={MerchantDetail} />
-          <Route path="/users" component={Users} />
-          <Route path="/reports" component={Reports} />
-          <Route path="/activity" component={ActivityLog} />
+          <Route path="/exchange" component={Exchange} />
+          <Route path="/payment-links" component={PaymentLinks} />
+          <Route path="/beneficiaries" component={Beneficiaries} />
+          <Route path="/verification" component={Verification} />
+          <Route path="/notifications" component={Notifications} />
+          <Route path="/developer" component={Developer} />
+          <Route path="/admin" component={Admin} />
           <Route path="/settings" component={Settings} />
           <Route component={NotFound} />
         </Switch>
@@ -81,17 +80,10 @@ function Router() {
   );
 }
 
-function App() {
+export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
-        </WouterRouter>
-        <Toaster />
-      </TooltipProvider>
-    </QueryClientProvider>
+    <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+      <AppRouter />
+    </WouterRouter>
   );
 }
-
-export default App;

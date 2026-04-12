@@ -1,135 +1,134 @@
 import { Link, useLocation } from "wouter";
-import { useAuth } from "@/context/AuthContext";
-import {
-  LayoutDashboard,
-  ArrowLeftRight,
-  Store,
-  Users,
-  Settings,
-  LogOut,
-  Menu,
-  X,
-  BarChart3,
-  ScrollText,
-} from "lucide-react";
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { useAuth } from "../context/AuthContext";
+import { useState, useEffect } from "react";
+import api from "../lib/api";
 
-const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/transactions", label: "Transactions", icon: ArrowLeftRight },
-  { href: "/merchants", label: "Merchants", icon: Store },
-  { href: "/users", label: "Users", icon: Users },
-  { href: "/reports", label: "Reports", icon: BarChart3 },
-  { href: "/activity", label: "Activity Log", icon: ScrollText },
-  { href: "/settings", label: "Settings", icon: Settings },
+const NAV = [
+  { path: "/dashboard", label: "Dashboard", icon: "📊" },
+  { path: "/wallets", label: "Wallets", icon: "💰" },
+  { path: "/send", label: "Send Money", icon: "💸" },
+  { path: "/transactions", label: "Transactions", icon: "📜" },
+  { path: "/exchange", label: "FX Exchange", icon: "💱" },
+  { path: "/payment-links", label: "Payment Links", icon: "🔗" },
+  { path: "/beneficiaries", label: "Beneficiaries", icon: "👥" },
+  { path: "/verification", label: "Verification", icon: "🛡️" },
+  { path: "/notifications", label: "Notifications", icon: "🔔" },
+  { path: "/developer", label: "Developer", icon: "⚙️" },
+  { path: "/settings", label: "Settings", icon: "🔧" },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const { user, logout } = useAuth();
+  const { user, wallets, logout } = useAuth();
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [unread, setUnread] = useState(0);
+
+  useEffect(() => {
+    api.get("/notifications/unread-count").then(({ data }) => setUnread(data.count || 0)).catch(() => {});
+  }, [location]);
+
+  const initials = user ? `${(user.first_name || "")[0] || ""}${(user.last_name || "")[0] || ""}`.toUpperCase() : "?";
+  const usdWallet = wallets.find(w => w.currency === "USD");
+  const allNav = user?.role === "admin"
+    ? [...NAV.slice(0, -1), { path: "/admin", label: "Admin Panel", icon: "🏛️" }, NAV[NAV.length - 1]]
+    : NAV;
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
-      {/* Sidebar */}
-      <aside
-        className={`
-          fixed inset-y-0 left-0 z-50 w-64 bg-sidebar border-r border-sidebar-border
-          flex flex-col transition-transform duration-200
-          ${mobileOpen ? "translate-x-0" : "-translate-x-full"}
-          lg:relative lg:translate-x-0
-        `}
-        data-testid="sidebar"
-      >
-        {/* Logo */}
-        <div className="flex items-center gap-3 px-4 py-4 border-b border-sidebar-border">
-          <img
-            src={`${import.meta.env.BASE_URL}cobo-logo.png`}
-            alt="COBO Africa Payments"
-            className="h-9 rounded"
-          />
-          <button
-            className="ml-auto lg:hidden text-muted-foreground"
-            onClick={() => setMobileOpen(false)}
-          >
-            <X className="w-4 h-4" />
-          </button>
+    <div style={{ display: "flex", minHeight: "100vh" }}>
+      {mobileOpen && <div onClick={() => setMobileOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 99 }} />}
+
+      <aside style={{
+        width: "var(--sidebar-w)", background: "var(--surface)", borderRight: "1px solid var(--border)",
+        display: "flex", flexDirection: "column", position: "fixed", top: 0, bottom: 0, left: 0, zIndex: 100,
+        transform: mobileOpen ? "translateX(0)" : undefined,
+      }} className="sidebar">
+        <div style={{ padding: "20px 16px 12px", borderBottom: "1px solid var(--border)" }}>
+          <img src={`${import.meta.env.BASE_URL}cobo-logo.png`} alt="COBO Africa" style={{ width: "100%", maxWidth: 200, borderRadius: 8 }} />
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {navItems.map(({ href, label, icon: Icon }) => {
-            const active = location === href || location.startsWith(href + "/");
+        <div style={{ padding: "16px", borderBottom: "1px solid var(--border)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{
+              width: 40, height: 40, borderRadius: "50%", background: "linear-gradient(135deg, var(--gold), var(--gold-dim))",
+              display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Syne',sans-serif",
+              fontWeight: 800, fontSize: 14, color: "var(--dark)",
+            }}>{initials}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {user?.first_name} {user?.last_name}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--text-dim)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user?.email}</div>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+            {user?.kyc_status === "verified" && <span className="badge badge-success" style={{ fontSize: 10 }}>✓ Verified</span>}
+            {user?.role === "admin" && <span className="badge badge-warning" style={{ fontSize: 10 }}>Admin</span>}
+          </div>
+          {usdWallet && (
+            <div style={{ marginTop: 12, padding: "10px 12px", background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
+              <div style={{ fontSize: 11, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: 0.5 }}>USD Balance</div>
+              <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 20, color: "var(--gold)", marginTop: 2 }}>
+                ${usdWallet.balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <nav style={{ flex: 1, padding: "8px", overflowY: "auto" }}>
+          {allNav.map(item => {
+            const active = location === item.path || location.startsWith(item.path + "/");
             return (
-              <Link key={href} href={href}>
+              <Link key={item.path} href={item.path}>
                 <div
-                  className={`
-                    flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer
-                    ${active
-                      ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                      : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                    }
-                  `}
-                  data-testid={`nav-${label.toLowerCase()}`}
                   onClick={() => setMobileOpen(false)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: "var(--radius-sm)",
+                    fontSize: 14, fontWeight: active ? 600 : 400, cursor: "pointer", position: "relative",
+                    color: active ? "var(--gold)" : "var(--text-dim)",
+                    background: active ? "rgba(232,169,64,0.08)" : "transparent",
+                    transition: "all 0.15s",
+                  }}
+                  onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = "var(--surface2)"; (e.currentTarget as HTMLElement).style.color = "var(--text)"; } }}
+                  onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-dim)"; } }}
                 >
-                  <Icon className="w-4 h-4 shrink-0" />
-                  {label}
+                  <span style={{ fontSize: 16, width: 22, textAlign: "center" }}>{item.icon}</span>
+                  <span>{item.label}</span>
+                  {item.label === "Notifications" && unread > 0 && (
+                    <span style={{
+                      marginLeft: "auto", background: "var(--red)", color: "#fff", fontSize: 10, fontWeight: 700,
+                      padding: "1px 6px", borderRadius: 99, minWidth: 18, textAlign: "center",
+                    }}>{unread}</span>
+                  )}
                 </div>
               </Link>
             );
           })}
         </nav>
 
-        {/* User */}
-        <div className="px-3 py-4 border-t border-sidebar-border">
-          <div className="flex items-center gap-3 px-3 py-2 mb-1">
-            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-xs font-bold uppercase">
-              {user?.name?.charAt(0) ?? "A"}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-sidebar-foreground truncate">{user?.name}</p>
-              <p className="text-xs text-muted-foreground truncate">{user?.role}</p>
-            </div>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-3 text-muted-foreground hover:text-destructive"
-            onClick={logout}
-            data-testid="button-logout"
-          >
-            <LogOut className="w-4 h-4" />
-            Sign out
-          </Button>
+        <div style={{ padding: "12px", borderTop: "1px solid var(--border)" }}>
+          <button onClick={logout} className="btn btn-ghost btn-full" style={{ justifyContent: "flex-start", gap: 10, color: "var(--red)" }}>
+            🚪 Logout
+          </button>
         </div>
       </aside>
 
-      {/* Mobile overlay */}
-      {mobileOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
-
-      {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Top bar (mobile) */}
-        <header className="flex items-center gap-4 px-4 py-3 border-b border-border lg:hidden">
-          <button
-            onClick={() => setMobileOpen(true)}
-            className="text-muted-foreground"
-            data-testid="button-menu"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
-          <img src={`${import.meta.env.BASE_URL}cobo-logo.png`} alt="COBO" className="h-7 rounded" />
+      <div style={{ flex: 1, marginLeft: "var(--sidebar-w)", minHeight: "100vh" }}>
+        <header className="mobile-header" style={{ display: "none", alignItems: "center", gap: 12, padding: "12px 16px", borderBottom: "1px solid var(--border)", background: "var(--surface)" }}>
+          <button onClick={() => setMobileOpen(true)} style={{ background: "none", border: "none", color: "var(--text)", fontSize: 22, cursor: "pointer" }}>☰</button>
+          <img src={`${import.meta.env.BASE_URL}cobo-logo.png`} alt="COBO" style={{ height: 28, borderRadius: 4 }} />
         </header>
-
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        <main style={{ overflow: "auto", height: "100vh" }}>
+          {children}
+        </main>
       </div>
+
+      <style>{`
+        @media (max-width: 768px) {
+          .sidebar { transform: translateX(-100%); transition: transform 0.25s; }
+          .mobile-header { display: flex !important; }
+          div[style*="marginLeft: var(--sidebar-w)"] { margin-left: 0 !important; }
+        }
+      `}</style>
     </div>
   );
 }

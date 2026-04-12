@@ -1,120 +1,59 @@
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { useLogin } from "@workspace/api-client-react";
-import { useAuth } from "@/context/AuthContext";
-import { useLocation } from "wouter";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { AlertCircle } from "lucide-react";
 import { useState } from "react";
-
-const loginSchema = z.object({
-  email: z.string().email("Enter a valid email"),
-  password: z.string().min(1, "Password is required"),
-});
-
-type LoginForm = z.infer<typeof loginSchema>;
+import { useAuth } from "../context/AuthContext";
+import { useLocation } from "wouter";
 
 export default function Login() {
   const { login } = useAuth();
   const [, setLocation] = useLocation();
-  const [apiError, setApiError] = useState<string | null>(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const loginMutation = useLogin({
-    mutation: {
-      onSuccess: (data) => {
-        login(data.token);
-        setLocation("/dashboard");
-      },
-      onError: (err: any) => {
-        setApiError(err?.data?.message || "Invalid email or password");
-      },
-    },
-  });
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<LoginForm>({ resolver: zodResolver(loginSchema) });
-
-  const onSubmit = (data: LoginForm) => {
-    setApiError(null);
-    loginMutation.mutate({ data });
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      await login(email, password);
+      setLocation("/dashboard");
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Login failed");
+    }
+    setLoading(false);
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-sm">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <img
-            src={`${import.meta.env.BASE_URL}cobo-logo.png`}
-            alt="COBO Africa Payments"
-            className="h-20 mx-auto mb-4 rounded-lg"
-          />
+    <div style={{ minHeight: "100vh", background: "var(--dark)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div className="fade-in" style={{ width: "100%", maxWidth: 420 }}>
+        <div style={{ textAlign: "center", marginBottom: 32 }}>
+          <img src={`${import.meta.env.BASE_URL}cobo-logo.png`} alt="COBO Africa" style={{ height: 48, borderRadius: 8, margin: "0 auto 16px" }} />
+          <h1 style={{ fontFamily: "'Syne',sans-serif", fontSize: 28, fontWeight: 800, color: "var(--text)" }}>Welcome Back</h1>
+          <p style={{ color: "var(--text-dim)", fontSize: 14, marginTop: 4 }}>Sign in to your COBO account</p>
         </div>
 
-        {/* Card */}
-        <div className="bg-card border border-card-border rounded-xl p-6 shadow-lg">
-          <h2 className="text-lg font-semibold text-card-foreground mb-1">Sign in</h2>
-          <p className="text-sm text-muted-foreground mb-6">Enter your credentials to continue</p>
+        <form onSubmit={handleSubmit} className="card-lg" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          {error && <div style={{ padding: "10px 14px", background: "var(--red-bg)", border: "1px solid rgba(245,83,83,0.2)", borderRadius: "var(--radius-sm)", color: "var(--red)", fontSize: 13 }}>{error}</div>}
 
-          {apiError && (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 mb-4" data-testid="error-login">
-              <AlertCircle className="w-4 h-4 text-destructive shrink-0" />
-              <p className="text-sm text-destructive">{apiError}</p>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-foreground">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="admin@cobo.africa"
-                {...register("email")}
-                data-testid="input-email"
-                className="bg-input border-border text-foreground placeholder:text-muted-foreground"
-              />
-              {errors.email && (
-                <p className="text-xs text-destructive">{errors.email.message}</p>
-              )}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="password" className="text-foreground">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                {...register("password")}
-                data-testid="input-password"
-                className="bg-input border-border text-foreground placeholder:text-muted-foreground"
-              />
-              {errors.password && (
-                <p className="text-xs text-destructive">{errors.password.message}</p>
-              )}
-            </div>
-
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={loginMutation.isPending}
-              data-testid="button-submit"
-            >
-              {loginMutation.isPending ? "Signing in..." : "Sign in"}
-            </Button>
-          </form>
-
-          <div className="mt-4 p-3 rounded-lg bg-muted border border-border">
-            <p className="text-xs text-muted-foreground font-mono">admin@cobo.africa</p>
-            <p className="text-xs text-muted-foreground font-mono">CoboAdmin2024!</p>
+          <div className="input-group">
+            <label className="input-label">Email</label>
+            <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" required />
           </div>
-        </div>
+
+          <div className="input-group">
+            <label className="input-label">Password</label>
+            <input className="input" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required />
+          </div>
+
+          <button type="submit" className="btn btn-primary btn-lg btn-full" disabled={loading}>
+            {loading ? <span className="spinner" /> : "Sign In"}
+          </button>
+
+          <p style={{ textAlign: "center", fontSize: 14, color: "var(--text-dim)" }}>
+            Don't have an account?{" "}
+            <a href="#" onClick={e => { e.preventDefault(); setLocation("/register"); }} style={{ color: "var(--gold)", fontWeight: 600 }}>Register</a>
+          </p>
+        </form>
       </div>
     </div>
   );

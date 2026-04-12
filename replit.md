@@ -2,7 +2,7 @@
 
 ## Overview
 
-Full-stack fintech admin dashboard for managing payments, transactions, merchants, and users across Africa. Built as a pnpm monorepo with Express API + React frontend.
+Full-stack fintech wallet platform for managing payments, wallets, FX exchange, and transfers across Africa. Built as a pnpm monorepo with Express API + React frontend. Features a dark gold custom CSS theme with Syne/DM Sans fonts.
 
 ## Admin Credentials
 - Email: `admin@cobo.africa`
@@ -16,71 +16,86 @@ Full-stack fintech admin dashboard for managing payments, transactions, merchant
 - **TypeScript version**: 5.9
 - **API framework**: Express 5
 - **Database**: PostgreSQL + Drizzle ORM
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
-- **API codegen**: Orval (from OpenAPI spec at `lib/api-spec/openapi.yaml`)
+- **Validation**: Zod (`zod/v4`)
 - **Build**: esbuild (CJS bundle)
-- **Frontend**: React + Vite + Tailwind CSS v4
-- **UI Components**: shadcn/ui (Radix UI primitives)
-- **Charts**: Recharts
+- **Frontend**: React + Vite, custom CSS (no Tailwind/shadcn)
 - **Auth**: JWT (stored in localStorage as `cobo_token`)
-- **HTTP client**: custom-fetch.ts with auto-injected Bearer token
+- **HTTP client**: custom api.ts fetch wrapper with auto-injected Bearer token
 
 ## Architecture
 
 ```
 artifacts/
-  api-server/        — Express API server (port 8080 via $PORT)
+  api-server/        — Express API server (port 8080)
   cobo-payments/     — React/Vite frontend (routed at /)
 lib/
-  api-spec/          — OpenAPI YAML spec
-  api-client-react/  — Generated React Query hooks (Orval codegen)
   db/                — Drizzle ORM schema + migrations
 ```
 
+## Design Theme
+
+- Dark gold theme with custom CSS variables
+- Colors: --dark: #0D0B07, --surface: #1A1710, --gold: #E8A940, --gold-dim: #8A6320, --green: #3DD68C, --red: #F55353, --blue: #4FA3E0, --text: #F0E8D5, --text-dim: #9A8F75
+- Fonts: Syne (headings, 700/800 weight), DM Sans (body)
+- Custom CSS classes: .card, .btn, .btn-primary, .input, .select, .badge, .stat-card, .table-wrap, .empty, .spinner, .fade-in, .grid-2/3/4, .page, .page-title, .modal-overlay
+
 ## Frontend Pages
 
-- `/login` — Auth login page (redirects to /dashboard on success)
-- `/dashboard` — KPI stats, volume charts, recent transactions, top merchants
-- `/transactions` — Paginated transaction list with search/filter, click to detail
-- `/transactions/:id` — Transaction detail with status update
-- `/merchants` — Merchant grid cards with Add/Delete, click to detail
-- `/merchants/:id` — Merchant detail with status update + recent transactions
-- `/users` — User table with Add/Delete/status update
-- `/settings` — Profile, security, notification settings
+- `/login` — Login page with dark gold theme
+- `/register` — Registration with first/last name, country, phone, business
+- `/dashboard` — Stats cards, wallet overview, recent transactions
+- `/wallets` — Multi-currency wallet management (add wallets, set default)
+- `/send` — Send money via bank transfer, mobile money, or internal COBO transfer
+- `/transactions` — Transaction history with status/type filters
+- `/exchange` — FX exchange with rate quotes and currency swap
+- `/payment-links` — Create and manage payment link pages
+- `/beneficiaries` — Saved recipients for quick transfers
+- `/verification` — KYC document submission and verification levels
+- `/notifications` — Notification center with read/unread management
+- `/developer` — API documentation and key management
+- `/admin` — Admin panel (admin role only) with user management
+- `/settings` — Profile editing and password change
 
 ## Backend API Routes
 
 All prefixed with `/api`:
-- `POST /api/auth/login` — returns JWT
-- `GET /api/auth/me` — current user
-- `GET|POST /api/users` — list/create users
-- `GET|PATCH|DELETE /api/users/:id` — single user
-- `GET|POST /api/merchants` — list/create merchants
-- `GET|PATCH|DELETE /api/merchants/:id` — single merchant
-- `GET|POST /api/transactions` — list/create transactions
-- `GET|PATCH /api/transactions/:id` — single transaction
-- `GET /api/dashboard/summary` — KPI summary
-- `GET /api/dashboard/recent-transactions` — recent txns
-- `GET /api/dashboard/volume-by-country` — country volume breakdown
-- `GET /api/dashboard/monthly-volume` — monthly chart data
-- `GET /api/dashboard/top-merchants` — top merchants by volume
+- `POST /api/auth/login` — Login, returns JWT + user + wallets
+- `POST /api/auth/register` — Register new user with wallets
+- `GET /api/auth/me` — Current user + wallets
+- `PUT /api/auth/profile` — Update profile
+- `POST /api/auth/change-password` — Change password
+- `GET /api/auth/dashboard` — Dashboard stats + recent transactions
+- `GET /api/wallets` — List user wallets
+- `POST /api/wallets` — Create wallet
+- `PUT /api/wallets/:id/default` — Set default wallet
+- `POST /api/wallets/fund` — Fund wallet (sandbox)
+- `POST /api/transfers/bank` — Bank transfer
+- `POST /api/transfers/mobile` — Mobile money transfer
+- `POST /api/transfers/internal` — Internal COBO user transfer
+- `GET /api/exchange/rates` — FX rates
+- `POST /api/exchange/convert` — Get conversion quote
+- `POST /api/exchange/swap` — Execute currency swap
+- `GET /api/beneficiaries` — List beneficiaries
+- `POST /api/beneficiaries` — Add beneficiary
+- `DELETE /api/beneficiaries/:id` — Remove beneficiary
+- `GET /api/payment-links` — List payment links
+- `POST /api/payment-links` — Create payment link
+- `GET /api/notifications` — List notifications
+- `GET /api/notifications/unread-count` — Unread count
+- `PUT /api/notifications/:id/read` — Mark as read
+- `PUT /api/notifications/read-all` — Mark all as read
+- `GET /api/kyc/documents` — List KYC documents
+- `POST /api/kyc/submit` — Submit KYC document
+- `GET /api/transactions` — List transactions
 
 ## Database
 
-PostgreSQL with tables: `users`, `merchants`, `transactions`
-- Seeded with: 1 admin user, 4 regular users, 8 merchants, 90 transactions
+PostgreSQL with tables: `users`, `merchants`, `transactions`, `wallets`, `beneficiaries`, `notifications`, `payment_links`, `kyc_documents`
+- Users table extended with: firstName, lastName, businessName, businessType, kycStatus, kycLevel, isActive
+- Seeded with: admin user (Abel Nkawula) with 4 wallets (USD, NGN, XOF, GHS), merchants, and sample transactions
 
 ## Key Commands
 
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks from OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes
-- `pnpm --filter @workspace/api-server run dev` — run API server locally
-
-## Design
-
-- Deep navy dark theme: `hsl(222 47% 11%)` background
-- Green primary: `hsl(142 71% 45%)`
-- Amber accent: `hsl(38 95% 56%)`
-- Font: Inter (sans), JetBrains Mono (mono)
+- `pnpm --filter @workspace/db run push` — Push DB schema changes
+- `pnpm --filter @workspace/api-server run dev` — Run API server
+- `pnpm --filter @workspace/cobo-payments run dev` — Run frontend

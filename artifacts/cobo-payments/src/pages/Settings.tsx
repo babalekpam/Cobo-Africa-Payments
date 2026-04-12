@@ -1,264 +1,75 @@
-import { Layout } from "@/components/Layout";
-import { useAuth } from "@/context/AuthContext";
-import { useUpdateUser, useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Shield, Bell, Globe, Key, Save, CheckCircle, AlertCircle, Database, Server, MapPin, Cpu } from "lucide-react";
-import { useState, useEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { useHealthCheck } from "@workspace/api-client-react";
-
-const NOTIF_STORAGE_KEY = "cobo_notification_prefs";
-
-function getNotifPrefs(): Record<string, boolean> {
-  try {
-    const raw = localStorage.getItem(NOTIF_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch { return {}; }
-}
-
-function saveNotifPrefs(prefs: Record<string, boolean>) {
-  localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(prefs));
-}
+import { useState } from "react";
+import { Layout } from "../components/Layout";
+import { useAuth } from "../context/AuthContext";
+import api from "../lib/api";
 
 export default function Settings() {
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
-  const updateMutation = useUpdateUser();
-  const { data: health } = useHealthCheck();
+  const { user, refreshUser } = useAuth();
+  const [tab, setTab] = useState<"profile" | "security">("profile");
+  const [profile, setProfile] = useState({ first_name: user?.first_name || "", last_name: user?.last_name || "", phone: user?.phone || "", business_name: user?.business_name || "" });
+  const [pw, setPw] = useState({ current_password: "", new_password: "", confirm: "" });
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
 
-  const [profileName, setProfileName] = useState("");
-  const [profileCountry, setProfileCountry] = useState("");
-  const [profilePhone, setProfilePhone] = useState("");
-  const [profileSaved, setProfileSaved] = useState(false);
-  const [profileError, setProfileError] = useState<string | null>(null);
-
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [passwordSaved, setPasswordSaved] = useState(false);
-  const [passwordError, setPasswordError] = useState<string | null>(null);
-
-  const [notifPrefs, setNotifPrefs] = useState<Record<string, boolean>>(getNotifPrefs);
-  const [notifSaved, setNotifSaved] = useState(false);
-
-  useEffect(() => {
-    if (user) {
-      setProfileName(user.name ?? "");
-      setProfileCountry(user.country ?? "");
-      setProfilePhone(user.phone ?? "");
-    }
-  }, [user]);
-
-  const handleSaveProfile = () => {
-    if (!user) return;
-    setProfileError(null);
-    updateMutation.mutate(
-      { id: user.id, data: { name: profileName, country: profileCountry, phone: profilePhone } },
-      {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
-          setProfileSaved(true);
-          setTimeout(() => setProfileSaved(false), 3000);
-        },
-        onError: () => {
-          setProfileError("Failed to save profile. Please try again.");
-        },
-      }
-    );
+  const saveProfile = async () => {
+    setSaving(true); setMsg("");
+    try {
+      await api.put("/auth/profile", profile);
+      await refreshUser();
+      setMsg("Profile updated!");
+    } catch (err: any) { setMsg(err.response?.data?.message || "Failed"); }
+    setSaving(false);
   };
 
-  const handleChangePassword = () => {
-    setPasswordError(null);
-    if (!newPassword || newPassword.length < 6) {
-      setPasswordError("New password must be at least 6 characters.");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setPasswordError("Passwords do not match.");
-      return;
-    }
-    if (!currentPassword) {
-      setPasswordError("Please enter your current password.");
-      return;
-    }
-    if (!user) return;
-    updateMutation.mutate(
-      { id: user.id, data: { password: newPassword } },
-      {
-        onSuccess: () => {
-          setPasswordSaved(true);
-          setCurrentPassword("");
-          setNewPassword("");
-          setConfirmPassword("");
-          setTimeout(() => setPasswordSaved(false), 3000);
-        },
-        onError: () => {
-          setPasswordError("Failed to change password.");
-        },
-      }
-    );
+  const changePassword = async () => {
+    if (pw.new_password !== pw.confirm) { setMsg("Passwords don't match"); return; }
+    setSaving(true); setMsg("");
+    try {
+      await api.post("/auth/change-password", { current_password: pw.current_password, new_password: pw.new_password });
+      setMsg("Password changed!");
+      setPw({ current_password: "", new_password: "", confirm: "" });
+    } catch (err: any) { setMsg(err.response?.data?.message || "Failed"); }
+    setSaving(false);
   };
-
-  const toggleNotif = (key: string) => {
-    const updated = { ...notifPrefs, [key]: !(notifPrefs[key] ?? true) };
-    setNotifPrefs(updated);
-    saveNotifPrefs(updated);
-    setNotifSaved(true);
-    setTimeout(() => setNotifSaved(false), 2000);
-  };
-
-  const notifications = [
-    { key: "transaction_alerts", title: "Transaction Alerts", desc: "Get notified for every new transaction" },
-    { key: "failed_payments", title: "Failed Payment Alerts", desc: "Alert when payments fail" },
-    { key: "merchant_updates", title: "Merchant Updates", desc: "Merchant status changes" },
-    { key: "weekly_reports", title: "Weekly Reports", desc: "Weekly payment summaries" },
-  ];
 
   return (
     <Layout>
-      <div className="max-w-2xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-xl font-bold text-foreground" data-testid="text-settings-title">Settings</h1>
-          <p className="text-sm text-muted-foreground">Manage your account and platform settings</p>
+      <div className="page fade-in">
+        <div className="page-header">
+          <h1 className="page-title">Settings</h1>
+          <p className="page-subtitle">Manage your account preferences</p>
         </div>
 
-        {/* Profile */}
-        <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Shield className="w-4 h-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">Profile</h2>
-          </div>
-          {profileError && (
-            <div className="flex items-center gap-2 p-2.5 rounded-lg bg-destructive/10 border border-destructive/20">
-              <AlertCircle className="w-4 h-4 text-destructive shrink-0" />
-              <p className="text-xs text-destructive">{profileError}</p>
-            </div>
-          )}
-          {profileSaved && (
-            <div className="flex items-center gap-2 p-2.5 rounded-lg bg-primary/10 border border-primary/20">
-              <CheckCircle className="w-4 h-4 text-primary shrink-0" />
-              <p className="text-xs text-primary">Profile updated successfully!</p>
-            </div>
-          )}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-muted-foreground text-xs">Name</Label>
-              <Input value={profileName} onChange={(e) => setProfileName(e.target.value)} className="bg-input border-border" data-testid="input-profile-name" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-muted-foreground text-xs">Email</Label>
-              <Input value={user?.email ?? ""} type="email" className="bg-input border-border" data-testid="input-profile-email" disabled />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-muted-foreground text-xs">Role</Label>
-              <Input value={user?.role ?? ""} className="bg-input border-border capitalize" disabled />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-muted-foreground text-xs">Country</Label>
-              <Input value={profileCountry} onChange={(e) => setProfileCountry(e.target.value)} className="bg-input border-border" data-testid="input-profile-country" />
-            </div>
-            <div className="space-y-1.5 col-span-2">
-              <Label className="text-muted-foreground text-xs">Phone</Label>
-              <Input value={profilePhone} onChange={(e) => setProfilePhone(e.target.value)} placeholder="+254..." className="bg-input border-border" data-testid="input-profile-phone" />
-            </div>
-          </div>
-          <Button size="sm" onClick={handleSaveProfile} disabled={updateMutation.isPending} data-testid="button-save-profile">
-            <Save className="w-3.5 h-3.5 mr-1.5" />
-            {updateMutation.isPending ? "Saving..." : profileSaved ? "Saved!" : "Save Profile"}
-          </Button>
+        <div style={{ display: "flex", gap: 10, marginBottom: 24 }}>
+          <button className={`btn ${tab === "profile" ? "btn-primary" : "btn-ghost"}`} onClick={() => { setTab("profile"); setMsg(""); }}>👤 Profile</button>
+          <button className={`btn ${tab === "security" ? "btn-primary" : "btn-ghost"}`} onClick={() => { setTab("security"); setMsg(""); }}>🔒 Security</button>
         </div>
 
-        {/* Security */}
-        <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Key className="w-4 h-4 text-accent" />
-            <h2 className="text-sm font-semibold text-foreground">Security</h2>
-          </div>
-          {passwordError && (
-            <div className="flex items-center gap-2 p-2.5 rounded-lg bg-destructive/10 border border-destructive/20">
-              <AlertCircle className="w-4 h-4 text-destructive shrink-0" />
-              <p className="text-xs text-destructive">{passwordError}</p>
-            </div>
-          )}
-          {passwordSaved && (
-            <div className="flex items-center gap-2 p-2.5 rounded-lg bg-primary/10 border border-primary/20">
-              <CheckCircle className="w-4 h-4 text-primary shrink-0" />
-              <p className="text-xs text-primary">Password changed successfully!</p>
-            </div>
-          )}
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label className="text-muted-foreground text-xs">Current Password</Label>
-              <Input type="password" placeholder="••••••••" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="bg-input border-border" data-testid="input-current-password" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-muted-foreground text-xs">New Password</Label>
-              <Input type="password" placeholder="••••••••" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="bg-input border-border" data-testid="input-new-password" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-muted-foreground text-xs">Confirm Password</Label>
-              <Input type="password" placeholder="••••••••" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="bg-input border-border" data-testid="input-confirm-password" />
-            </div>
-          </div>
-          <Button variant="secondary" size="sm" onClick={handleChangePassword} disabled={updateMutation.isPending} data-testid="button-change-password">
-            {updateMutation.isPending ? "Changing..." : passwordSaved ? "Changed!" : "Change Password"}
-          </Button>
-        </div>
+        {msg && <div style={{ padding: "10px 14px", background: msg.includes("!") ? "var(--green-bg)" : "var(--red-bg)", borderRadius: "var(--radius-sm)", color: msg.includes("!") ? "var(--green)" : "var(--red)", fontSize: 13, marginBottom: 16 }}>{msg}</div>}
 
-        {/* Notifications */}
-        <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Bell className="w-4 h-4 text-chart-3" />
-              <h2 className="text-sm font-semibold text-foreground">Notifications</h2>
+        {tab === "profile" && (
+          <div className="card-lg" style={{ maxWidth: 500 }}>
+            <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 18, marginBottom: 20 }}>Profile Information</h3>
+            <div className="grid-2" style={{ marginBottom: 16 }}>
+              <div className="input-group"><label className="input-label">First Name</label><input className="input" value={profile.first_name} onChange={e => setProfile(p => ({ ...p, first_name: e.target.value }))} /></div>
+              <div className="input-group"><label className="input-label">Last Name</label><input className="input" value={profile.last_name} onChange={e => setProfile(p => ({ ...p, last_name: e.target.value }))} /></div>
             </div>
-            {notifSaved && <span className="text-xs text-primary">Preferences saved</span>}
+            <div className="input-group" style={{ marginBottom: 16 }}><label className="input-label">Email</label><input className="input" value={user?.email || ""} disabled /></div>
+            <div className="input-group" style={{ marginBottom: 16 }}><label className="input-label">Phone</label><input className="input" value={profile.phone} onChange={e => setProfile(p => ({ ...p, phone: e.target.value }))} /></div>
+            <div className="input-group" style={{ marginBottom: 20 }}><label className="input-label">Business Name</label><input className="input" value={profile.business_name} onChange={e => setProfile(p => ({ ...p, business_name: e.target.value }))} /></div>
+            <button className="btn btn-primary btn-full" onClick={saveProfile} disabled={saving}>{saving ? <span className="spinner" /> : "Save Changes"}</button>
           </div>
-          {notifications.map(({ key, title, desc }) => (
-            <div key={key} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-              <div>
-                <p className="text-sm font-medium text-foreground">{title}</p>
-                <p className="text-xs text-muted-foreground">{desc}</p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={notifPrefs[key] ?? true}
-                  onChange={() => toggleNotif(key)}
-                  className="sr-only peer"
-                  data-testid={`toggle-${key}`}
-                />
-                <div className="w-9 h-5 bg-muted rounded-full peer-checked:bg-primary transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-4" />
-              </label>
-            </div>
-          ))}
-        </div>
+        )}
 
-        {/* Platform */}
-        <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Globe className="w-4 h-4 text-chart-2" />
-            <h2 className="text-sm font-semibold text-foreground">Platform</h2>
+        {tab === "security" && (
+          <div className="card-lg" style={{ maxWidth: 500 }}>
+            <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 18, marginBottom: 20 }}>Change Password</h3>
+            <div className="input-group" style={{ marginBottom: 16 }}><label className="input-label">Current Password</label><input className="input" type="password" value={pw.current_password} onChange={e => setPw(p => ({ ...p, current_password: e.target.value }))} /></div>
+            <div className="input-group" style={{ marginBottom: 16 }}><label className="input-label">New Password</label><input className="input" type="password" value={pw.new_password} onChange={e => setPw(p => ({ ...p, new_password: e.target.value }))} placeholder="Min 8 characters" /></div>
+            <div className="input-group" style={{ marginBottom: 20 }}><label className="input-label">Confirm New Password</label><input className="input" type="password" value={pw.confirm} onChange={e => setPw(p => ({ ...p, confirm: e.target.value }))} /></div>
+            <button className="btn btn-primary btn-full" onClick={changePassword} disabled={saving || !pw.current_password || !pw.new_password}>{saving ? <span className="spinner" /> : "Change Password"}</button>
           </div>
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            {[
-              { icon: Cpu, label: "Version", value: "1.0.0" },
-              { icon: Server, label: "Environment", value: health ? "Online" : "Checking..." },
-              { icon: MapPin, label: "Region", value: "Africa" },
-              { icon: Database, label: "DB Status", value: health?.status === "healthy" ? "Connected" : "Checking..." },
-            ].map(({ icon: Icon, label, value }) => (
-              <div key={label} className="flex items-center gap-3 py-2.5 px-3 border border-border rounded-lg">
-                <Icon className="w-4 h-4 text-muted-foreground shrink-0" />
-                <div>
-                  <p className="text-xs text-muted-foreground">{label}</p>
-                  <p className="font-medium text-foreground text-sm">{value}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        )}
       </div>
     </Layout>
   );

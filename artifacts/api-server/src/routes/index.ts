@@ -5,6 +5,13 @@ import usersRouter from "./users";
 import merchantsRouter from "./merchants";
 import transactionsRouter from "./transactions";
 import dashboardRouter from "./dashboard";
+import walletsRouter from "./wallets";
+import transfersRouter from "./transfers";
+import exchangeRouter from "./exchange";
+import beneficiariesRouter from "./beneficiariesRoute";
+import notificationsRouter from "./notificationsRoute";
+import paymentLinksRouter from "./paymentLinksRoute";
+import kycRouter from "./kycRoute";
 
 const router: IRouter = Router();
 
@@ -14,5 +21,12 @@ router.use(usersRouter);
 router.use(merchantsRouter);
 router.use(transactionsRouter);
 router.use(dashboardRouter);
+router.use(walletsRouter);
+router.use(transfersRouter);
+router.use(exchangeRouter);
+router.use(beneficiariesRouter);
+router.use(notificationsRouter);
+router.use(paymentLinksRouter);
+router.use(kycRouter);
 
 export default router;
