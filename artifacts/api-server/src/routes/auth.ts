@@ -29,7 +29,18 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   if (existing) { res.status(409).json({ success: false, message: "Email already registered" }); return; }
   const passwordHash = hashPassword(password);
   const name = `${first_name} ${last_name}`;
-  const DEFAULT_CURRENCIES: Record<string, string> = { NG:"NGN",GH:"GHS",SN:"XOF",TG:"XOF",CI:"XOF",CM:"XAF",KE:"KES",ZA:"ZAR",EG:"EGP",MA:"MAD",TZ:"TZS",UG:"UGX",ET:"ETB",RW:"RWF",US:"USD",GB:"GBP",FR:"EUR" };
+  const DEFAULT_CURRENCIES: Record<string, string> = {
+    NG:"NGN",GH:"GHS",SN:"XOF",TG:"XOF",CI:"XOF",BJ:"XOF",BF:"XOF",NE:"XOF",ML:"XOF",GW:"XOF",
+    CM:"XAF",GA:"XAF",TD:"XAF",CG:"XAF",CF:"XAF",GQ:"XAF",
+    KE:"KES",ZA:"ZAR",EG:"EGP",MA:"MAD",TZ:"TZS",UG:"UGX",ET:"ETB",RW:"RWF",
+    CD:"CDF",AO:"AOA",MZ:"MZN",BW:"BWP",MW:"MWK",ZM:"ZMW",
+    SD:"SDG",TN:"TND",DZ:"DZD",LY:"LYD",
+    GM:"GMD",SL:"SLL",GN:"GNF",CV:"CVE",ST:"STN",
+    SC:"SCR",MU:"MUR",MG:"MGA",KM:"KMF",DJ:"DJF",
+    ER:"ERN",SO:"SOS",SS:"SSP",BI:"BIF",LS:"LSL",SZ:"SZL",NA:"NAD",
+    LR:"LRD",MR:"MRU",
+    US:"USD",GB:"GBP",FR:"EUR",
+  };
   const [user] = await db.insert(usersTable).values({ email, name, firstName: first_name, lastName: last_name, passwordHash, country: country || "US", phone, businessName: business_name }).returning();
   const primaryCur = DEFAULT_CURRENCIES[country || "US"] || "USD";
   const currencies = [...new Set([primaryCur, "USD"])];

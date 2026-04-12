@@ -3,7 +3,13 @@ import { Layout } from "../components/Layout";
 import { useAuth } from "../context/AuthContext";
 import api from "../lib/api";
 
-const CURRENCIES = ["USD", "NGN", "GHS", "KES", "XOF", "XAF", "ZAR", "EGP", "TZS", "UGX", "ETB", "RWF", "GBP", "EUR", "MAD"];
+const CURRENCIES = [
+  "USD", "EUR", "GBP",
+  "NGN", "GHS", "KES", "XOF", "XAF", "ZAR", "EGP", "MAD", "TZS", "UGX", "ETB", "RWF",
+  "CDF", "AOA", "MZN", "BWP", "MWK", "ZMW", "SDG", "TND", "DZD", "LYD",
+  "GMD", "SLL", "GNF", "CVE", "STN", "SCR", "MUR", "MGA", "KMF", "DJF",
+  "ERN", "SOS", "SSP", "BIF", "LSL", "SZL", "NAD", "LRD", "MRU",
+];
 
 export default function Wallets() {
   const { wallets, refreshWallets } = useAuth();

@@ -6,7 +6,17 @@ import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAu
 const router: IRouter = Router();
 
 const RATES: Record<string, Record<string, number>> = {
-  USD: { NGN: 1580, GHS: 14.5, XOF: 620, KES: 129, ZAR: 18.9, EGP: 48.5, MAD: 10.1, TZS: 2540, UGX: 3750, ETB: 57.5, RWF: 1290, EUR: 0.92, GBP: 0.79, XAF: 620 },
+  USD: {
+    NGN: 1580, GHS: 14.5, XOF: 620, XAF: 620, KES: 129, ZAR: 18.9, EGP: 48.5,
+    MAD: 10.1, TZS: 2540, UGX: 3750, ETB: 57.5, RWF: 1290,
+    CDF: 2780, AOA: 830, MZN: 63.8, BWP: 13.6, MWK: 1720, ZMW: 26.5,
+    SDG: 601, TND: 3.12, DZD: 134.5, LYD: 4.85,
+    GMD: 67.5, SLL: 22500, GNF: 8600, CVE: 102, STN: 23.2,
+    SCR: 14.2, MUR: 45.5, MGA: 4520, KMF: 460, DJF: 177.7,
+    ERN: 15, SOS: 571, SSP: 1320, BIF: 2870, LSL: 18.9, SZL: 18.9, NAD: 18.9,
+    LRD: 192, MRU: 39.7,
+    EUR: 0.92, GBP: 0.79,
+  },
 };
 function getRate(from: string, to: string): number | null {
   if (from === to) return 1;

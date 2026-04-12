@@ -4,11 +4,25 @@ import { useLocation } from "wouter";
 
 const COUNTRIES = [
   { code: "NG", name: "Nigeria" }, { code: "GH", name: "Ghana" }, { code: "KE", name: "Kenya" },
-  { code: "TG", name: "Togo" }, { code: "SN", name: "Senegal" }, { code: "CI", name: "Côte d'Ivoire" },
-  { code: "CM", name: "Cameroon" }, { code: "ZA", name: "South Africa" }, { code: "EG", name: "Egypt" },
-  { code: "TZ", name: "Tanzania" }, { code: "UG", name: "Uganda" }, { code: "ET", name: "Ethiopia" },
-  { code: "RW", name: "Rwanda" }, { code: "MA", name: "Morocco" }, { code: "US", name: "United States" },
-  { code: "GB", name: "United Kingdom" }, { code: "FR", name: "France" },
+  { code: "ZA", name: "South Africa" }, { code: "EG", name: "Egypt" }, { code: "ET", name: "Ethiopia" },
+  { code: "TZ", name: "Tanzania" }, { code: "UG", name: "Uganda" }, { code: "RW", name: "Rwanda" },
+  { code: "SN", name: "Senegal" }, { code: "CI", name: "Côte d'Ivoire" }, { code: "TG", name: "Togo" },
+  { code: "BJ", name: "Benin" }, { code: "BF", name: "Burkina Faso" }, { code: "NE", name: "Niger" },
+  { code: "ML", name: "Mali" }, { code: "GW", name: "Guinea-Bissau" },
+  { code: "CM", name: "Cameroon" }, { code: "GA", name: "Gabon" }, { code: "TD", name: "Chad" },
+  { code: "CG", name: "Congo" }, { code: "CF", name: "Central African Republic" }, { code: "GQ", name: "Equatorial Guinea" },
+  { code: "CD", name: "DR Congo" }, { code: "AO", name: "Angola" }, { code: "MZ", name: "Mozambique" },
+  { code: "ZM", name: "Zambia" }, { code: "MW", name: "Malawi" }, { code: "BW", name: "Botswana" },
+  { code: "NA", name: "Namibia" }, { code: "LS", name: "Lesotho" }, { code: "SZ", name: "Eswatini" },
+  { code: "MA", name: "Morocco" }, { code: "TN", name: "Tunisia" }, { code: "DZ", name: "Algeria" },
+  { code: "LY", name: "Libya" }, { code: "SD", name: "Sudan" }, { code: "SS", name: "South Sudan" },
+  { code: "SO", name: "Somalia" }, { code: "DJ", name: "Djibouti" }, { code: "ER", name: "Eritrea" },
+  { code: "GM", name: "Gambia" }, { code: "SL", name: "Sierra Leone" }, { code: "GN", name: "Guinea" },
+  { code: "LR", name: "Liberia" }, { code: "MR", name: "Mauritania" },
+  { code: "CV", name: "Cape Verde" }, { code: "ST", name: "São Tomé and Príncipe" },
+  { code: "MU", name: "Mauritius" }, { code: "SC", name: "Seychelles" }, { code: "MG", name: "Madagascar" },
+  { code: "KM", name: "Comoros" }, { code: "BI", name: "Burundi" },
+  { code: "US", name: "United States" }, { code: "GB", name: "United Kingdom" }, { code: "FR", name: "France" },
 ];
 
 export default function Register() {
