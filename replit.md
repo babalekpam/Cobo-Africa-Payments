@@ -48,7 +48,7 @@ lib/
 - `/register` — Registration with first/last name, country, phone, business
 - `/dashboard` — Stats cards, wallet overview, recent transactions
 - `/wallets` — Multi-currency wallet management (add wallets, set default)
-- `/send` — Send money via bank transfer, mobile money, or internal COBO transfer
+- `/send` — Send money with multi-currency support, 53 African countries, FX conversion, country-specific mobile money providers
 - `/transactions` — Transaction history with filters, Export CSV button, receipt buttons
 - `/exchange` — FX exchange with rate quotes and currency swap
 - `/payment-links` — Create and manage payment link pages
