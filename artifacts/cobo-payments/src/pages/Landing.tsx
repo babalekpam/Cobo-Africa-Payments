@@ -162,7 +162,66 @@ export default function Landing() {
         </div>
       </section>
 
-      <section style={{ padding: "80px 40px", background: "linear-gradient(180deg, #F5F0E8 0%, #FAF7F2 100%)" }}>
+      <section style={{ padding: "100px 40px", background: "linear-gradient(180deg, #F5F0E8 0%, #FAF7F2 100%)" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+          <div style={{ textAlign: "center", marginBottom: 60 }}>
+            <h2 style={{ fontFamily: "var(--font-heading)", fontSize: 40, fontWeight: 800, color: "#0F2B4C", letterSpacing: "-0.03em", marginBottom: 16 }}>
+              Lowest fees in the market
+            </h2>
+            <p style={{ fontSize: 18, color: "#7A6E58", maxWidth: 600, margin: "0 auto" }}>
+              We compared our pricing to every major competitor. See for yourself.
+            </p>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 20, marginBottom: 40 }}>
+            {[
+              { label: "COBO Transfers", value: "0.5%", sub: "min $0.25", highlight: true },
+              { label: "International Fee", value: "$0.99", sub: "flat per transfer", highlight: true },
+              { label: "FX Spread", value: "0.35%", sub: "transparent rate", highlight: true },
+              { label: "COBO-to-COBO", value: "FREE", sub: "always", highlight: true },
+            ].map(p => (
+              <div key={p.label} style={{
+                background: "#FFFFFF", borderRadius: 20, padding: "32px 24px", textAlign: "center",
+                border: "2px solid rgba(201,138,26,0.2)", boxShadow: "0 4px 20px rgba(0,0,0,0.04)",
+              }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#7A6E58", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>{p.label}</div>
+                <div style={{ fontFamily: "var(--font-heading)", fontSize: 36, fontWeight: 800, color: "#C98A1A", letterSpacing: "-0.02em" }}>{p.value}</div>
+                <div style={{ fontSize: 13, color: "#7A6E58", marginTop: 8 }}>{p.sub}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ background: "#FFFFFF", borderRadius: 16, overflow: "hidden", border: "1px solid rgba(0,0,0,0.06)" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 15 }}>
+              <thead>
+                <tr style={{ background: "#0F2B4C" }}>
+                  <th style={{ padding: "14px 20px", textAlign: "left", color: "#fff", fontWeight: 600 }}>Provider</th>
+                  <th style={{ padding: "14px 20px", textAlign: "center", color: "#fff", fontWeight: 600 }}>Transfer Fee</th>
+                  <th style={{ padding: "14px 20px", textAlign: "center", color: "#fff", fontWeight: 600 }}>FX Markup</th>
+                  <th style={{ padding: "14px 20px", textAlign: "center", color: "#fff", fontWeight: 600 }}>Internal Transfers</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { name: "COBO Africa", fee: "0.5% (min $0.25)", fx: "0.35%", internal: "Free", best: true },
+                  { name: "Wise", fee: "0.4–1.5%", fx: "0.3–0.6%", internal: "N/A", best: false },
+                  { name: "WorldRemit", fee: "$1.99–$4.99", fx: "1–3%", internal: "N/A", best: false },
+                  { name: "Remitly", fee: "$0–$4.99", fx: "1–2%", internal: "N/A", best: false },
+                  { name: "Flutterwave", fee: "1.4%", fx: "1–2%", internal: "N/A", best: false },
+                  { name: "Chipper Cash", fee: '"Free"', fx: "2–5% hidden", internal: "N/A", best: false },
+                ].map((r, i) => (
+                  <tr key={r.name} style={{ background: r.best ? "rgba(201,138,26,0.06)" : i % 2 === 0 ? "#FAFAFA" : "#FFFFFF" }}>
+                    <td style={{ padding: "14px 20px", fontWeight: r.best ? 700 : 500, color: r.best ? "#C98A1A" : "#0F2B4C" }}>{r.best ? "★ " : ""}{r.name}</td>
+                    <td style={{ padding: "14px 20px", textAlign: "center", fontWeight: r.best ? 700 : 400, color: r.best ? "#1B9E5A" : "#555" }}>{r.fee}</td>
+                    <td style={{ padding: "14px 20px", textAlign: "center", fontWeight: r.best ? 700 : 400, color: r.best ? "#1B9E5A" : "#555" }}>{r.fx}</td>
+                    <td style={{ padding: "14px 20px", textAlign: "center", fontWeight: r.best ? 700 : 400, color: r.best ? "#1B9E5A" : "#555" }}>{r.internal}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section style={{ padding: "80px 40px", background: "linear-gradient(180deg, #FAF7F2 0%, #F5F0E8 100%)" }}>
         <div style={{ maxWidth: 1200, margin: "0 auto" }}>
           <div style={{ textAlign: "center", marginBottom: 48 }}>
             <h2 style={{ fontFamily: "var(--font-heading)", fontSize: 36, fontWeight: 800, color: "#0F2B4C", letterSpacing: "-0.03em", marginBottom: 12 }}>

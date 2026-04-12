@@ -40,7 +40,7 @@ router.post("/exchange/convert", requireAuth, async (req: AuthenticatedRequest, 
   const rate = getRate(from, to);
   if (!rate) { res.status(400).json({ success: false, message: "Rate not available" }); return; }
   const converted = Number(amount) * rate;
-  const feePercent = 0.005;
+  const feePercent = 0.0035;
   const feeAmount = Number(amount) * feePercent;
   const netAmount = converted * (1 - feePercent);
   res.json({ success: true, from, to, amount: Number(amount), rate, converted, fee_percent: feePercent * 100, fee_amount: feeAmount, net_amount: netAmount });
@@ -57,7 +57,7 @@ router.post("/exchange/swap", requireAuth, async (req: AuthenticatedRequest, res
   if (!toWallet) {
     [toWallet] = await db.insert(walletsTable).values({ userId: req.user!.id, currency: to }).returning();
   }
-  const feePercent = 0.005;
+  const feePercent = 0.0035;
   const converted = Number(amount) * rate;
   const netAmount = converted * (1 - feePercent);
   await db.update(walletsTable).set({ balance: String(Number(fromWallet.balance) - Number(amount)) }).where(eq(walletsTable.id, fromWallet.id));

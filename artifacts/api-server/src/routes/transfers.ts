@@ -5,9 +5,9 @@ import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAu
 import { emailService } from "../services/email";
 
 const router: IRouter = Router();
-const FEE_RATE = 0.009;
-const MIN_FEE = 0.5;
-const INTL_FLAT_FEE = 1.5;
+const FEE_RATE = 0.005;
+const MIN_FEE = 0.25;
+const INTL_FLAT_FEE = 0.99;
 const KYC_LIMITS: Record<number, number> = { 0: 100, 1: 5000, 2: 50000 };
 
 const FX_RATES: Record<string, Record<string, number>> = {
