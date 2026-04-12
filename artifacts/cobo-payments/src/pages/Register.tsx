@@ -35,7 +35,7 @@ export default function Register() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--dark)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+    <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div className="fade-in" style={{ width: "100%", maxWidth: 480 }}>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
           <img src={`${import.meta.env.BASE_URL}cobo-logo.png`} alt="COBO Africa" style={{ height: 48, borderRadius: 8, margin: "0 auto 16px" }} />

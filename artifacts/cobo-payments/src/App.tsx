@@ -34,7 +34,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div style={{ minHeight: "100vh", background: "var(--dark)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ textAlign: "center" }}>
           <div className="spinner" style={{ width: 32, height: 32, marginBottom: 12 }} />
           <div style={{ color: "var(--text-dim)", fontSize: 14 }}>Loading COBO...</div>

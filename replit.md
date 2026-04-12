@@ -2,7 +2,7 @@
 
 ## Overview
 
-Full-stack fintech wallet platform for managing payments, wallets, FX exchange, and transfers across Africa. Built as a pnpm monorepo with Express API + React frontend. Features a dark gold custom CSS theme with Syne/DM Sans fonts.
+Full-stack fintech wallet platform for managing payments, wallets, FX exchange, and transfers across Africa. Built as a pnpm monorepo with Express API + React frontend. Features a cream/warm white theme with gold accents, dark sidebar, and Plus Jakarta Sans/DM Sans fonts.
 
 ## Admin Credentials
 - Email: `admin@cobo.africa`
@@ -34,9 +34,10 @@ lib/
 
 ## Design Theme
 
-- Dark gold theme with custom CSS variables
-- Colors: --dark: #0D0B07, --surface: #1A1710, --gold: #E8A940, --gold-dim: #8A6320, --green: #3DD68C, --red: #F55353, --blue: #4FA3E0, --text: #F0E8D5, --text-dim: #9A8F75
-- Fonts: Syne (headings, 700/800 weight), DM Sans (body)
+- Cream/warm white theme with gold accents and dark sidebar
+- Colors: --bg: #FAF7F2, --surface: #FFFFFF, --surface2: #F5F0E8, --gold: #C98A1A, --gold-light: #E8A940, --green: #1B9E5A, --red: #D93636, --blue: #2A7CC7, --text: #2C2416, --text-dim: #7A6E58
+- Sidebar: dark (#2C2416) with dedicated vars: --sidebar-bg, --sidebar-text, --sidebar-text-dim, --sidebar-border, --sidebar-surface
+- Fonts: Plus Jakarta Sans (headings, 700 weight), DM Sans (body)
 - Custom CSS classes: .card, .btn, .btn-primary, .input, .select, .badge, .stat-card, .table-wrap, .empty, .spinner, .fade-in, .grid-2/3/4, .page, .page-title, .modal-overlay
 
 ## Frontend Pages
