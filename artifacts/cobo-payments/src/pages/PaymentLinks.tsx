@@ -58,7 +58,7 @@ export default function PaymentLinks() {
         {showCreate && (
           <div className="modal-overlay" onClick={() => setShowCreate(false)}>
             <div className="card-lg fade-in" style={{ width: 440 }} onClick={e => e.stopPropagation()}>
-              <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 18, marginBottom: 20 }}>Create Payment Link</h3>
+              <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 18, marginBottom: 20 }}>Create Payment Link</h3>
               <div className="input-group" style={{ marginBottom: 16 }}><label className="input-label">Title</label><input className="input" value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="e.g. Invoice #001" /></div>
               <div className="input-group" style={{ marginBottom: 16 }}><label className="input-label">Description</label><input className="input" value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} /></div>
               <div className="grid-2" style={{ marginBottom: 20 }}>

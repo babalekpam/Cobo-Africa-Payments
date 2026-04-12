@@ -55,7 +55,7 @@ export default function Exchange() {
           <div className="card-lg fade-in" style={{ maxWidth: 500 }}>
             <div style={{ textAlign: "center" }}>
               <div style={{ fontSize: 48, marginBottom: 12 }}>💱</div>
-              <h2 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 22, marginBottom: 8 }}>Swap Complete!</h2>
+              <h2 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 22, marginBottom: 8 }}>Swap Complete!</h2>
               <p style={{ color: "var(--text-dim)", marginBottom: 20 }}>Your balances have been updated</p>
               <button className="btn btn-primary" onClick={() => { setResult(null); setQuote(null); setAmount(""); }}>New Exchange</button>
             </div>
@@ -63,7 +63,7 @@ export default function Exchange() {
         ) : (
           <div className="grid-2">
             <div className="card-lg">
-              <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 18, marginBottom: 20 }}>Convert Currency</h3>
+              <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 18, marginBottom: 20 }}>Convert Currency</h3>
               {error && <div style={{ padding: "10px 14px", background: "var(--red-bg)", borderRadius: "var(--radius-sm)", color: "var(--red)", fontSize: 13, marginBottom: 16 }}>{error}</div>}
 
               <div className="input-group" style={{ marginBottom: 16 }}>
@@ -93,7 +93,7 @@ export default function Exchange() {
                 <div>
                   <div style={{ padding: "16px", background: "var(--surface2)", borderRadius: "var(--radius-sm)", marginBottom: 16, border: "1px solid var(--border-gold)" }}>
                     <div style={{ fontSize: 13, color: "var(--text-dim)" }}>You'll receive approximately</div>
-                    <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 26, color: "var(--gold)", marginTop: 4 }}>
+                    <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 26, color: "var(--gold)", marginTop: 4 }}>
                       {toCur} {Number(quote.converted).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                     </div>
                     <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 4 }}>Rate: 1 {fromCur} = {quote.rate} {toCur}</div>
@@ -104,7 +104,7 @@ export default function Exchange() {
             </div>
 
             <div className="card">
-              <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 16, marginBottom: 16 }}>Exchange Rates (vs USD)</h3>
+              <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 16, marginBottom: 16 }}>Exchange Rates (vs USD)</h3>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {Object.entries(rates).map(([cur, rate]) => (
                   <div key={cur} style={{ display: "flex", justifyContent: "space-between", padding: "10px 12px", background: "var(--surface2)", borderRadius: "var(--radius-sm)" }}>

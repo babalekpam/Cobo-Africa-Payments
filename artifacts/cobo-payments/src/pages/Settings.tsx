@@ -49,7 +49,7 @@ export default function Settings() {
 
         {tab === "profile" && (
           <div className="card-lg" style={{ maxWidth: 500 }}>
-            <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 18, marginBottom: 20 }}>Profile Information</h3>
+            <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 18, marginBottom: 20 }}>Profile Information</h3>
             <div className="grid-2" style={{ marginBottom: 16 }}>
               <div className="input-group"><label className="input-label">First Name</label><input className="input" value={profile.first_name} onChange={e => setProfile(p => ({ ...p, first_name: e.target.value }))} /></div>
               <div className="input-group"><label className="input-label">Last Name</label><input className="input" value={profile.last_name} onChange={e => setProfile(p => ({ ...p, last_name: e.target.value }))} /></div>
@@ -63,7 +63,7 @@ export default function Settings() {
 
         {tab === "security" && (
           <div className="card-lg" style={{ maxWidth: 500 }}>
-            <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 18, marginBottom: 20 }}>Change Password</h3>
+            <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 18, marginBottom: 20 }}>Change Password</h3>
             <div className="input-group" style={{ marginBottom: 16 }}><label className="input-label">Current Password</label><input className="input" type="password" value={pw.current_password} onChange={e => setPw(p => ({ ...p, current_password: e.target.value }))} /></div>
             <div className="input-group" style={{ marginBottom: 16 }}><label className="input-label">New Password</label><input className="input" type="password" value={pw.new_password} onChange={e => setPw(p => ({ ...p, new_password: e.target.value }))} placeholder="Min 8 characters" /></div>
             <div className="input-group" style={{ marginBottom: 20 }}><label className="input-label">Confirm New Password</label><input className="input" type="password" value={pw.confirm} onChange={e => setPw(p => ({ ...p, confirm: e.target.value }))} /></div>

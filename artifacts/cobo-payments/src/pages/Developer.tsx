@@ -34,14 +34,14 @@ export default function Developer() {
 
         <div className="grid-2" style={{ marginBottom: 28 }}>
           <div className="card-lg">
-            <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 18, marginBottom: 16 }}>API Key</h3>
+            <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 18, marginBottom: 16 }}>API Key</h3>
             <div style={{ padding: "14px 16px", background: "var(--surface2)", borderRadius: "var(--radius-sm)", fontFamily: "monospace", fontSize: 13, color: "var(--gold)", wordBreak: "break-all", marginBottom: 12 }}>
               {showKey ? fakeKey : "••••••••••••••••••••••••"}
             </div>
             <button className="btn btn-ghost btn-sm" onClick={() => setShowKey(!showKey)}>{showKey ? "Hide" : "Reveal"} Key</button>
           </div>
           <div className="card-lg">
-            <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 18, marginBottom: 16 }}>Authentication</h3>
+            <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 18, marginBottom: 16 }}>Authentication</h3>
             <div style={{ fontSize: 14, color: "var(--text-dim)", lineHeight: 1.6 }}>
               <p>All API requests require a Bearer token:</p>
               <div style={{ padding: "10px 14px", background: "var(--surface2)", borderRadius: "var(--radius-sm)", fontFamily: "monospace", fontSize: 12, marginTop: 8 }}>
@@ -52,7 +52,7 @@ export default function Developer() {
         </div>
 
         <div className="card">
-          <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 16, marginBottom: 16 }}>API Endpoints</h3>
+          <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 16, marginBottom: 16 }}>API Endpoints</h3>
           <div className="table-wrap">
             <table>
               <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th></tr></thead>

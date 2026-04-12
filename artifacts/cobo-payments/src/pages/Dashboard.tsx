@@ -57,7 +57,7 @@ export default function Dashboard() {
 
         <div className="grid-2">
           <div className="card">
-            <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 16, marginBottom: 16 }}>Your Wallets</h3>
+            <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 16, marginBottom: 16 }}>Your Wallets</h3>
             {wallets.length === 0 ? (
               <div className="empty"><div className="empty-icon">💰</div><div className="empty-desc">No wallets yet</div></div>
             ) : (
@@ -68,7 +68,7 @@ export default function Dashboard() {
                       <div style={{ fontWeight: 600, fontSize: 15 }}>{w.currency}</div>
                       {w.isDefault && <span className="badge badge-warning" style={{ fontSize: 10 }}>Default</span>}
                     </div>
-                    <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 18 }}>
+                    <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 18 }}>
                       {w.balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                     </div>
                   </div>
@@ -78,7 +78,7 @@ export default function Dashboard() {
           </div>
 
           <div className="card">
-            <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 16, marginBottom: 16 }}>Recent Transactions</h3>
+            <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 16, marginBottom: 16 }}>Recent Transactions</h3>
             {loading ? (
               <div style={{ textAlign: "center", padding: 40 }}><span className="spinner" /></div>
             ) : recent.length === 0 ? (

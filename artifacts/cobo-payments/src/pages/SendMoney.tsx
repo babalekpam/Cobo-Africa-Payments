@@ -77,7 +77,7 @@ export default function SendMoney() {
           <div className="card-lg fade-in" style={{ maxWidth: 500 }}>
             <div style={{ textAlign: "center" }}>
               <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
-              <h2 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 22, marginBottom: 8 }}>Transfer Initiated</h2>
+              <h2 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 22, marginBottom: 8 }}>Transfer Initiated</h2>
               <p style={{ color: "var(--text-dim)", marginBottom: 20 }}>Reference: {result.transaction?.reference || result.reference}</p>
               <button className="btn btn-primary" onClick={() => setResult(null)}>Send Another</button>
             </div>

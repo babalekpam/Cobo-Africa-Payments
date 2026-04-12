@@ -48,7 +48,7 @@ export default function Wallets() {
                 {w.isDefault && <span className="badge badge-warning" style={{ position: "absolute", top: 16, right: 16 }}>Default</span>}
                 <div style={{ fontSize: 32, marginBottom: 8 }}>💰</div>
                 <div style={{ fontSize: 14, color: "var(--text-dim)", fontWeight: 500 }}>{w.currency} Wallet</div>
-                <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 28, marginTop: 4 }}>
+                <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 28, marginTop: 4 }}>
                   {w.balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                 </div>
                 {w.lockedBalance > 0 && <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 4 }}>🔒 Locked: {w.lockedBalance.toLocaleString()}</div>}
@@ -61,7 +61,7 @@ export default function Wallets() {
         {showAdd && (
           <div className="modal-overlay" onClick={() => setShowAdd(false)}>
             <div className="card-lg fade-in" style={{ width: 400 }} onClick={e => e.stopPropagation()}>
-              <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 18, marginBottom: 20 }}>Add New Wallet</h3>
+              <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 18, marginBottom: 20 }}>Add New Wallet</h3>
               <div className="input-group" style={{ marginBottom: 20 }}>
                 <label className="input-label">Currency</label>
                 <select className="select" value={currency} onChange={e => setCurrency(e.target.value)}>

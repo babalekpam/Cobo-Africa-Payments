@@ -62,7 +62,7 @@ export default function Beneficiaries() {
         {showAdd && (
           <div className="modal-overlay" onClick={() => setShowAdd(false)}>
             <div className="card-lg fade-in" style={{ width: 440 }} onClick={e => e.stopPropagation()}>
-              <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 18, marginBottom: 20 }}>Add Beneficiary</h3>
+              <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 18, marginBottom: 20 }}>Add Beneficiary</h3>
               <div className="input-group" style={{ marginBottom: 16 }}><label className="input-label">Name</label><input className="input" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} /></div>
               <div className="input-group" style={{ marginBottom: 16 }}>
                 <label className="input-label">Type</label>

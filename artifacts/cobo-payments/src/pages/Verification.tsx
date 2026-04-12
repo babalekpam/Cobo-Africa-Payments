@@ -46,7 +46,7 @@ export default function Verification() {
           {LEVELS.map(l => (
             <div key={l.level} className="card" style={{ border: currentLevel >= l.level ? "1px solid var(--border-gold)" : undefined }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-                <span style={{ fontWeight: 700, fontSize: 16, fontFamily: "'Syne',sans-serif" }}>Level {l.level}</span>
+                <span style={{ fontWeight: 700, fontSize: 16, fontFamily: "var(--font-heading)" }}>Level {l.level}</span>
                 {currentLevel >= l.level ? <span className="badge badge-success">✓ Complete</span> : currentLevel === l.level - 1 ? <span className="badge badge-warning">Current</span> : <span className="badge badge-dim">Locked</span>}
               </div>
               <div style={{ fontWeight: 600, marginBottom: 4 }}>{l.label}</div>
@@ -58,7 +58,7 @@ export default function Verification() {
 
         <div className="grid-2">
           <div className="card-lg">
-            <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 18, marginBottom: 20 }}>Submit Document</h3>
+            <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 18, marginBottom: 20 }}>Submit Document</h3>
             {user?.kyc_status === "verified" && currentLevel >= 2 ? (
               <div className="empty"><div className="empty-icon">✅</div><div className="empty-title">Fully Verified</div><div className="empty-desc">You have completed all verification levels</div></div>
             ) : (
@@ -82,7 +82,7 @@ export default function Verification() {
           </div>
 
           <div className="card">
-            <h3 style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 16, marginBottom: 16 }}>Submitted Documents</h3>
+            <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 16, marginBottom: 16 }}>Submitted Documents</h3>
             {loading ? <div style={{ textAlign: "center", padding: 20 }}><span className="spinner" /></div> : docs.length === 0 ? (
               <div className="empty" style={{ padding: 30 }}><div className="empty-desc">No documents submitted yet</div></div>
             ) : (

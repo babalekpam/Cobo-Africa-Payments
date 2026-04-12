@@ -50,8 +50,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div style={{
               width: 40, height: 40, borderRadius: "50%", background: "linear-gradient(135deg, var(--gold), var(--gold-dim))",
-              display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Syne',sans-serif",
-              fontWeight: 800, fontSize: 14, color: "var(--dark)",
+              display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-heading)",
+              fontWeight: 700, fontSize: 14, color: "var(--dark)",
             }}>{initials}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -67,7 +67,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {usdWallet && (
             <div style={{ marginTop: 12, padding: "10px 12px", background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
               <div style={{ fontSize: 11, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: 0.5 }}>USD Balance</div>
-              <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 20, color: "var(--gold)", marginTop: 2 }}>
+              <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 20, color: "var(--gold)", marginTop: 2 }}>
                 ${usdWallet.balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}
               </div>
             </div>
