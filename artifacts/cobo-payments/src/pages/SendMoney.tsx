@@ -220,6 +220,10 @@ export default function SendMoney() {
   const [rate, setRate] = useState<number | null>(null);
   const [rateLoading, setRateLoading] = useState(false);
   const [convertedAmount, setConvertedAmount] = useState<number | null>(null);
+  const [showAddWallet, setShowAddWallet] = useState(false);
+  const [newWalletCurrency, setNewWalletCurrency] = useState("");
+  const [addingWallet, setAddingWallet] = useState(false);
+  const [walletSearch, setWalletSearch] = useState("");
 
   const [form, setForm] = useState<any>({
     walletId: "", amount: "", senderCurrency: "USD",
@@ -263,6 +267,34 @@ export default function SendMoney() {
       .catch(() => { setRate(null); setConvertedAmount(null); })
       .finally(() => setRateLoading(false));
   }, [form.amount, form.senderCurrency, form.recipientCurrency, tab]);
+
+  const addNewWallet = async (cur: string) => {
+    setAddingWallet(true);
+    try {
+      await api.post("/wallets", { currency: cur });
+      await refreshWallets();
+      setShowAddWallet(false);
+      setWalletSearch("");
+      setTimeout(() => {
+        const created = wallets.find(w => w.currency === cur);
+        if (created) {
+          setForm((p: any) => ({ ...p, walletId: String(created.id), senderCurrency: cur }));
+        }
+      }, 300);
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Failed to create wallet");
+    }
+    setAddingWallet(false);
+  };
+
+  useEffect(() => {
+    if (wallets.length > 0) {
+      const cur = wallets.find(w => w.currency === form.senderCurrency);
+      if (cur && form.walletId !== String(cur.id)) {
+        setForm((p: any) => ({ ...p, walletId: String(cur.id) }));
+      }
+    }
+  }, [wallets]);
 
   const set = (k: string, v: string) => setForm((p: any) => ({ ...p, [k]: v }));
   const selectedWallet = wallets.find(w => w.id === Number(form.walletId));
@@ -384,6 +416,24 @@ export default function SendMoney() {
                       </button>
                     );
                   })}
+                  <button
+                    type="button"
+                    onClick={() => { setShowAddWallet(true); setNewWalletCurrency(""); setWalletSearch(""); }}
+                    style={{
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                      padding: "12px 14px",
+                      border: "1px dashed var(--gold)",
+                      borderRadius: 10,
+                      background: "transparent",
+                      cursor: "pointer",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: "var(--gold)",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    + Add another currency wallet
+                  </button>
                 </div>
               </div>
 
@@ -557,6 +607,65 @@ export default function SendMoney() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+        {showAddWallet && (
+          <div className="modal-overlay" onClick={() => setShowAddWallet(false)}>
+            <div className="card-lg fade-in" style={{ width: 480, maxHeight: "80vh", overflow: "hidden", display: "flex", flexDirection: "column" }} onClick={e => e.stopPropagation()}>
+              <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 18, marginBottom: 4 }}>Add Currency Wallet</h3>
+              <p style={{ fontSize: 13, color: "var(--text-dim)", marginBottom: 16 }}>Choose your local currency to create a new wallet</p>
+
+              <div className="input-group" style={{ marginBottom: 12 }}>
+                <input className="input" placeholder="Search by currency or country..." value={walletSearch} onChange={e => setWalletSearch(e.target.value)} style={{ fontSize: 14 }} />
+              </div>
+
+              <div style={{ flex: 1, overflowY: "auto", maxHeight: 350, marginBottom: 16 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                  {ALL_CURRENCIES
+                    .filter(c => !wallets.find(w => w.currency === c.code))
+                    .filter(c =>
+                      !walletSearch ||
+                      c.code.toLowerCase().includes(walletSearch.toLowerCase()) ||
+                      c.name.toLowerCase().includes(walletSearch.toLowerCase()) ||
+                      (CURRENCY_INFO[c.code]?.name || "").toLowerCase().includes(walletSearch.toLowerCase())
+                    )
+                    .map(c => {
+                      const info = CURRENCY_INFO[c.code];
+                      const isSelected = newWalletCurrency === c.code;
+                      return (
+                        <button
+                          key={c.code}
+                          type="button"
+                          onClick={() => setNewWalletCurrency(c.code)}
+                          style={{
+                            display: "flex", alignItems: "center", gap: 8,
+                            padding: "10px 12px",
+                            border: isSelected ? "2px solid var(--gold)" : "1px solid var(--surface2)",
+                            borderRadius: 10,
+                            background: isSelected ? "rgba(201,138,26,0.08)" : "var(--surface)",
+                            cursor: "pointer",
+                            textAlign: "left",
+                            transition: "all 0.15s",
+                          }}
+                        >
+                          <span style={{ fontSize: 18 }}>{info?.flag || "💰"}</span>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: isSelected ? 700 : 600, color: isSelected ? "var(--gold)" : "var(--text)" }}>{c.code}</div>
+                            <div style={{ fontSize: 10, color: "var(--text-dim)" }}>{c.name}</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: 10 }}>
+                <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => { setShowAddWallet(false); setWalletSearch(""); }}>Cancel</button>
+                <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => newWalletCurrency && addNewWallet(newWalletCurrency)} disabled={!newWalletCurrency || addingWallet}>
+                  {addingWallet ? <span className="spinner" /> : `Create ${newWalletCurrency || "..."} Wallet`}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
