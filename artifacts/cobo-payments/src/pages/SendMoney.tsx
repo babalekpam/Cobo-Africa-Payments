@@ -332,10 +332,11 @@ export default function SendMoney() {
 
   const set = (k: string, v: string) => setForm((p: any) => ({ ...p, [k]: v }));
   const selectedWallet = wallets.find(w => w.id === Number(form.walletId));
-  const fee = tab === "internal" ? 0 : Math.max(0.5, Number(form.amount || 0) * 0.009);
   const selectedCountry = ALL_COUNTRIES.find(c => c.code === form.recipientCountry);
   const providers = MOBILE_PROVIDERS[form.recipientCountry] || DEFAULT_PROVIDERS;
   const isCrossCurrency = form.senderCurrency !== form.recipientCurrency && tab !== "internal";
+  const intlFlatFee = isCrossCurrency ? 1.5 : 0;
+  const fee = tab === "internal" ? 0 : Math.max(0.5, Number(form.amount || 0) * 0.009) + intlFlatFee;
 
   const send = async () => {
     setError(""); setResult(null); setLoading(true);
@@ -475,8 +476,8 @@ export default function SendMoney() {
                 <label className="input-label">Amount ({CURRENCY_INFO[form.senderCurrency]?.flag} {form.senderCurrency})</label>
                 <input className="input" type="number" min="0" step="0.01" value={form.amount} onChange={e => set("amount", e.target.value)} placeholder="0.00" style={{ fontSize: 18, fontWeight: 600 }} />
                 {Number(form.amount) > 0 && (
-                  <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 4, display: "flex", justifyContent: "space-between" }}>
-                    <span>Fee: {form.senderCurrency} {fee.toFixed(2)}</span>
+                  <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 4, display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 4 }}>
+                    <span>Fee: {form.senderCurrency} {fee.toFixed(2)}{isCrossCurrency ? " (incl. $1.50 intl.)" : ""}</span>
                     <span>Total: {form.senderCurrency} {(Number(form.amount) + fee).toFixed(2)}</span>
                   </div>
                 )}

@@ -7,6 +7,7 @@ import { emailService } from "../services/email";
 const router: IRouter = Router();
 const FEE_RATE = 0.009;
 const MIN_FEE = 0.5;
+const INTL_FLAT_FEE = 1.5;
 const KYC_LIMITS: Record<number, number> = { 0: 100, 1: 5000, 2: 50000 };
 
 const FX_RATES: Record<string, Record<string, number>> = {
@@ -32,9 +33,10 @@ function getFxRate(from: string, to: string): number | null {
   return null;
 }
 
-function calcFee(amount: number, type: string) {
+function calcFee(amount: number, type: string, isInternational: boolean = false) {
   if (type === "internal") return 0;
-  return Math.max(amount * FEE_RATE, MIN_FEE);
+  const percentFee = Math.max(amount * FEE_RATE, MIN_FEE);
+  return isInternational ? percentFee + INTL_FLAT_FEE : percentFee;
 }
 
 async function checkDailyLimit(userId: number, kycLevel: number, amountUSD: number) {
@@ -109,14 +111,15 @@ router.post("/transfers/bank", requireAuth, async (req: AuthenticatedRequest, re
 
   const wallet = await getWallet(req.user!.id, wallet_id, currency);
   if (!wallet) { res.status(404).json({ success: false, message: "Wallet not found" }); return; }
-  const fee = calcFee(Number(amount), "bank");
+  const recipCurrency = recipient_currency || wallet.currency;
+  const isInternational = recipCurrency !== wallet.currency;
+  const fee = calcFee(Number(amount), "bank", isInternational);
   const total = Number(amount) + fee;
   if (Number(wallet.balance) < total) { res.status(400).json({ success: false, message: "Insufficient funds" }); return; }
 
-  const recipCurrency = recipient_currency || wallet.currency;
   let convertedAmount = Number(amount);
   let fxRate: number | null = 1;
-  if (recipCurrency !== wallet.currency) {
+  if (isInternational) {
     fxRate = getFxRate(wallet.currency, recipCurrency);
     if (!fxRate) { res.status(400).json({ success: false, message: `Exchange rate unavailable for ${wallet.currency} → ${recipCurrency}` }); return; }
     convertedAmount = Number(amount) * fxRate;
@@ -124,18 +127,18 @@ router.post("/transfers/bank", requireAuth, async (req: AuthenticatedRequest, re
 
   await db.update(walletsTable).set({ balance: String(Number(wallet.balance) - total) }).where(eq(walletsTable.id, wallet.id));
   const ref = "COBO-BANK-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
-  const desc = description || `Bank transfer to ${account_name || bank_name}${recipCurrency !== wallet.currency ? ` (${wallet.currency} → ${recipCurrency})` : ""}`;
+  const desc = description || `Bank transfer to ${account_name || bank_name}${isInternational ? ` (${wallet.currency} → ${recipCurrency})` : ""}`;
   await db.insert(transactionsTable).values({
     reference: ref, amount: String(amount), currency: wallet.currency, status: "completed", type: "send",
     customerId: req.user!.id, description: desc,
     paymentMethod: "bank",
   });
   await db.insert(notificationsTable).values({
-    userId: req.user!.id, title: "Transfer Sent", message: `${wallet.currency} ${Number(amount).toLocaleString()} sent to ${account_name || bank_name}${recipCurrency !== wallet.currency ? ` (${recipCurrency} ${convertedAmount.toFixed(2)} received)` : ""}`, type: "success",
+    userId: req.user!.id, title: "Transfer Sent", message: `${wallet.currency} ${Number(amount).toLocaleString()} sent to ${account_name || bank_name}${isInternational ? ` (${recipCurrency} ${convertedAmount.toFixed(2)} received)` : ""}`, type: "success",
   });
-  await db.insert(auditLogsTable).values({ userId: req.user!.id, action: "transfer_bank", ip: req.ip || "unknown", meta: { amount, currency: wallet.currency, recipient_currency: recipCurrency, fx_rate: fxRate, converted_amount: convertedAmount, recipient_country, ref } });
+  await db.insert(auditLogsTable).values({ userId: req.user!.id, action: "transfer_bank", ip: req.ip || "unknown", meta: { amount, currency: wallet.currency, recipient_currency: recipCurrency, fx_rate: fxRate, converted_amount: convertedAmount, recipient_country, ref, fee, is_international: isInternational } });
   emailService.sendTransferSentEmail(user, { amount: Number(amount), currency: wallet.currency, recipient: account_name || bank_name, reference: ref, fee }).catch(() => {});
-  res.json({ success: true, message: "Transfer sent", reference: ref, fee, net_amount: Number(amount), recipient_currency: recipCurrency, converted_amount: convertedAmount, fx_rate: fxRate });
+  res.json({ success: true, message: "Transfer sent", reference: ref, fee, net_amount: Number(amount), recipient_currency: recipCurrency, converted_amount: convertedAmount, fx_rate: fxRate, is_international: isInternational });
 });
 
 router.post("/transfers/mobile", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
@@ -149,11 +152,11 @@ router.post("/transfers/mobile", requireAuth, async (req: AuthenticatedRequest, 
 
   const wallet = await getWallet(req.user!.id, wallet_id, currency);
   if (!wallet) { res.status(404).json({ success: false, message: "Wallet not found" }); return; }
-  const fee = calcFee(Number(amount), "mobile");
+  const recipCurrency = recipient_currency || wallet.currency;
+  const isInternational = recipCurrency !== wallet.currency;
+  const fee = calcFee(Number(amount), "mobile", isInternational);
   const total = Number(amount) + fee;
   if (Number(wallet.balance) < total) { res.status(400).json({ success: false, message: "Insufficient funds" }); return; }
-
-  const recipCurrency = recipient_currency || wallet.currency;
   let convertedAmount = Number(amount);
   let fxRate: number | null = 1;
   if (recipCurrency !== wallet.currency) {
