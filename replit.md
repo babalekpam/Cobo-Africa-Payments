@@ -63,6 +63,7 @@ lib/
 - `/reports` — Reports & Analytics with status breakdown, volume by type/country, payment methods, top merchants table, export report
 - `/developer` — API documentation and key management
 - `/admin` — Admin panel (admin role only) with user management
+- `/compliance` — Compliance Center (admin only): KYC review queue, sanctions screening, SAR reports, compliance dashboard
 - `/settings` — Profile editing, password change, 2FA setup/disable (Security tab)
 - `/forgot-password` — Password reset request (public)
 - `/reset-password` — Set new password with token (public)

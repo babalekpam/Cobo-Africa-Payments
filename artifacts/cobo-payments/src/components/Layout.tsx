@@ -37,7 +37,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const usdWallet = wallets.find(w => w.currency === "USD");
 
   const allNav = user?.role === "admin"
-    ? [...NAV_KEYS.slice(0, -1), { path: "/admin", key: "admin_panel", icon: "🏛️" }, NAV_KEYS[NAV_KEYS.length - 1]]
+    ? [...NAV_KEYS.slice(0, -1), { path: "/admin", key: "admin_panel", icon: "🏛️" }, { path: "/compliance", key: "compliance", icon: "⚖️" }, NAV_KEYS[NAV_KEYS.length - 1]]
     : NAV_KEYS;
 
   return (

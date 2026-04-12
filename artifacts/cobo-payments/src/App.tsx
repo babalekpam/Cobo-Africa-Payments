@@ -30,6 +30,7 @@ import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 import Checkout from "./pages/Checkout";
 import Landing from "./pages/Landing";
+import Compliance from "./pages/Compliance";
 import NotFound from "./pages/not-found";
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
@@ -99,6 +100,7 @@ function AppRouter() {
             <Route path="/merchants" component={Merchants} />
             <Route path="/reports" component={Reports} />
             <Route path="/admin" component={Admin} />
+            <Route path="/compliance" component={Compliance} />
             <Route path="/settings" component={Settings} />
             <Route path="/activity-log" component={AuditLog} />
             <Route component={NotFound} />

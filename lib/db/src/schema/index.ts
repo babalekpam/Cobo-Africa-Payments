@@ -9,3 +9,4 @@ export * from "./kycDocuments";
 export * from "./auditLogs";
 export * from "./apiKeys";
 export * from "./checkoutSessions";
+export * from "./compliance";
