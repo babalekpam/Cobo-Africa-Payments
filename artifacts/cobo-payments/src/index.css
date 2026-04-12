@@ -22,11 +22,12 @@
   --blue-bg: rgba(42,124,199,0.08);
   --orange: #D95430;
   --bg: #FAF7F2;
-  --sidebar-bg: #2C2416;
-  --sidebar-text: #F0E8D5;
-  --sidebar-text-dim: #9A8F75;
-  --sidebar-border: rgba(255,255,255,0.08);
-  --sidebar-surface: rgba(255,255,255,0.06);
+  --sidebar-bg: linear-gradient(180deg, #0F2B4C 0%, #143A5C 40%, #0C2340 100%);
+  --sidebar-bg-solid: #0F2B4C;
+  --sidebar-text: #E8F0F8;
+  --sidebar-text-dim: #8BADC4;
+  --sidebar-border: rgba(255,255,255,0.10);
+  --sidebar-surface: rgba(255,255,255,0.08);
   --font-heading: 'Plus Jakarta Sans', sans-serif;
   --font-body: 'DM Sans', sans-serif;
   --radius: 14px;

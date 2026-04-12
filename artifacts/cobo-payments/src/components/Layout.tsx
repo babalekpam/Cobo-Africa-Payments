@@ -46,6 +46,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         width: "var(--sidebar-w)", background: "var(--sidebar-bg)", borderRight: "1px solid var(--sidebar-border)",
         display: "flex", flexDirection: "column", position: "fixed", top: 0, bottom: 0, left: 0, zIndex: 100,
         transform: mobileOpen ? "translateX(0)" : undefined,
+        boxShadow: "2px 0 20px rgba(15,43,76,0.15)",
       }} className="sidebar">
         <div style={{ padding: "20px 16px 12px", borderBottom: "1px solid var(--sidebar-border)" }}>
           <img src={`${import.meta.env.BASE_URL}cobo-logo.png`} alt="COBO Africa" style={{ width: "100%", maxWidth: 200, borderRadius: 8 }} />
@@ -91,7 +92,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: "var(--radius-sm)",
                     fontSize: 14, fontWeight: active ? 600 : 400, cursor: "pointer", position: "relative",
                     color: active ? "var(--gold-light)" : "var(--sidebar-text-dim)",
-                    background: active ? "rgba(232,169,64,0.1)" : "transparent",
+                    background: active ? "rgba(232,169,64,0.12)" : "transparent",
                     transition: "all 0.15s",
                   }}
                   onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = "var(--sidebar-surface)"; (e.currentTarget as HTMLElement).style.color = "var(--sidebar-text)"; } }}

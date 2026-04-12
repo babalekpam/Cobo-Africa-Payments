@@ -38,7 +38,7 @@ lib/
 
 - Cream/warm white theme with gold accents and dark sidebar
 - Colors: --bg: #FAF7F2, --surface: #FFFFFF, --surface2: #F5F0E8, --gold: #C98A1A, --gold-light: #E8A940, --green: #1B9E5A, --red: #D93636, --blue: #2A7CC7, --text: #2C2416, --text-dim: #7A6E58
-- Sidebar: dark (#2C2416) with dedicated vars: --sidebar-bg, --sidebar-text, --sidebar-text-dim, --sidebar-border, --sidebar-surface
+- Sidebar: ocean blue gradient (#0F2B4C → #143A5C → #0C2340) with dedicated vars: --sidebar-bg, --sidebar-text (#E8F0F8), --sidebar-text-dim (#8BADC4), --sidebar-border, --sidebar-surface
 - Fonts: Plus Jakarta Sans (headings, 700 weight), DM Sans (body)
 - Custom CSS classes: .card, .btn, .btn-primary, .input, .select, .badge, .stat-card, .table-wrap, .empty, .spinner, .fade-in, .grid-2/3/4, .page, .page-title, .modal-overlay
 
