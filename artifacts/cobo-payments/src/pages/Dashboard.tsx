@@ -26,6 +26,30 @@ export default function Dashboard() {
           <p className="page-subtitle">Here's your financial overview</p>
         </div>
 
+        {user && user.kyc_status !== "verified" && (
+          <div style={{
+            padding: "14px 20px", marginBottom: 20, borderRadius: "var(--radius)",
+            display: "flex", alignItems: "center", gap: 14,
+            background: user.kyc_status === "submitted" ? "rgba(201,138,26,0.08)" : "var(--red-bg)",
+            border: `1px solid ${user.kyc_status === "submitted" ? "var(--border-gold)" : "rgba(217,54,54,0.2)"}`,
+          }}>
+            <span style={{ fontSize: 22 }}>{user.kyc_status === "submitted" ? "🔄" : "🛡️"}</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600, fontSize: 14, color: "var(--text)", marginBottom: 2 }}>
+                {user.kyc_status === "submitted" ? "Identity verification in progress" : "Identity verification required"}
+              </div>
+              <div style={{ fontSize: 13, color: "var(--text-dim)" }}>
+                {user.kyc_status === "submitted"
+                  ? "Your documents are being reviewed. This usually takes 1-2 business days."
+                  : "Verify your identity to unlock full platform features and higher transaction limits."}
+              </div>
+            </div>
+            {user.kyc_status !== "submitted" && (
+              <a href="/verification" style={{ color: "var(--gold)", fontWeight: 600, fontSize: 14, whiteSpace: "nowrap" }}>Verify Now</a>
+            )}
+          </div>
+        )}
+
         <div className="grid-4" style={{ marginBottom: 28 }}>
           <div className="stat-card">
             <div className="stat-card-icon">💰</div>

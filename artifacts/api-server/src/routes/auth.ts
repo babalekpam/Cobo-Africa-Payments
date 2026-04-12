@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, count, sum, sql, desc } from "drizzle-orm";
-import { db, usersTable, walletsTable, transactionsTable, notificationsTable } from "@workspace/db";
+import { db, usersTable, walletsTable, transactionsTable, notificationsTable, kycDocumentsTable } from "@workspace/db";
 import { LoginBody } from "@workspace/api-zod";
 import { hashPassword, comparePassword, signToken } from "../lib/auth";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
@@ -20,7 +20,7 @@ function safeUser(user: any) {
 }
 
 router.post("/auth/register", async (req, res): Promise<void> => {
-  const { email, password, first_name, last_name, country, business_name, phone } = req.body;
+  const { email, password, first_name, last_name, country, business_name, phone, id_type, id_number, date_of_birth } = req.body;
   if (!email || !password || !first_name || !last_name) {
     res.status(400).json({ success: false, message: "Missing required fields" });
     return;
@@ -47,7 +47,13 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   for (let i = 0; i < currencies.length; i++) {
     await db.insert(walletsTable).values({ userId: user.id, currency: currencies[i], isDefault: i === 0 });
   }
-  await db.insert(notificationsTable).values({ userId: user.id, title: "Welcome to COBO! 🌍", message: "Your account is ready. Complete KYC to unlock full limits.", type: "success" });
+  if (id_type && id_number) {
+    await db.insert(kycDocumentsTable).values({ userId: user.id, docType: id_type, docUrl: id_number });
+    await db.update(usersTable).set({ kycStatus: "submitted" }).where(eq(usersTable.id, user.id));
+    await db.insert(notificationsTable).values({ userId: user.id, title: "Welcome to COBO! 🌍", message: "Your account is ready. Your ID verification is being reviewed by our compliance team.", type: "success" });
+  } else {
+    await db.insert(notificationsTable).values({ userId: user.id, title: "Welcome to COBO! 🌍", message: "Your account is ready. Please verify your identity to unlock full features.", type: "success" });
+  }
   const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, user.id));
   const token = signToken({ id: user.id, email: user.email, role: user.role });
   res.status(201).json({ success: true, token, user: safeUser(user), wallets: wallets.map(w => ({ ...w, balance: Number(w.balance), lockedBalance: Number(w.lockedBalance) })) });
