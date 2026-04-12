@@ -302,31 +302,31 @@ export default function Landing() {
             <div>
               <h4 style={{ color: "#FFFFFF", fontSize: 14, fontWeight: 600, marginBottom: 16, fontFamily: "var(--font-heading)" }}>Product</h4>
               <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 14 }}>
-                <span style={{ cursor: "pointer" }}>Wallets</span>
-                <span style={{ cursor: "pointer" }}>Transfers</span>
-                <span style={{ cursor: "pointer" }}>FX Exchange</span>
-                <span style={{ cursor: "pointer" }}>Payment Links</span>
-                <span style={{ cursor: "pointer" }}>Merchant Tools</span>
+                <span onClick={() => setLocation("/register")} style={{ cursor: "pointer", transition: "color 0.2s" }} onMouseEnter={e => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={e => (e.currentTarget.style.color = "")}>Wallets</span>
+                <span onClick={() => setLocation("/register")} style={{ cursor: "pointer", transition: "color 0.2s" }} onMouseEnter={e => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={e => (e.currentTarget.style.color = "")}>Transfers</span>
+                <span onClick={() => setLocation("/register")} style={{ cursor: "pointer", transition: "color 0.2s" }} onMouseEnter={e => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={e => (e.currentTarget.style.color = "")}>FX Exchange</span>
+                <span onClick={() => setLocation("/register")} style={{ cursor: "pointer", transition: "color 0.2s" }} onMouseEnter={e => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={e => (e.currentTarget.style.color = "")}>Payment Links</span>
+                <span onClick={() => setLocation("/register")} style={{ cursor: "pointer", transition: "color 0.2s" }} onMouseEnter={e => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={e => (e.currentTarget.style.color = "")}>Merchant Tools</span>
               </div>
             </div>
             <div>
               <h4 style={{ color: "#FFFFFF", fontSize: 14, fontWeight: 600, marginBottom: 16, fontFamily: "var(--font-heading)" }}>Developers</h4>
               <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 14 }}>
-                <span style={{ cursor: "pointer" }}>API Reference</span>
-                <span style={{ cursor: "pointer" }}>Checkout API</span>
-                <span style={{ cursor: "pointer" }}>Webhooks</span>
-                <span style={{ cursor: "pointer" }}>SDKs</span>
-                <span style={{ cursor: "pointer" }}>Sandbox</span>
+                <span onClick={() => setLocation("/register")} style={{ cursor: "pointer", transition: "color 0.2s" }} onMouseEnter={e => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={e => (e.currentTarget.style.color = "")}>API Reference</span>
+                <span onClick={() => setLocation("/register")} style={{ cursor: "pointer", transition: "color 0.2s" }} onMouseEnter={e => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={e => (e.currentTarget.style.color = "")}>Checkout API</span>
+                <span onClick={() => setLocation("/register")} style={{ cursor: "pointer", transition: "color 0.2s" }} onMouseEnter={e => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={e => (e.currentTarget.style.color = "")}>Webhooks</span>
+                <span onClick={() => setLocation("/register")} style={{ cursor: "pointer", transition: "color 0.2s" }} onMouseEnter={e => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={e => (e.currentTarget.style.color = "")}>SDKs</span>
+                <span onClick={() => setLocation("/register")} style={{ cursor: "pointer", transition: "color 0.2s" }} onMouseEnter={e => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={e => (e.currentTarget.style.color = "")}>Sandbox</span>
               </div>
             </div>
             <div>
               <h4 style={{ color: "#FFFFFF", fontSize: 14, fontWeight: 600, marginBottom: 16, fontFamily: "var(--font-heading)" }}>Company</h4>
               <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 14 }}>
-                <span style={{ cursor: "pointer" }}>About</span>
-                <span style={{ cursor: "pointer" }}>Blog</span>
-                <span onClick={() => setLocation("/terms")} style={{ cursor: "pointer" }}>Terms of Service</span>
-                <span onClick={() => setLocation("/privacy")} style={{ cursor: "pointer" }}>Privacy Policy</span>
-                <span style={{ cursor: "pointer" }}>Contact</span>
+                <span onClick={() => setLocation("/register")} style={{ cursor: "pointer", transition: "color 0.2s" }} onMouseEnter={e => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={e => (e.currentTarget.style.color = "")}>About</span>
+                <span onClick={() => setLocation("/register")} style={{ cursor: "pointer", transition: "color 0.2s" }} onMouseEnter={e => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={e => (e.currentTarget.style.color = "")}>Blog</span>
+                <span onClick={() => setLocation("/terms")} style={{ cursor: "pointer", transition: "color 0.2s" }} onMouseEnter={e => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={e => (e.currentTarget.style.color = "")}>Terms of Service</span>
+                <span onClick={() => setLocation("/privacy")} style={{ cursor: "pointer", transition: "color 0.2s" }} onMouseEnter={e => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={e => (e.currentTarget.style.color = "")}>Privacy Policy</span>
+                <span onClick={() => setLocation("/register")} style={{ cursor: "pointer", transition: "color 0.2s" }} onMouseEnter={e => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={e => (e.currentTarget.style.color = "")}>Contact</span>
               </div>
             </div>
           </div>
