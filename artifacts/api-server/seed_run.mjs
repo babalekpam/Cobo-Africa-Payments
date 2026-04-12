@@ -13,12 +13,14 @@ function genRef() {
 async function seed() {
   const client = await pool.connect();
   try {
-    const adminHash = bcryptjs.hashSync("CoboAdmin2024!", 10);
+    const adminPwd = process.env.ADMIN_PASSWORD;
+    if (!adminPwd) { console.error("ADMIN_PASSWORD env var required"); process.exit(1); }
+    const adminHash = bcryptjs.hashSync(adminPwd, 10);
     const passHash = bcryptjs.hashSync("Pass123!", 10);
 
     await client.query(`
       INSERT INTO users (email, name, password_hash, role, status, phone, country) VALUES
-        ('admin@cobo.africa', 'COBO Admin', $1, 'admin', 'active', '+254700000000', 'Kenya'),
+        ('abel@argilette.com', 'Abel Nkawula', $1, 'admin', 'active', '+228 90 123 456', 'Togo'),
         ('ops@cobo.africa', 'Operations Manager', $1, 'admin', 'active', '+234800000000', 'Nigeria'),
         ('merchant1@jumia.africa', 'Jumia Kenya Rep', $2, 'merchant', 'active', '+254711223344', 'Kenya'),
         ('customer1@gmail.com', 'Amina Osei', $2, 'customer', 'active', '+233244100200', 'Ghana'),

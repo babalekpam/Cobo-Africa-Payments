@@ -12,13 +12,18 @@ function generateRef(): string {
 async function seed() {
   logger.info("Starting seed...");
 
-  const adminHash = bcrypt.hashSync("CoboAdmin2024!", 10);
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  if (!adminPassword) {
+    logger.error("ADMIN_PASSWORD environment variable is required");
+    process.exit(1);
+  }
+  const adminHash = bcrypt.hashSync(adminPassword, 10);
 
   await db
     .insert(usersTable)
     .values([
       {
-        email: "admin@cobo.africa",
+        email: "abel@argilette.com",
         name: "Abel Nkawula",
         firstName: "Abel",
         lastName: "Nkawula",
@@ -38,7 +43,7 @@ async function seed() {
 
   logger.info("Users seeded");
 
-  const [admin] = await db.select().from(usersTable).where(eq(usersTable.email, "admin@cobo.africa"));
+  const [admin] = await db.select().from(usersTable).where(eq(usersTable.email, "abel@argilette.com"));
   if (admin) {
     await db.update(usersTable).set({
       firstName: "Abel", lastName: "Nkawula", name: "Abel Nkawula",

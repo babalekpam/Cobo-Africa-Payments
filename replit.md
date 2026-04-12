@@ -5,8 +5,8 @@
 Full-stack fintech wallet platform for managing payments, wallets, FX exchange, and transfers across Africa. Built as a pnpm monorepo with Express API + React frontend. Features a cream/warm white theme with gold accents, dark sidebar, and Plus Jakarta Sans/DM Sans fonts.
 
 ## Admin Credentials
-- Email: `admin@cobo.africa`
-- Password: `CoboAdmin2024!`
+- Email: `abel@argilette.com`
+- Password: stored in ADMIN_PASSWORD secret
 
 ## Stack
 
