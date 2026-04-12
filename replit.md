@@ -44,6 +44,7 @@ lib/
 
 ## Frontend Pages
 
+- `/` — Public landing page (hero, features, currencies, developer API, CTA, footer); logged-in users redirect to dashboard
 - `/login` — Login with "Forgot password?" link, Terms/Privacy links, 2FA code field
 - `/register` — Registration with first/last name, country, phone, business
 - `/dashboard` — Stats cards (clickable), wallet breakdown bar chart, monthly transaction activity chart, quick-action buttons (Send/Deposit/Exchange/Payment Link), recent transactions (clickable rows → detail)

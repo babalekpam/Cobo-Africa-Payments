@@ -29,16 +29,17 @@ import ResetPassword from "./pages/ResetPassword";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 import Checkout from "./pages/Checkout";
+import Landing from "./pages/Landing";
 import NotFound from "./pages/not-found";
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const [location, setLocation] = useLocation();
 
-  const publicPaths = ["/login", "/register", "/forgot-password", "/reset-password", "/terms", "/privacy", "/pay/"];
+  const publicPaths = ["/", "/login", "/register", "/forgot-password", "/reset-password", "/terms", "/privacy", "/pay/"];
 
   useEffect(() => {
-    if (!loading && !user && !publicPaths.some(p => location.startsWith(p))) {
+    if (!loading && !user && !publicPaths.some(p => p === "/" ? location === "/" : location.startsWith(p))) {
       setLocation("/login");
     }
     if (!loading && user && (location === "/login" || location === "/register")) {
@@ -63,8 +64,9 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 function IndexRedirect() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
-  useEffect(() => { setLocation(user ? "/dashboard" : "/login"); }, [user]);
-  return null;
+  useEffect(() => { if (user) setLocation("/dashboard"); }, [user]);
+  if (user) return null;
+  return <Landing />;
 }
 
 function AppRouter() {
