@@ -164,6 +164,53 @@ const ALL_CURRENCIES = [
   { code: "DJF", name: "Djiboutian Franc", symbol: "Fdj" },
 ];
 
+const CURRENCY_INFO: Record<string, { flag: string; name: string; symbol: string }> = {
+  USD: { flag: "🇺🇸", name: "US Dollar", symbol: "$" },
+  EUR: { flag: "🇪🇺", name: "Euro", symbol: "€" },
+  GBP: { flag: "🇬🇧", name: "British Pound", symbol: "£" },
+  NGN: { flag: "🇳🇬", name: "Nigerian Naira", symbol: "₦" },
+  GHS: { flag: "🇬🇭", name: "Ghanaian Cedi", symbol: "GH₵" },
+  KES: { flag: "🇰🇪", name: "Kenyan Shilling", symbol: "KSh" },
+  ZAR: { flag: "🇿🇦", name: "South African Rand", symbol: "R" },
+  XOF: { flag: "🏦", name: "CFA Franc (West)", symbol: "CFA" },
+  XAF: { flag: "🏦", name: "CFA Franc (Central)", symbol: "FCFA" },
+  TZS: { flag: "🇹🇿", name: "Tanzanian Shilling", symbol: "TSh" },
+  UGX: { flag: "🇺🇬", name: "Ugandan Shilling", symbol: "USh" },
+  ETB: { flag: "🇪🇹", name: "Ethiopian Birr", symbol: "Br" },
+  EGP: { flag: "🇪🇬", name: "Egyptian Pound", symbol: "E£" },
+  MAD: { flag: "🇲🇦", name: "Moroccan Dirham", symbol: "MAD" },
+  RWF: { flag: "🇷🇼", name: "Rwandan Franc", symbol: "FRw" },
+  CDF: { flag: "🇨🇩", name: "Congolese Franc", symbol: "FC" },
+  AOA: { flag: "🇦🇴", name: "Angolan Kwanza", symbol: "Kz" },
+  MZN: { flag: "🇲🇿", name: "Mozambican Metical", symbol: "MT" },
+  ZMW: { flag: "🇿🇲", name: "Zambian Kwacha", symbol: "ZK" },
+  MWK: { flag: "🇲🇼", name: "Malawian Kwacha", symbol: "MK" },
+  BWP: { flag: "🇧🇼", name: "Botswana Pula", symbol: "P" },
+  TND: { flag: "🇹🇳", name: "Tunisian Dinar", symbol: "DT" },
+  DZD: { flag: "🇩🇿", name: "Algerian Dinar", symbol: "DA" },
+  LYD: { flag: "🇱🇾", name: "Libyan Dinar", symbol: "LD" },
+  SDG: { flag: "🇸🇩", name: "Sudanese Pound", symbol: "SDG" },
+  GMD: { flag: "🇬🇲", name: "Gambian Dalasi", symbol: "D" },
+  SLL: { flag: "🇸🇱", name: "Sierra Leonean Leone", symbol: "Le" },
+  GNF: { flag: "🇬🇳", name: "Guinean Franc", symbol: "FG" },
+  SOS: { flag: "🇸🇴", name: "Somali Shilling", symbol: "Sh" },
+  SSP: { flag: "🇸🇸", name: "South Sudanese Pound", symbol: "SSP" },
+  MGA: { flag: "🇲🇬", name: "Malagasy Ariary", symbol: "Ar" },
+  MUR: { flag: "🇲🇺", name: "Mauritian Rupee", symbol: "Rs" },
+  SCR: { flag: "🇸🇨", name: "Seychellois Rupee", symbol: "SCR" },
+  NAD: { flag: "🇳🇦", name: "Namibian Dollar", symbol: "N$" },
+  LRD: { flag: "🇱🇷", name: "Liberian Dollar", symbol: "L$" },
+  BIF: { flag: "🇧🇮", name: "Burundian Franc", symbol: "FBu" },
+  ERN: { flag: "🇪🇷", name: "Eritrean Nakfa", symbol: "Nfk" },
+  LSL: { flag: "🇱🇸", name: "Lesotho Loti", symbol: "L" },
+  SZL: { flag: "🇸🇿", name: "Eswatini Lilangeni", symbol: "E" },
+  MRU: { flag: "🇲🇷", name: "Mauritanian Ouguiya", symbol: "UM" },
+  CVE: { flag: "🇨🇻", name: "Cape Verdean Escudo", symbol: "CVE" },
+  STN: { flag: "🇸🇹", name: "São Tomé Dobra", symbol: "Db" },
+  KMF: { flag: "🇰🇲", name: "Comorian Franc", symbol: "KMF" },
+  DJF: { flag: "🇩🇯", name: "Djiboutian Franc", symbol: "Fdj" },
+};
+
 export default function SendMoney() {
   const { wallets, refreshWallets } = useAuth();
   const [tab, setTab] = useState<Tab>("bank");
@@ -305,21 +352,43 @@ export default function SendMoney() {
 
               <div className="input-group" style={{ marginBottom: 16 }}>
                 <label className="input-label">From Wallet</label>
-                <select className="select" value={form.walletId} onChange={e => {
-                  set("walletId", e.target.value);
-                  const w = wallets.find(w => w.id === Number(e.target.value));
-                  if (w) set("senderCurrency", w.currency);
-                }}>
-                  {wallets.map(w => (
-                    <option key={w.id} value={w.id}>
-                      {w.currency} — Balance: {w.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                    </option>
-                  ))}
-                </select>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {wallets.map(w => {
+                    const info = CURRENCY_INFO[w.currency];
+                    const isSelected = form.walletId === String(w.id);
+                    return (
+                      <button
+                        key={w.id}
+                        type="button"
+                        onClick={() => { set("walletId", String(w.id)); set("senderCurrency", w.currency); }}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 10,
+                          padding: "12px 14px",
+                          border: isSelected ? "2px solid var(--gold)" : "1px solid var(--surface2)",
+                          borderRadius: 10,
+                          background: isSelected ? "rgba(201,138,26,0.08)" : "var(--surface)",
+                          cursor: "pointer",
+                          textAlign: "left",
+                          transition: "all 0.15s",
+                        }}
+                      >
+                        <span style={{ fontSize: 22 }}>{info?.flag || "💰"}</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 14, fontWeight: isSelected ? 700 : 600, color: isSelected ? "var(--gold)" : "var(--text)" }}>{w.currency}</div>
+                          <div style={{ fontSize: 11, color: "var(--text-dim)" }}>{info?.name || w.currency}</div>
+                        </div>
+                        <div style={{ textAlign: "right" }}>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{info?.symbol}{w.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+                          <div style={{ fontSize: 10, color: "var(--text-dim)" }}>Available</div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="input-group" style={{ marginBottom: 16 }}>
-                <label className="input-label">Amount ({form.senderCurrency})</label>
+                <label className="input-label">Amount ({CURRENCY_INFO[form.senderCurrency]?.flag} {form.senderCurrency})</label>
                 <input className="input" type="number" min="0" step="0.01" value={form.amount} onChange={e => set("amount", e.target.value)} placeholder="0.00" style={{ fontSize: 18, fontWeight: 600 }} />
                 {Number(form.amount) > 0 && (
                   <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 4, display: "flex", justifyContent: "space-between" }}>
@@ -346,9 +415,10 @@ export default function SendMoney() {
                   <div className="input-group" style={{ marginBottom: 16 }}>
                     <label className="input-label">Recipient Currency</label>
                     <select className="select" value={form.recipientCurrency} onChange={e => set("recipientCurrency", e.target.value)}>
-                      {ALL_CURRENCIES.map(c => (
-                        <option key={c.code} value={c.code}>{c.code} — {c.name}</option>
-                      ))}
+                      {ALL_CURRENCIES.map(c => {
+                        const info = CURRENCY_INFO[c.code];
+                        return <option key={c.code} value={c.code}>{info?.flag || ""} {c.code} — {c.name}</option>;
+                      })}
                     </select>
                   </div>
 
