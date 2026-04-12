@@ -71,10 +71,11 @@ export default function Users() {
     },
   });
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<UserForm>({
+  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<UserForm>({
     resolver: zodResolver(userSchema),
     defaultValues: { role: "customer" },
   });
+  const selectedRole = watch("role");
 
   const onSubmit = (d: UserForm) => {
     createMutation.mutate({ data: d });
@@ -119,8 +120,8 @@ export default function Users() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label>Role</Label>
-                    <Select defaultValue="customer" onValueChange={(v) => {}}>
-                      <SelectTrigger className="bg-input border-border"><SelectValue /></SelectTrigger>
+                    <Select value={selectedRole} onValueChange={(v) => setValue("role", v as any)}>
+                      <SelectTrigger className="bg-input border-border" data-testid="select-user-role-create"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="admin">Admin</SelectItem>
                         <SelectItem value="merchant">Merchant</SelectItem>

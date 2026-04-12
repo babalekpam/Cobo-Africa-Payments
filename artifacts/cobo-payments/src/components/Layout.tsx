@@ -9,6 +9,8 @@ import {
   LogOut,
   Menu,
   X,
+  BarChart3,
+  ScrollText,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -18,6 +20,8 @@ const navItems = [
   { href: "/transactions", label: "Transactions", icon: ArrowLeftRight },
   { href: "/merchants", label: "Merchants", icon: Store },
   { href: "/users", label: "Users", icon: Users },
+  { href: "/reports", label: "Reports", icon: BarChart3 },
+  { href: "/activity", label: "Activity Log", icon: ScrollText },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

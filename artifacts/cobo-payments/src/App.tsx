@@ -12,6 +12,8 @@ import Merchants from "@/pages/Merchants";
 import MerchantDetail from "@/pages/MerchantDetail";
 import Users from "@/pages/Users";
 import Settings from "@/pages/Settings";
+import Reports from "@/pages/Reports";
+import ActivityLog from "@/pages/ActivityLog";
 import { useEffect } from "react";
 
 const queryClient = new QueryClient({
@@ -69,6 +71,8 @@ function Router() {
           <Route path="/merchants" component={Merchants} />
           <Route path="/merchants/:id" component={MerchantDetail} />
           <Route path="/users" component={Users} />
+          <Route path="/reports" component={Reports} />
+          <Route path="/activity" component={ActivityLog} />
           <Route path="/settings" component={Settings} />
           <Route component={NotFound} />
         </Switch>
