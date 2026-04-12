@@ -1,0 +1,20 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /wallets
+Disallow: /send
+Disallow: /exchange
+Disallow: /transactions
+Disallow: /beneficiaries
+Disallow: /payment-links
+Disallow: /kyc
+Disallow: /notifications
+Disallow: /settings
+Disallow: /admin
+Disallow: /compliance
+Disallow: /merchants
+Disallow: /reports
+Disallow: /deposit
+Disallow: /api/
+
+Sitemap: https://cob-o.com/sitemap.xml
