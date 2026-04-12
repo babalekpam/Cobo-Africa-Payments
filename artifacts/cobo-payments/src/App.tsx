@@ -18,6 +18,9 @@ import Beneficiaries from "./pages/Beneficiaries";
 import Verification from "./pages/Verification";
 import Notifications from "./pages/Notifications";
 import Developer from "./pages/Developer";
+import Merchants from "./pages/Merchants";
+import MerchantDetail from "./pages/MerchantDetail";
+import Reports from "./pages/Reports";
 import Admin from "./pages/Admin";
 import Settings from "./pages/Settings";
 import AuditLog from "./pages/AuditLog";
@@ -90,6 +93,9 @@ function AppRouter() {
             <Route path="/verification" component={Verification} />
             <Route path="/notifications" component={Notifications} />
             <Route path="/developer" component={Developer} />
+            <Route path="/merchants/:id" component={MerchantDetail} />
+            <Route path="/merchants" component={Merchants} />
+            <Route path="/reports" component={Reports} />
             <Route path="/admin" component={Admin} />
             <Route path="/settings" component={Settings} />
             <Route path="/activity-log" component={AuditLog} />

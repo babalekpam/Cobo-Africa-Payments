@@ -1,140 +1,160 @@
-import { useGetMerchant, useListTransactions, useUpdateMerchant, getListMerchantsQueryKey } from "@workspace/api-client-react";
-import { Layout } from "@/components/Layout";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Activity } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Layout } from "../components/Layout";
 import { useLocation } from "wouter";
-import { useQueryClient } from "@tanstack/react-query";
-import { formatDistanceToNow } from "date-fns";
-
-function statusColor(status: string) {
-  switch (status) {
-    case "completed": return "text-primary bg-primary/10";
-    case "pending": return "text-accent bg-accent/10";
-    case "failed": return "text-destructive bg-destructive/10";
-    default: return "text-muted-foreground bg-muted";
-  }
-}
-
-function merchantStatusColor(status: string) {
-  switch (status) {
-    case "active": return "text-primary bg-primary/10 border-primary/20";
-    case "pending": return "text-accent bg-accent/10 border-accent/20";
-    case "suspended": return "text-destructive bg-destructive/10 border-destructive/20";
-    default: return "text-muted-foreground bg-muted border-border";
-  }
-}
+import api from "../lib/api";
 
 export default function MerchantDetail({ params }: { params: { id: string } }) {
-  const id = parseInt(params.id, 10);
-  const { data: merchant, isLoading } = useGetMerchant(id, { query: { enabled: !!id } });
-  const { data: transactions } = useListTransactions({ merchantId: id, limit: 10 });
-  const updateMutation = useUpdateMerchant();
-  const queryClient = useQueryClient();
+  const id = params.id;
+  const [merchant, setMerchant] = useState<any>(null);
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState(false);
   const [, setLocation] = useLocation();
 
-  const handleStatusChange = (newStatus: string) => {
-    updateMutation.mutate(
-      { id, data: { status: newStatus as any } },
-      { onSuccess: () => queryClient.invalidateQueries({ queryKey: getListMerchantsQueryKey() }) }
-    );
+  useEffect(() => {
+    Promise.all([
+      api.get(`/merchants/${id}`).then(({ data }) => setMerchant(data)).catch(() => {}),
+      api.get(`/transactions?merchantId=${id}&limit=10`).then(({ data }) => {
+        setTransactions(Array.isArray(data) ? data : data.data || []);
+      }).catch(() => {}),
+    ]).finally(() => setLoading(false));
+  }, [id]);
+
+  const updateStatus = async (newStatus: string) => {
+    setUpdating(true);
+    try {
+      const { data } = await api.put(`/merchants/${id}`, { status: newStatus });
+      setMerchant(data);
+    } catch {}
+    setUpdating(false);
   };
 
-  if (isLoading) {
-    return <Layout><div className="max-w-3xl mx-auto animate-pulse space-y-4"><div className="h-8 bg-card rounded w-48" /><div className="h-48 bg-card rounded-xl" /></div></Layout>;
+  if (loading) {
+    return <Layout><div className="page fade-in"><div style={{ textAlign: "center", padding: 60 }}><span className="spinner" style={{ width: 32, height: 32 }} /></div></div></Layout>;
   }
 
   if (!merchant) {
-    return <Layout><div className="text-center py-12 text-muted-foreground">Merchant not found</div></Layout>;
+    return (
+      <Layout>
+        <div className="page fade-in" style={{ textAlign: "center", padding: 60 }}>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>🏪</div>
+          <h2 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, marginBottom: 8 }}>Merchant Not Found</h2>
+          <button className="btn btn-primary" onClick={() => setLocation("/merchants")}>Back to Merchants</button>
+        </div>
+      </Layout>
+    );
   }
+
+  const statusBadge = (status: string) => {
+    const cls = status === "active" ? "badge-success" : status === "suspended" ? "badge-error" : status === "completed" || status === "success" ? "badge-success" : status === "failed" ? "badge-error" : "badge-warning";
+    return <span className={`badge ${cls}`} style={{ textTransform: "capitalize" }}>{status}</span>;
+  };
+
+  const timeAgo = (dateStr: string) => {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const days = Math.floor(diff / 86400000);
+    if (days > 365) return `${Math.floor(days / 365)} year${Math.floor(days / 365) > 1 ? "s" : ""} ago`;
+    if (days > 30) return `${Math.floor(days / 30)} month${Math.floor(days / 30) > 1 ? "s" : ""} ago`;
+    if (days > 0) return `${days} day${days > 1 ? "s" : ""} ago`;
+    const hours = Math.floor(diff / 3600000);
+    if (hours > 0) return `${hours} hour${hours > 1 ? "s" : ""} ago`;
+    return "just now";
+  };
+
+  const infoRows = [
+    { label: "Email", value: merchant.email },
+    { label: "Phone", value: merchant.phone || "—" },
+    { label: "Country", value: merchant.country },
+    { label: "Business Type", value: merchant.businessType || "—" },
+    { label: "Joined", value: timeAgo(merchant.createdAt) },
+  ];
 
   return (
     <Layout>
-      <div className="max-w-3xl mx-auto space-y-6">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" data-testid="button-back" onClick={() => setLocation("/merchants")}><ArrowLeft className="w-4 h-4 mr-1" /> Back</Button>
-          <h1 className="text-lg font-bold text-foreground" data-testid="text-merchant-name">{merchant.name}</h1>
-        </div>
+      <div className="page fade-in" style={{ maxWidth: 800 }}>
+        <button className="btn btn-ghost" onClick={() => setLocation("/merchants")} style={{ marginBottom: 16, gap: 6 }}>
+          ← Back to Merchants
+        </button>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Profile */}
-          <div className="md:col-span-2 bg-card border border-card-border rounded-xl p-5 space-y-4">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary font-bold text-lg">
-                  {merchant.name.charAt(0)}
-                </div>
-                <div>
-                  <h2 className="font-semibold text-foreground">{merchant.name}</h2>
-                  <p className="text-sm text-muted-foreground">{merchant.email}</p>
-                </div>
+        <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 24 }}>
+          <div className="card-lg" style={{ flex: "1 1 440px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20 }}>
+              <div style={{
+                width: 48, height: 48, borderRadius: 12,
+                background: "linear-gradient(135deg, var(--gold-light), var(--gold))",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                color: "#fff", fontWeight: 700, fontSize: 20,
+              }}>{merchant.name.charAt(0)}</div>
+              <div style={{ flex: 1 }}>
+                <h2 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 20 }}>{merchant.name}</h2>
+                <div style={{ fontSize: 13, color: "var(--text-dim)" }}>{merchant.email}</div>
               </div>
-              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${merchantStatusColor(merchant.status)}`}>
-                {merchant.status}
-              </span>
+              {statusBadge(merchant.status)}
             </div>
 
-            <dl className="grid grid-cols-2 gap-3">
-              {[
-                ["Country", merchant.country],
-                ["Phone", merchant.phone ?? "—"],
-                ["Business Type", merchant.businessType ?? "—"],
-                ["Joined", formatDistanceToNow(new Date(merchant.createdAt), { addSuffix: true })],
-              ].map(([label, value]) => (
-                <div key={label as string}>
-                  <dt className="text-xs text-muted-foreground">{label as string}</dt>
-                  <dd className="text-sm font-medium text-foreground mt-0.5">{value as string}</dd>
+            <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+              {infoRows.map((row, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: i < infoRows.length - 1 ? "1px solid var(--surface2)" : "none" }}>
+                  <span style={{ fontSize: 13, color: "var(--text-dim)" }}>{row.label}</span>
+                  <span style={{ fontSize: 13, fontWeight: 500 }}>{row.value}</span>
                 </div>
               ))}
-            </dl>
+            </div>
 
-            <div className="pt-2 border-t border-border">
-              <p className="text-xs text-muted-foreground mb-2">Update status</p>
-              <Select value={merchant.status} onValueChange={handleStatusChange}>
-                <SelectTrigger className="w-40 h-8 text-xs bg-card border-border" data-testid="select-merchant-status">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="suspended">Suspended</SelectItem>
-                </SelectContent>
-              </Select>
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--surface2)" }}>
+              <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 8 }}>Update Status</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                {["active", "pending", "suspended"].map(s => (
+                  <button key={s} className={`btn btn-sm ${merchant.status === s ? "btn-primary" : "btn-ghost"}`}
+                    onClick={() => updateStatus(s)} disabled={updating || merchant.status === s}
+                    style={{ textTransform: "capitalize", fontSize: 12 }}>
+                    {s}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
-          {/* Stats */}
-          <div className="space-y-4">
-            <div className="bg-card border border-card-border rounded-xl p-4 text-center">
-              <Activity className="w-5 h-5 text-primary mx-auto mb-2" />
-              <p className="text-2xl font-bold text-primary">${(merchant.totalVolume ?? 0).toLocaleString()}</p>
-              <p className="text-xs text-muted-foreground">Total Volume</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 200, flex: "0 0 auto" }}>
+            <div className="card" style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 28, marginBottom: 4 }}>💰</div>
+              <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 22, color: "var(--gold)" }}>
+                ${(merchant.totalVolume ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--text-dim)" }}>Total Volume</div>
             </div>
-            <div className="bg-card border border-card-border rounded-xl p-4 text-center">
-              <p className="text-2xl font-bold text-foreground">{merchant.transactionCount ?? 0}</p>
-              <p className="text-xs text-muted-foreground">Transactions</p>
+            <div className="card" style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 28, marginBottom: 4 }}>📊</div>
+              <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 22 }}>
+                {merchant.transactionCount ?? 0}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--text-dim)" }}>Transactions</div>
             </div>
           </div>
         </div>
 
-        {/* Recent Transactions */}
-        <div className="bg-card border border-card-border rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-foreground mb-4">Recent Transactions</h3>
-          <div className="space-y-2">
-            {(transactions?.data ?? []).map((tx) => (
-              <div key={tx.id} className="flex items-center gap-3 py-2 border-b border-border last:border-0" data-testid={`row-tx-${tx.id}`}>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-mono text-foreground truncate">{tx.reference}</p>
-                  <p className="text-xs text-muted-foreground">{tx.paymentMethod ?? tx.type} · {tx.country}</p>
-                </div>
-                <p className="text-sm font-semibold text-foreground shrink-0">${Number(tx.amount).toLocaleString()}</p>
-                <span className={`text-xs px-2 py-0.5 rounded font-medium shrink-0 ${statusColor(tx.status)}`}>{tx.status}</span>
-              </div>
-            ))}
-            {!transactions?.data?.length && (
-              <p className="text-sm text-muted-foreground text-center py-4">No transactions</p>
-            )}
-          </div>
+        <div className="card">
+          <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 16, marginBottom: 16 }}>Recent Transactions</h3>
+          {transactions.length === 0 ? (
+            <div className="empty"><div className="empty-icon">📜</div><div className="empty-desc">No transactions for this merchant</div></div>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Reference</th><th>Type</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead>
+                <tbody>
+                  {transactions.map((tx: any) => (
+                    <tr key={tx.id} onClick={() => setLocation(`/transactions/${tx.id}`)} style={{ cursor: "pointer" }}>
+                      <td style={{ fontFamily: "monospace", fontSize: 12 }}>{tx.reference}</td>
+                      <td style={{ textTransform: "capitalize" }}>{tx.type}</td>
+                      <td style={{ fontWeight: 600 }}>{tx.currency} {Number(tx.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}</td>
+                      <td>{statusBadge(tx.status)}</td>
+                      <td style={{ color: "var(--text-dim)", fontSize: 13 }}>{new Date(tx.createdAt).toLocaleDateString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </Layout>

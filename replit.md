@@ -57,6 +57,9 @@ lib/
 - `/beneficiaries` — Saved recipients for quick transfers
 - `/verification` — KYC document submission and verification levels
 - `/notifications` — Notification center with read/unread management
+- `/merchants` — Merchant management with stats, search, create/delete modal, clickable rows → detail
+- `/merchants/:id` — Merchant detail with profile info, volume/txn stats, status update, recent transactions
+- `/reports` — Reports & Analytics with status breakdown, volume by type/country, payment methods, top merchants table, export report
 - `/developer` — API documentation and key management
 - `/admin` — Admin panel (admin role only) with user management
 - `/settings` — Profile editing, password change, 2FA setup/disable (Security tab)

@@ -1,220 +1,201 @@
-import { useState } from "react";
-import { useListMerchants, useCreateMerchant, useDeleteMerchant, getListMerchantsQueryKey } from "@workspace/api-client-react";
-import { Layout } from "@/components/Layout";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Search, Plus, Trash2, Eye, ChevronLeft, ChevronRight } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Layout } from "../components/Layout";
 import { useLocation } from "wouter";
-import { useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-
-const merchantSchema = z.object({
-  name: z.string().min(1),
-  email: z.string().email(),
-  phone: z.string().optional(),
-  country: z.string().min(1),
-  businessType: z.string().optional(),
-});
-
-type MerchantForm = z.infer<typeof merchantSchema>;
-
-function statusColor(status: string) {
-  switch (status) {
-    case "active": return "text-primary bg-primary/10 border-primary/20";
-    case "pending": return "text-accent bg-accent/10 border-accent/20";
-    case "suspended": return "text-destructive bg-destructive/10 border-destructive/20";
-    default: return "text-muted-foreground bg-muted border-border";
-  }
-}
+import api from "../lib/api";
 
 export default function Merchants() {
-  const [page, setPage] = useState(1);
-  const [searchInput, setSearchInput] = useState("");
+  const [merchants, setMerchants] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const queryClient = useQueryClient();
+  const [statusFilter, setStatusFilter] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState("");
   const [, setLocation] = useLocation();
+  const [form, setForm] = useState({ name: "", email: "", phone: "", country: "", businessType: "" });
 
-  const { data, isLoading } = useListMerchants({
-    page,
-    limit: 20,
-    ...(search && { search }),
-    ...(status && status !== "all" && { status: status as any }),
-  });
+  const loadMerchants = () => {
+    setLoading(true);
+    const params = new URLSearchParams();
+    if (search) params.set("search", search);
+    if (statusFilter) params.set("status", statusFilter);
+    api.get(`/merchants?${params}`).then(({ data }) => {
+      setMerchants(data.data || data || []);
+    }).catch(() => {}).finally(() => setLoading(false));
+  };
 
-  const createMutation = useCreateMerchant({
-    mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getListMerchantsQueryKey() });
-        setDialogOpen(false);
-        reset();
-      },
-    },
-  });
+  useEffect(() => { loadMerchants(); }, [search, statusFilter]);
 
-  const deleteMutation = useDeleteMerchant({
-    mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getListMerchantsQueryKey() });
-      },
-    },
-  });
+  const createMerchant = async () => {
+    if (!form.name || !form.email || !form.country) { setError("Name, email and country are required"); return; }
+    setCreating(true); setError("");
+    try {
+      await api.post("/merchants", form);
+      setShowCreate(false);
+      setForm({ name: "", email: "", phone: "", country: "", businessType: "" });
+      loadMerchants();
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Failed to create merchant");
+    }
+    setCreating(false);
+  };
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<MerchantForm>({
-    resolver: zodResolver(merchantSchema),
-  });
+  const deleteMerchant = async (id: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm("Delete this merchant?")) return;
+    try {
+      await api.delete(`/merchants/${id}`);
+      loadMerchants();
+    } catch {}
+  };
 
-  const onSubmit = (data: MerchantForm) => {
-    createMutation.mutate({ data });
+  const statusBadge = (status: string) => {
+    const cls = status === "active" ? "badge-success" : status === "suspended" ? "badge-error" : "badge-warning";
+    return <span className={`badge ${cls}`} style={{ textTransform: "capitalize" }}>{status}</span>;
+  };
+
+  const stats = {
+    total: merchants.length,
+    active: merchants.filter(m => m.status === "active").length,
+    totalVolume: merchants.reduce((s, m) => s + (m.totalVolume || 0), 0),
+    totalTxns: merchants.reduce((s, m) => s + (m.transactionCount || 0), 0),
   };
 
   return (
     <Layout>
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="page fade-in">
+        <div className="page-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
           <div>
-            <h1 className="text-xl font-bold text-foreground" data-testid="text-merchants-title">Merchants</h1>
-            <p className="text-sm text-muted-foreground">{data?.total ?? 0} merchants</p>
+            <h1 className="page-title">Merchants</h1>
+            <p className="page-subtitle">Manage registered merchants and their transactions</p>
           </div>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" data-testid="button-add-merchant">
-                <Plus className="w-4 h-4 mr-1" /> Add Merchant
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="bg-card border-card-border">
-              <DialogHeader>
-                <DialogTitle>Add Merchant</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-2">
-                <div className="space-y-1.5">
-                  <Label>Name</Label>
-                  <Input {...register("name")} placeholder="Merchant name" className="bg-input border-border" data-testid="input-merchant-name" />
-                  {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Email</Label>
-                  <Input {...register("email")} type="email" placeholder="merchant@example.com" className="bg-input border-border" data-testid="input-merchant-email" />
-                  {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label>Phone</Label>
-                    <Input {...register("phone")} placeholder="+254..." className="bg-input border-border" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Country</Label>
-                    <Input {...register("country")} placeholder="Kenya" className="bg-input border-border" data-testid="input-merchant-country" />
-                    {errors.country && <p className="text-xs text-destructive">{errors.country.message}</p>}
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Business Type</Label>
-                  <Input {...register("businessType")} placeholder="E-Commerce, Fintech..." className="bg-input border-border" />
-                </div>
-                <Button type="submit" className="w-full" disabled={createMutation.isPending} data-testid="button-submit-merchant">
-                  {createMutation.isPending ? "Creating..." : "Create Merchant"}
-                </Button>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <button className="btn btn-primary" onClick={() => setShowCreate(true)} style={{ gap: 6 }}>
+            + Add Merchant
+          </button>
         </div>
 
-        {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-3">
-          <form onSubmit={(e) => { e.preventDefault(); setSearch(searchInput); setPage(1); }} className="flex gap-2 flex-1">
-            <div className="relative flex-1 max-w-xs">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search merchants..."
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                className="pl-9 bg-card border-border"
-                data-testid="input-search-merchant"
-              />
+        <div className="grid-4" style={{ marginBottom: 24 }}>
+          <div className="stat-card">
+            <div className="stat-card-icon">🏪</div>
+            <div className="stat-card-label">Total Merchants</div>
+            <div className="stat-card-value">{stats.total}</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card-icon">✅</div>
+            <div className="stat-card-label">Active</div>
+            <div className="stat-card-value" style={{ color: "var(--green)" }}>{stats.active}</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card-icon">💰</div>
+            <div className="stat-card-label">Total Volume</div>
+            <div className="stat-card-value">${stats.totalVolume.toLocaleString("en-US", { minimumFractionDigits: 2 })}</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card-icon">📊</div>
+            <div className="stat-card-label">Total Transactions</div>
+            <div className="stat-card-value">{stats.totalTxns}</div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
+          <input className="input" placeholder="Search merchants..." value={search} onChange={e => setSearch(e.target.value)} style={{ maxWidth: 280 }} />
+          <select className="select" style={{ width: 160 }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+            <option value="">All Statuses</option>
+            <option value="active">Active</option>
+            <option value="suspended">Suspended</option>
+            <option value="pending">Pending</option>
+          </select>
+        </div>
+
+        <div className="card">
+          {loading ? (
+            <div style={{ textAlign: "center", padding: 40 }}><span className="spinner" /></div>
+          ) : merchants.length === 0 ? (
+            <div className="empty">
+              <div className="empty-icon">🏪</div>
+              <div className="empty-title">No merchants found</div>
+              <div className="empty-desc">Add your first merchant to get started</div>
             </div>
-            <Button type="submit" variant="secondary" size="sm">Search</Button>
-          </form>
-          <Select value={status} onValueChange={(v) => { setStatus(v); setPage(1); }}>
-            <SelectTrigger className="w-40 bg-card border-border" data-testid="select-merchant-status">
-              <SelectValue placeholder="All statuses" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="suspended">Suspended</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {isLoading ? (
-            Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="bg-card border border-card-border rounded-xl p-5 h-40 animate-pulse" />
-            ))
-          ) : data?.data?.map((m) => (
-            <div key={m.id} className="bg-card border border-card-border rounded-xl p-5 space-y-3 hover:border-primary/30 transition-colors" data-testid={`card-merchant-${m.id}`}>
-              <div className="flex items-start justify-between">
-                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
-                  {m.name.charAt(0)}
-                </div>
-                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${statusColor(m.status)}`}>
-                  {m.status}
-                </span>
-              </div>
-              <div>
-                <p className="font-semibold text-foreground text-sm">{m.name}</p>
-                <p className="text-xs text-muted-foreground">{m.country} · {m.businessType ?? "—"}</p>
-                <p className="text-xs text-muted-foreground mt-1">{m.transactionCount ?? 0} transactions</p>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-primary">
-                  ${(m.totalVolume ?? 0).toLocaleString()}
-                </span>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    data-testid={`link-merchant-${m.id}`}
-                    onClick={() => setLocation(`/merchants/${m.id}`)}
-                  >
-                    <Eye className="w-3.5 h-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                    onClick={() => deleteMutation.mutate({ id: m.id })}
-                    data-testid={`button-delete-merchant-${m.id}`}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
-              </div>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Merchant</th><th>Email</th><th>Country</th><th>Type</th><th>Status</th><th>Volume</th><th>Txns</th><th></th></tr>
+                </thead>
+                <tbody>
+                  {merchants.map((m: any) => (
+                    <tr key={m.id} onClick={() => setLocation(`/merchants/${m.id}`)} style={{ cursor: "pointer" }}>
+                      <td>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div style={{
+                            width: 34, height: 34, borderRadius: 8,
+                            background: "linear-gradient(135deg, var(--gold-light), var(--gold))",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            color: "#fff", fontWeight: 700, fontSize: 14,
+                          }}>{m.name.charAt(0)}</div>
+                          <span style={{ fontWeight: 600 }}>{m.name}</span>
+                        </div>
+                      </td>
+                      <td style={{ color: "var(--text-dim)", fontSize: 13 }}>{m.email}</td>
+                      <td>{m.country}</td>
+                      <td style={{ color: "var(--text-dim)", fontSize: 13, textTransform: "capitalize" }}>{m.businessType || "—"}</td>
+                      <td>{statusBadge(m.status)}</td>
+                      <td style={{ fontWeight: 600 }}>${(m.totalVolume || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}</td>
+                      <td>{m.transactionCount || 0}</td>
+                      <td>
+                        <button className="btn btn-ghost btn-sm" onClick={e => deleteMerchant(m.id, e)} title="Delete" style={{ padding: "4px 8px", color: "var(--red)" }}>
+                          🗑️
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          ))}
+          )}
         </div>
 
-        {/* Pagination */}
-        {data && data.totalPages > 1 && (
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-muted-foreground">Page {data.page} of {data.totalPages}</p>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} data-testid="button-prev">
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(data.totalPages, p + 1))} disabled={page === data.totalPages} data-testid="button-next">
-                <ChevronRight className="w-4 h-4" />
-              </Button>
+        {showCreate && (
+          <div className="modal-overlay" onClick={() => setShowCreate(false)}>
+            <div className="card-lg fade-in" onClick={e => e.stopPropagation()} style={{ maxWidth: 480, width: "90%" }}>
+              <h2 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 20, marginBottom: 20 }}>Add Merchant</h2>
+              {error && <div style={{ padding: "10px 14px", background: "var(--red-bg)", border: "1px solid rgba(217,54,54,0.15)", borderRadius: 8, color: "var(--red)", fontSize: 13, marginBottom: 16 }}>{error}</div>}
+              <div className="input-group" style={{ marginBottom: 14 }}>
+                <label className="input-label">Business Name *</label>
+                <input className="input" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Shoprite Nigeria" />
+              </div>
+              <div className="input-group" style={{ marginBottom: 14 }}>
+                <label className="input-label">Email *</label>
+                <input className="input" type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder="merchant@example.com" />
+              </div>
+              <div className="input-group" style={{ marginBottom: 14 }}>
+                <label className="input-label">Phone</label>
+                <input className="input" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} placeholder="+234 800 000 0000" />
+              </div>
+              <div style={{ display: "flex", gap: 12, marginBottom: 14 }}>
+                <div className="input-group" style={{ flex: 1 }}>
+                  <label className="input-label">Country *</label>
+                  <input className="input" value={form.country} onChange={e => setForm(p => ({ ...p, country: e.target.value }))} placeholder="e.g. Nigeria" />
+                </div>
+                <div className="input-group" style={{ flex: 1 }}>
+                  <label className="input-label">Business Type</label>
+                  <select className="select" value={form.businessType} onChange={e => setForm(p => ({ ...p, businessType: e.target.value }))}>
+                    <option value="">Select...</option>
+                    <option value="retail">Retail</option>
+                    <option value="e-commerce">E-Commerce</option>
+                    <option value="fintech">Fintech</option>
+                    <option value="saas">SaaS</option>
+                    <option value="marketplace">Marketplace</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+                <button className="btn btn-ghost" onClick={() => setShowCreate(false)}>Cancel</button>
+                <button className="btn btn-primary" onClick={createMerchant} disabled={creating}>
+                  {creating ? <span className="spinner" /> : "Create Merchant"}
+                </button>
+              </div>
             </div>
           </div>
         )}

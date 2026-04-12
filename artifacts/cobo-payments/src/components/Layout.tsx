@@ -15,6 +15,8 @@ const NAV_KEYS = [
   { path: "/beneficiaries", key: "beneficiaries", icon: "👥" },
   { path: "/verification", key: "verification", icon: "🛡️" },
   { path: "/notifications", key: "notifications", icon: "🔔" },
+  { path: "/merchants", key: "merchants", icon: "🏪" },
+  { path: "/reports", key: "reports", icon: "📈" },
   { path: "/developer", key: "developer", icon: "⚙️" },
   { path: "/activity-log", key: "activity_log", icon: "📋" },
   { path: "/settings", key: "settings", icon: "🔧" },
