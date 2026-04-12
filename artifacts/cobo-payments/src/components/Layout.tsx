@@ -9,7 +9,6 @@ import {
   LogOut,
   Menu,
   X,
-  Activity,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -40,14 +39,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
         data-testid="sidebar"
       >
         {/* Logo */}
-        <div className="flex items-center gap-3 px-6 py-5 border-b border-sidebar-border">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary">
-            <Activity className="w-4 h-4 text-primary-foreground" />
-          </div>
-          <div>
-            <span className="text-sm font-bold text-sidebar-foreground tracking-wider">COBO</span>
-            <span className="block text-[10px] text-muted-foreground uppercase tracking-widest">Africa Payments</span>
-          </div>
+        <div className="flex items-center gap-3 px-4 py-4 border-b border-sidebar-border">
+          <img
+            src={`${import.meta.env.BASE_URL}cobo-logo.png`}
+            alt="COBO Africa Payments"
+            className="h-9 rounded"
+          />
           <button
             className="ml-auto lg:hidden text-muted-foreground"
             onClick={() => setMobileOpen(false)}
@@ -124,7 +121,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           >
             <Menu className="w-5 h-5" />
           </button>
-          <span className="text-sm font-bold text-foreground">COBO Africa</span>
+          <img src={`${import.meta.env.BASE_URL}cobo-logo.png`} alt="COBO" className="h-7 rounded" />
         </header>
 
         <main className="flex-1 overflow-y-auto p-6">{children}</main>

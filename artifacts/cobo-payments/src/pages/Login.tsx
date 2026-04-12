@@ -7,7 +7,7 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Activity, AlertCircle } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import { useState } from "react";
 
 const loginSchema = z.object({
@@ -50,11 +50,11 @@ export default function Login() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-primary mb-4">
-            <Activity className="w-6 h-6 text-primary-foreground" />
-          </div>
-          <h1 className="text-2xl font-bold text-foreground">COBO Africa</h1>
-          <p className="text-sm text-muted-foreground mt-1">Payments Platform</p>
+          <img
+            src={`${import.meta.env.BASE_URL}cobo-logo.png`}
+            alt="COBO Africa Payments"
+            className="h-20 mx-auto mb-4 rounded-lg"
+          />
         </div>
 
         {/* Card */}
