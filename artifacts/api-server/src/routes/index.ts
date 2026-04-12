@@ -13,6 +13,7 @@ import notificationsRouter from "./notificationsRoute";
 import paymentLinksRouter from "./paymentLinksRoute";
 import kycRouter from "./kycRoute";
 import exportsRouter from "./exports";
+import checkoutApiRouter from "./checkoutApi";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use(notificationsRouter);
 router.use(paymentLinksRouter);
 router.use(kycRouter);
 router.use(exportsRouter);
+router.use(checkoutApiRouter);
 
 export default router;

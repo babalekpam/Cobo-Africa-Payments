@@ -63,6 +63,7 @@ lib/
 - `/terms` — Terms of Service (public or with sidebar when logged in)
 - `/privacy` — Privacy Policy (public or with sidebar when logged in)
 - `/activity-log` — Audit log of user actions
+- `/pay/:sessionId` — Hosted checkout page (public, Stripe-like)
 
 ## i18n (Multi-language)
 
@@ -111,6 +112,26 @@ All prefixed with `/api`:
 - `GET /api/exports/transactions.csv` — CSV export (auth via query token)
 - `GET /api/exports/transactions.json` — JSON export (auth via query token)
 - `GET /api/exports/receipt/:txId` — Printable receipt HTML (auth via query token)
+- `POST /api/developer/api-keys` — Create API key (test/live mode)
+- `GET /api/developer/api-keys` — List API keys
+- `DELETE /api/developer/api-keys/:id` — Revoke API key
+- `POST /api/checkout/sessions` — Create checkout session (API key auth)
+- `GET /api/checkout/sessions/:id` — Get checkout session (API key auth)
+- `GET /api/checkout/sessions` — List checkout sessions (API key auth)
+- `GET /api/pay/:sessionId/info` — Get checkout info (public)
+- `POST /api/pay/:sessionId/complete` — Complete payment (public)
+
+## Checkout API (Stripe-like)
+
+Developers can generate API keys and use COBO's Checkout API to collect payments from their platforms:
+1. Create an API key from the Developer page (test or live mode)
+2. `POST /api/checkout/sessions` with Bearer API key to create a checkout session
+3. Redirect customers to the `checkout_url` — a hosted payment page
+4. Receive webhook notifications at your `webhook_url` when payment completes
+5. Verify payment status via `GET /api/checkout/sessions/:id`
+
+Sessions expire after 30 minutes. Webhook payloads include HMAC-SHA256 signature via `X-COBO-Signature` header.
+DB tables: `api_keys` (hashed key storage), `checkout_sessions`, `webhook_events`.
 
 ## Security Features
 
@@ -123,7 +144,7 @@ All prefixed with `/api`:
 
 ## Database
 
-PostgreSQL with tables: `users`, `merchants`, `transactions`, `wallets`, `beneficiaries`, `notifications`, `payment_links`, `kyc_documents`, `audit_logs`
+PostgreSQL with tables: `users`, `merchants`, `transactions`, `wallets`, `beneficiaries`, `notifications`, `payment_links`, `kyc_documents`, `audit_logs`, `api_keys`, `checkout_sessions`, `webhook_events`
 - Users table extended with: firstName, lastName, businessName, businessType, kycStatus, kycLevel, isActive, twoFaSecret, twoFaEnabled, passwordResetToken, passwordResetExpires
 - Audit logs table: userId, action, ip, meta (jsonb), createdAt
 - Seeded with: admin user (Abel Nkawula) with 4 wallets (USD, NGN, XOF, GHS), merchants, and sample transactions
