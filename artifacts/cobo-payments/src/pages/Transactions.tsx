@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
 import { Layout } from "../components/Layout";
+import { useLocation } from "wouter";
 import api from "../lib/api";
 
 export default function Transactions() {
   const [txs, setTxs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState({ status: "", type: "" });
+  const [, setLocation] = useLocation();
 
   useEffect(() => {
     const params = new URLSearchParams();
@@ -25,11 +27,6 @@ export default function Transactions() {
     window.open(`/api/exports/transactions.csv?${params}&token=${token}`, "_blank");
   };
 
-  const viewReceipt = (txId: number) => {
-    const token = localStorage.getItem("cobo_token");
-    window.open(`/api/exports/receipt/${txId}?token=${token}`, "_blank");
-  };
-
   return (
     <Layout>
       <div className="page fade-in">
@@ -43,7 +40,7 @@ export default function Transactions() {
           </button>
         </div>
 
-        <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+        <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
           <select className="select" style={{ width: 160 }} value={filter.status} onChange={e => setFilter(p => ({ ...p, status: e.target.value }))}>
             <option value="">All Statuses</option>
             <option value="completed">Completed</option>
@@ -53,9 +50,9 @@ export default function Transactions() {
           <select className="select" style={{ width: 160 }} value={filter.type} onChange={e => setFilter(p => ({ ...p, type: e.target.value }))}>
             <option value="">All Types</option>
             <option value="payment">Payment</option>
-            <option value="transfer">Transfer</option>
             <option value="send">Send</option>
             <option value="deposit">Deposit</option>
+            <option value="exchange">Exchange</option>
           </select>
         </div>
 
@@ -67,18 +64,23 @@ export default function Transactions() {
           ) : (
             <div className="table-wrap">
               <table>
-                <thead><tr><th>Reference</th><th>Type</th><th>Amount</th><th>Status</th><th>Method</th><th>Date</th><th></th></tr></thead>
+                <thead><tr><th>Reference</th><th>Type</th><th>Amount</th><th>Status</th><th>Description</th><th>Date</th><th></th></tr></thead>
                 <tbody>
                   {txs.map((tx: any) => (
-                    <tr key={tx.id}>
+                    <tr key={tx.id} onClick={() => setLocation(`/transactions/${tx.id}`)} style={{ cursor: "pointer" }}>
                       <td style={{ fontFamily: "monospace", fontSize: 12 }}>{tx.reference}</td>
-                      <td style={{ textTransform: "capitalize" }}>{tx.type}</td>
-                      <td style={{ fontWeight: 600 }}>{tx.currency} {Number(tx.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}</td>
+                      <td>
+                        <span style={{ marginRight: 4 }}>{tx.type === "send" ? "💸" : tx.type === "deposit" ? "💰" : tx.type === "exchange" ? "💱" : "📜"}</span>
+                        <span style={{ textTransform: "capitalize" }}>{tx.type}</span>
+                      </td>
+                      <td style={{ fontWeight: 600, color: tx.type === "deposit" ? "#1B9E5A" : "var(--text)" }}>
+                        {tx.type === "deposit" ? "+" : "-"}{tx.currency} {Number(tx.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                      </td>
                       <td><span className={`badge ${tx.status === "completed" || tx.status === "success" ? "badge-success" : tx.status === "failed" ? "badge-error" : "badge-warning"}`}>{tx.status}</span></td>
-                      <td style={{ color: "var(--text-dim)" }}>{tx.paymentMethod || "—"}</td>
+                      <td style={{ color: "var(--text-dim)", fontSize: 13, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.description || tx.paymentMethod || "—"}</td>
                       <td style={{ color: "var(--text-dim)", fontSize: 13 }}>{new Date(tx.createdAt).toLocaleDateString()}</td>
                       <td>
-                        <button className="btn btn-ghost btn-sm" onClick={() => viewReceipt(tx.id)} title="View Receipt" style={{ padding: "4px 8px", fontSize: 12 }}>
+                        <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); const token = localStorage.getItem("cobo_token"); window.open(`/api/exports/receipt/${tx.id}?token=${token}`, "_blank"); }} title="View Receipt" style={{ padding: "4px 8px", fontSize: 12 }}>
                           🧾
                         </button>
                       </td>

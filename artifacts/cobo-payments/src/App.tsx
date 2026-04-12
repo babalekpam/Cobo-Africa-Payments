@@ -9,7 +9,9 @@ import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Wallets from "./pages/Wallets";
 import SendMoney from "./pages/SendMoney";
+import Deposit from "./pages/Deposit";
 import Transactions from "./pages/Transactions";
+import TransactionDetail from "./pages/TransactionDetail";
 import Exchange from "./pages/Exchange";
 import PaymentLinks from "./pages/PaymentLinks";
 import Beneficiaries from "./pages/Beneficiaries";
@@ -79,6 +81,8 @@ function AppRouter() {
             <Route path="/dashboard" component={Dashboard} />
             <Route path="/wallets" component={Wallets} />
             <Route path="/send" component={SendMoney} />
+            <Route path="/deposit" component={Deposit} />
+            <Route path="/transactions/:id" component={TransactionDetail} />
             <Route path="/transactions" component={Transactions} />
             <Route path="/exchange" component={Exchange} />
             <Route path="/payment-links" component={PaymentLinks} />

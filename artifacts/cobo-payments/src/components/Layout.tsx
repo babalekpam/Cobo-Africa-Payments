@@ -8,6 +8,7 @@ const NAV_KEYS = [
   { path: "/dashboard", key: "dashboard", icon: "📊" },
   { path: "/wallets", key: "wallets", icon: "💰" },
   { path: "/send", key: "send_money", icon: "💸" },
+  { path: "/deposit", key: "deposit", icon: "📥" },
   { path: "/transactions", key: "transactions", icon: "📜" },
   { path: "/exchange", key: "fx_exchange", icon: "💱" },
   { path: "/payment-links", key: "payment_links", icon: "🔗" },
@@ -121,12 +122,41 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <div style={{ flex: 1, marginLeft: "var(--sidebar-w)", minHeight: "100vh", background: "var(--bg)" }}>
-        <header className="mobile-header" style={{ display: "none", alignItems: "center", gap: 12, padding: "12px 16px", borderBottom: "1px solid var(--border)", background: "var(--surface)" }}>
-          <button onClick={() => setMobileOpen(true)} style={{ background: "none", border: "none", color: "var(--text)", fontSize: 22, cursor: "pointer" }}>☰</button>
-          <img src={`${import.meta.env.BASE_URL}cobo-logo.png`} alt="COBO" style={{ height: 28, borderRadius: 4 }} />
+      <div style={{ flex: 1, marginLeft: "var(--sidebar-w)", minHeight: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column" }}>
+        <header style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "10px 24px", borderBottom: "1px solid var(--border)", background: "var(--surface)",
+          position: "sticky", top: 0, zIndex: 50,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <button className="mobile-menu-btn" onClick={() => setMobileOpen(true)} style={{ display: "none", background: "none", border: "none", color: "var(--text)", fontSize: 22, cursor: "pointer" }}>☰</button>
+            <div style={{ fontSize: 13, color: "var(--text-dim)" }}>
+              {new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <Link href="/notifications">
+              <div style={{ position: "relative", cursor: "pointer", padding: 6 }}>
+                <span style={{ fontSize: 20 }}>🔔</span>
+                {unread > 0 && (
+                  <span style={{
+                    position: "absolute", top: 0, right: 0, background: "var(--red)", color: "#fff",
+                    fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 99, minWidth: 16, textAlign: "center",
+                  }}>{unread}</span>
+                )}
+              </div>
+            </Link>
+            <Link href="/settings">
+              <div style={{
+                width: 32, height: 32, borderRadius: "50%",
+                background: "linear-gradient(135deg, var(--gold-light), var(--gold-dim))",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 12, color: "#fff", cursor: "pointer",
+              }}>{initials}</div>
+            </Link>
+          </div>
         </header>
-        <main style={{ overflow: "auto", height: "100vh" }}>
+        <main style={{ overflow: "auto", flex: 1 }}>
           {children}
         </main>
       </div>
@@ -134,7 +164,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <style>{`
         @media (max-width: 768px) {
           .sidebar { transform: translateX(-100%); transition: transform 0.25s; }
-          .mobile-header { display: flex !important; }
+          .mobile-menu-btn { display: block !important; }
           div[style*="marginLeft: var(--sidebar-w)"] { margin-left: 0 !important; }
         }
       `}</style>

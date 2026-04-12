@@ -46,10 +46,12 @@ lib/
 
 - `/login` — Login with "Forgot password?" link, Terms/Privacy links, 2FA code field
 - `/register` — Registration with first/last name, country, phone, business
-- `/dashboard` — Stats cards, wallet overview, recent transactions
+- `/dashboard` — Stats cards (clickable), wallet breakdown bar chart, monthly transaction activity chart, quick-action buttons (Send/Deposit/Exchange/Payment Link), recent transactions (clickable rows → detail)
 - `/wallets` — Multi-currency wallet management (add wallets, set default)
 - `/send` — Send money with multi-currency support, 53 African countries, FX conversion, country-specific mobile money providers
-- `/transactions` — Transaction history with filters, Export CSV button, receipt buttons
+- `/deposit` — Deposit/receive money with 3 methods: Bank Transfer (account details), Card Top-Up (form), Mobile Money (collection number); wallet selector; sandbox fund endpoint
+- `/transactions` — Transaction history with filters, Export CSV button, receipt buttons, clickable rows → detail page
+- `/transactions/:id` — Full transaction detail view with reference, amount, status badge, copy reference, view receipt buttons
 - `/exchange` — FX exchange with rate quotes and currency swap
 - `/payment-links` — Create and manage payment link pages
 - `/beneficiaries` — Saved recipients for quick transfers
