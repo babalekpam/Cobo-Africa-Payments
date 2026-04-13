@@ -15,6 +15,7 @@ import kycRouter from "./kycRoute";
 import exportsRouter from "./exports";
 import checkoutApiRouter from "./checkoutApi";
 import complianceRouter from "./compliance";
+import depositsRouter from "./deposits";
 
 const router: IRouter = Router();
 
@@ -34,5 +35,6 @@ router.use(kycRouter);
 router.use(exportsRouter);
 router.use(checkoutApiRouter);
 router.use(complianceRouter);
+router.use(depositsRouter);
 
 export default router;

@@ -1,9 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Layout } from "../components/Layout";
 import { useAuth } from "../context/AuthContext";
 import api from "../lib/api";
-
-type Method = "bank" | "card" | "mobile";
 
 const CURRENCY_INFO: Record<string, { flag: string; name: string; symbol: string }> = {
   USD: { flag: "🇺🇸", name: "US Dollar", symbol: "$" },
@@ -33,174 +31,263 @@ const BANK_DETAILS: Record<string, { bank: string; account: string; name: string
   GBP: { bank: "COBO Africa UK Account", account: "COBO-GBP-001-2024", name: "COBO Africa Payments Ltd", swift: "COBOGB2L", branch: "London, UK" },
 };
 
+type Tab = "deposit" | "history";
+
+interface DepositRequest {
+  id: number;
+  currency: string;
+  amount: number;
+  method: string;
+  reference: string;
+  bankName: string;
+  senderName: string;
+  status: string;
+  rejectionReason: string | null;
+  createdAt: string;
+  reviewedAt: string | null;
+}
+
 export default function Deposit() {
-  const { wallets, refreshWallets } = useAuth();
-  const [method, setMethod] = useState<Method>("bank");
-  const [selectedWallet, setSelectedWallet] = useState(wallets[0]?.currency || "USD");
+  const { wallets } = useAuth();
+  const [tab, setTab] = useState<Tab>("deposit");
+  const [selectedCurrency, setSelectedCurrency] = useState(wallets[0]?.currency || "USD");
   const [amount, setAmount] = useState("");
+  const [senderName, setSenderName] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [senderAccount, setSenderAccount] = useState("");
+  const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [success, setSuccess] = useState<any>(null);
   const [error, setError] = useState("");
-  const [cardForm, setCardForm] = useState({ number: "", expiry: "", cvv: "", name: "" });
+  const [deposits, setDeposits] = useState<DepositRequest[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
-  const info = CURRENCY_INFO[selectedWallet];
-  const bankInfo = BANK_DETAILS[selectedWallet] || BANK_DETAILS.USD;
+  const info = CURRENCY_INFO[selectedCurrency];
+  const bankInfo = BANK_DETAILS[selectedCurrency] || BANK_DETAILS.USD;
 
-  const fundWallet = async () => {
-    if (!amount || Number(amount) <= 0) return;
-    setLoading(true); setError(""); setResult(null);
+  const fetchDeposits = async () => {
+    setLoadingHistory(true);
     try {
-      await api.post("/wallets/fund", { currency: selectedWallet, amount: Number(amount) });
-      await refreshWallets();
-      setResult({ amount: Number(amount), currency: selectedWallet, method });
-      setAmount("");
+      const res = await api.get("/deposits");
+      setDeposits(res.data.deposits || []);
+    } catch {}
+    setLoadingHistory(false);
+  };
+
+  useEffect(() => {
+    if (tab === "history") fetchDeposits();
+  }, [tab]);
+
+  const submitDeposit = async () => {
+    if (!amount || Number(amount) <= 0) { setError("Enter a valid amount"); return; }
+    if (!senderName.trim()) { setError("Enter the sender name used for the transfer"); return; }
+    setLoading(true); setError(""); setSuccess(null);
+    try {
+      const res = await api.post("/deposits", {
+        currency: selectedCurrency,
+        amount: Number(amount),
+        method: "bank",
+        bankName: bankName.trim() || undefined,
+        senderName: senderName.trim(),
+        senderAccount: senderAccount.trim() || undefined,
+        notes: notes.trim() || undefined,
+      });
+      setSuccess(res.data.deposit);
+      setAmount(""); setSenderName(""); setBankName(""); setSenderAccount(""); setNotes("");
     } catch (err: any) {
-      setError(err.response?.data?.message || "Deposit failed");
+      setError(err.response?.data?.message || "Failed to submit deposit request");
     }
     setLoading(false);
   };
 
-  const methods: { key: Method; label: string; icon: string }[] = [
-    { key: "bank", label: "Bank Deposit", icon: "🏦" },
-    { key: "card", label: "Card Top-Up", icon: "💳" },
-    { key: "mobile", label: "Mobile Money", icon: "📱" },
-  ];
+  const statusBadge = (status: string) => {
+    const colors: Record<string, { bg: string; color: string }> = {
+      pending: { bg: "rgba(201,138,26,0.1)", color: "#C98A1A" },
+      approved: { bg: "rgba(27,158,90,0.1)", color: "#1B9E5A" },
+      rejected: { bg: "rgba(217,54,54,0.1)", color: "#D93636" },
+    };
+    const c = colors[status] || colors.pending;
+    return <span style={{ padding: "4px 10px", borderRadius: 6, fontSize: 12, fontWeight: 600, background: c.bg, color: c.color, textTransform: "capitalize" }}>{status}</span>;
+  };
 
   return (
     <Layout>
       <div className="page fade-in">
         <div className="page-header">
-          <h1 className="page-title">Deposit / Receive Money</h1>
-          <p className="page-subtitle">Add funds to your COBO wallet</p>
+          <h1 className="page-title">Deposit / Fund Wallet</h1>
+          <p className="page-subtitle">Transfer funds to your COBO wallet via bank transfer</p>
         </div>
 
-        <div style={{ display: "flex", gap: 10, marginBottom: 24, flexWrap: "wrap" }}>
-          {methods.map(m => (
-            <button key={m.key} className={`btn ${method === m.key ? "btn-primary" : "btn-ghost"}`} onClick={() => { setMethod(m.key); setResult(null); setError(""); }}>
-              {m.icon} {m.label}
-            </button>
-          ))}
+        <div style={{ display: "flex", gap: 10, marginBottom: 24 }}>
+          <button className={`btn ${tab === "deposit" ? "btn-primary" : "btn-ghost"}`} onClick={() => { setTab("deposit"); setSuccess(null); setError(""); }}>
+            🏦 New Deposit
+          </button>
+          <button className={`btn ${tab === "history" ? "btn-primary" : "btn-ghost"}`} onClick={() => setTab("history")}>
+            📋 My Deposits
+          </button>
         </div>
 
-        {result ? (
-          <div className="card-lg fade-in" style={{ maxWidth: 500, textAlign: "center" }}>
-            <div style={{ width: 64, height: 64, borderRadius: "50%", background: "#edf7f2", color: "#1B9E5A", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, fontWeight: 700, margin: "0 auto 16px" }}>✓</div>
-            <h2 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 22, marginBottom: 8 }}>Deposit Successful</h2>
-            <p style={{ color: "var(--text-dim)", marginBottom: 4, fontSize: 15 }}>
-              {info?.symbol}{result.amount.toLocaleString()} {result.currency} added to your wallet
-            </p>
-            <p style={{ color: "var(--text-dim)", fontSize: 13, marginBottom: 20 }}>via {result.method === "bank" ? "Bank Transfer" : result.method === "card" ? "Card Payment" : "Mobile Money"}</p>
-            <button className="btn btn-primary" onClick={() => setResult(null)}>Make Another Deposit</button>
-          </div>
-        ) : (
-          <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-start" }}>
-            <div className="card-lg" style={{ flex: 1, minWidth: 340, maxWidth: 520 }}>
-              {error && <div style={{ padding: "10px 14px", background: "#fef2f2", border: "1px solid rgba(217,54,54,0.15)", borderRadius: 8, color: "var(--red)", fontSize: 13, marginBottom: 16 }}>{error}</div>}
-
-              <div className="input-group" style={{ marginBottom: 16 }}>
-                <label className="input-label">Deposit To</label>
-                <select className="select" value={selectedWallet} onChange={e => setSelectedWallet(e.target.value)}>
-                  {wallets.map(w => {
-                    const ci = CURRENCY_INFO[w.currency];
-                    return <option key={w.id} value={w.currency}>{ci?.flag || "💰"} {w.currency} — {ci?.name || w.currency} (Balance: {ci?.symbol}{w.balance.toLocaleString()})</option>;
-                  })}
-                </select>
-              </div>
-
-              <div className="input-group" style={{ marginBottom: 20 }}>
-                <label className="input-label">Amount ({info?.flag} {selectedWallet})</label>
-                <input className="input" type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" style={{ fontSize: 18, fontWeight: 600 }} />
-              </div>
-
-              {method === "bank" && (
-                <div style={{ padding: 16, background: "var(--surface2)", borderRadius: 10, marginBottom: 20 }}>
-                  <h4 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 14, marginBottom: 12, color: "var(--gold)" }}>BANK TRANSFER DETAILS</h4>
-                  <p style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 12 }}>Transfer funds to the account below. Your wallet will be credited once payment is confirmed.</p>
-                  {[
-                    { label: "Bank", value: bankInfo.bank },
-                    { label: "Account Name", value: bankInfo.name },
-                    { label: "Account Number", value: bankInfo.account },
-                    { label: "SWIFT/BIC", value: bankInfo.swift },
-                    { label: "Branch", value: bankInfo.branch },
-                    { label: "Reference", value: `COBO-DEP-${Date.now().toString(36).toUpperCase()}` },
-                  ].map(row => (
-                    <div key={row.label} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid var(--border)", fontSize: 13 }}>
-                      <span style={{ color: "var(--text-dim)" }}>{row.label}</span>
-                      <span style={{ fontWeight: 600, fontFamily: row.label === "Account Number" || row.label === "SWIFT/BIC" || row.label === "Reference" ? "monospace" : "inherit" }}>{row.value}</span>
-                    </div>
-                  ))}
+        {tab === "deposit" && (
+          <>
+            {success ? (
+              <div className="card-lg fade-in" style={{ maxWidth: 520, textAlign: "center" }}>
+                <div style={{ width: 64, height: 64, borderRadius: "50%", background: "rgba(201,138,26,0.1)", color: "#C98A1A", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, fontWeight: 700, margin: "0 auto 16px" }}>⏳</div>
+                <h2 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 22, marginBottom: 8 }}>Deposit Request Submitted</h2>
+                <p style={{ color: "var(--text-dim)", marginBottom: 4, fontSize: 15 }}>
+                  {CURRENCY_INFO[success.currency]?.symbol}{success.amount.toLocaleString()} {success.currency}
+                </p>
+                <p style={{ fontSize: 13, color: "var(--text-dim)", marginBottom: 4 }}>Reference: <strong style={{ fontFamily: "monospace" }}>{success.reference}</strong></p>
+                <p style={{ fontSize: 13, color: "var(--text-dim)", marginBottom: 20 }}>
+                  Your deposit will be credited once our team verifies the payment. This usually takes 1–24 hours.
+                </p>
+                <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+                  <button className="btn btn-primary" onClick={() => setSuccess(null)}>Submit Another</button>
+                  <button className="btn btn-ghost" onClick={() => setTab("history")}>View History</button>
                 </div>
-              )}
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-start" }}>
+                <div className="card-lg" style={{ flex: 1, minWidth: 340, maxWidth: 560 }}>
+                  <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 16, marginBottom: 20 }}>Step 1: Transfer to Our Bank Account</h3>
 
-              {method === "card" && (
-                <>
+                  {error && <div style={{ padding: "10px 14px", background: "#fef2f2", border: "1px solid rgba(217,54,54,0.15)", borderRadius: 8, color: "var(--red)", fontSize: 13, marginBottom: 16 }}>{error}</div>}
+
                   <div className="input-group" style={{ marginBottom: 16 }}>
-                    <label className="input-label">Cardholder Name</label>
-                    <input className="input" value={cardForm.name} onChange={e => setCardForm(p => ({ ...p, name: e.target.value }))} placeholder="Name on card" />
+                    <label className="input-label">Deposit Currency</label>
+                    <select className="select" value={selectedCurrency} onChange={e => setSelectedCurrency(e.target.value)}>
+                      {wallets.map(w => {
+                        const ci = CURRENCY_INFO[w.currency];
+                        return <option key={w.id} value={w.currency}>{ci?.flag || "💰"} {w.currency} — {ci?.name || w.currency}</option>;
+                      })}
+                    </select>
                   </div>
+
+                  <div style={{ padding: 16, background: "var(--surface2)", borderRadius: 10, marginBottom: 20 }}>
+                    <h4 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 13, marginBottom: 12, color: "var(--gold)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Transfer to this account</h4>
+                    {[
+                      { label: "Bank", value: bankInfo.bank },
+                      { label: "Account Name", value: bankInfo.name },
+                      { label: "Account Number", value: bankInfo.account },
+                      { label: "SWIFT/BIC", value: bankInfo.swift },
+                      { label: "Branch", value: bankInfo.branch },
+                    ].map(row => (
+                      <div key={row.label} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: "1px solid var(--border)", fontSize: 13 }}>
+                        <span style={{ color: "var(--text-dim)" }}>{row.label}</span>
+                        <span style={{ fontWeight: 600, fontFamily: row.label === "Account Number" || row.label === "SWIFT/BIC" ? "monospace" : "inherit" }}>{row.value}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 16, marginBottom: 16 }}>Step 2: Tell Us About Your Transfer</h3>
+
                   <div className="input-group" style={{ marginBottom: 16 }}>
-                    <label className="input-label">Card Number</label>
-                    <input className="input" value={cardForm.number} onChange={e => setCardForm(p => ({ ...p, number: e.target.value }))} placeholder="4242 4242 4242 4242" maxLength={19} style={{ fontFamily: "monospace" }} />
+                    <label className="input-label">Amount Transferred ({info?.flag} {selectedCurrency})</label>
+                    <input className="input" type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" style={{ fontSize: 18, fontWeight: 600 }} />
                   </div>
+
+                  <div className="input-group" style={{ marginBottom: 16 }}>
+                    <label className="input-label">Sender Name (as it appears on the transfer) *</label>
+                    <input className="input" value={senderName} onChange={e => setSenderName(e.target.value)} placeholder="e.g. Abel Nkawula" />
+                  </div>
+
                   <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
                     <div className="input-group" style={{ flex: 1 }}>
-                      <label className="input-label">Expiry</label>
-                      <input className="input" value={cardForm.expiry} onChange={e => setCardForm(p => ({ ...p, expiry: e.target.value }))} placeholder="MM/YY" maxLength={5} />
+                      <label className="input-label">Your Bank Name</label>
+                      <input className="input" value={bankName} onChange={e => setBankName(e.target.value)} placeholder="e.g. GTBank" />
                     </div>
                     <div className="input-group" style={{ flex: 1 }}>
-                      <label className="input-label">CVV</label>
-                      <input className="input" value={cardForm.cvv} onChange={e => setCardForm(p => ({ ...p, cvv: e.target.value }))} placeholder="123" maxLength={4} type="password" />
+                      <label className="input-label">Your Account Number</label>
+                      <input className="input" value={senderAccount} onChange={e => setSenderAccount(e.target.value)} placeholder="Optional" />
                     </div>
                   </div>
-                  <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 16 }}>
-                    <span style={{ fontSize: 18 }}>🔒</span>
-                    <span style={{ fontSize: 12, color: "var(--text-dim)" }}>Secured with 256-bit SSL encryption. Sandbox mode — no real charges.</span>
-                  </div>
-                </>
-              )}
 
-              {method === "mobile" && (
-                <div style={{ padding: 16, background: "var(--surface2)", borderRadius: 10, marginBottom: 20 }}>
-                  <h4 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 14, marginBottom: 12, color: "var(--gold)" }}>MOBILE MONEY DEPOSIT</h4>
-                  <p style={{ fontSize: 13, color: "var(--text-dim)", marginBottom: 12 }}>Send money to the COBO collection number below:</p>
-                  <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", fontSize: 13 }}>
-                    <span style={{ color: "var(--text-dim)" }}>Provider</span>
-                    <span style={{ fontWeight: 600 }}>All Providers Accepted</span>
+                  <div className="input-group" style={{ marginBottom: 20 }}>
+                    <label className="input-label">Notes (optional)</label>
+                    <textarea className="input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any additional details about the transfer..." rows={3} style={{ resize: "vertical" }} />
                   </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", fontSize: 13, borderTop: "1px solid var(--border)" }}>
-                    <span style={{ color: "var(--text-dim)" }}>Number</span>
-                    <span style={{ fontWeight: 600, fontFamily: "monospace" }}>*880*COBO#</span>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", fontSize: 13, borderTop: "1px solid var(--border)" }}>
-                    <span style={{ color: "var(--text-dim)" }}>Reference</span>
-                    <span style={{ fontWeight: 600, fontFamily: "monospace" }}>COBO-{Date.now().toString(36).toUpperCase().slice(-6)}</span>
-                  </div>
+
+                  <button className="btn btn-primary btn-lg btn-full" onClick={submitDeposit} disabled={loading || !amount || Number(amount) <= 0 || !senderName.trim()}>
+                    {loading ? <span className="spinner" /> : `Submit Deposit Request — ${info?.symbol || ""}${amount || "0.00"} ${selectedCurrency}`}
+                  </button>
+                  <p style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 8, textAlign: "center" }}>Your wallet will be credited after our team verifies the payment (1–24 hours).</p>
                 </div>
-              )}
 
-              <button className="btn btn-primary btn-lg btn-full" onClick={fundWallet} disabled={loading || !amount || Number(amount) <= 0}>
-                {loading ? <span className="spinner" /> : `Deposit ${info?.symbol || ""}${amount || "0.00"} ${selectedWallet}`}
-              </button>
-              <p style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 8, textAlign: "center" }}>Sandbox mode — deposits are instant for testing</p>
-            </div>
-
-            <div style={{ minWidth: 260, maxWidth: 300, flex: "0 0 auto" }}>
-              <div className="card" style={{ position: "sticky", top: 20 }}>
-                <h4 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 14, marginBottom: 16 }}>Deposit Info</h4>
-                <div style={{ fontSize: 13, color: "var(--text-dim)", marginBottom: 12 }}>
-                  {method === "bank" ? "Bank transfers typically take 1-3 business days to reflect." :
-                   method === "card" ? "Card top-ups are instant. A 2.5% processing fee applies." :
-                   "Mobile money deposits are processed within 5 minutes."}
-                </div>
-                <div style={{ padding: 12, background: "var(--surface2)", borderRadius: 8 }}>
-                  <div style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 4 }}>Current Balance</div>
-                  <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 20 }}>
-                    {info?.symbol}{(wallets.find(w => w.currency === selectedWallet)?.balance || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                <div style={{ minWidth: 260, maxWidth: 300, flex: "0 0 auto" }}>
+                  <div className="card" style={{ position: "sticky", top: 20 }}>
+                    <h4 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 14, marginBottom: 16 }}>How It Works</h4>
+                    <div style={{ fontSize: 13, color: "var(--text-dim)", lineHeight: 1.7 }}>
+                      {[
+                        { step: "1", text: "Transfer funds from your bank to our account shown on the left." },
+                        { step: "2", text: "Fill in the details of your transfer and submit." },
+                        { step: "3", text: "Our team verifies the payment (1–24 hours)." },
+                        { step: "4", text: "Your COBO wallet is credited automatically." },
+                      ].map(s => (
+                        <div key={s.step} style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+                          <div style={{ width: 24, height: 24, borderRadius: "50%", background: "rgba(201,138,26,0.1)", color: "#C98A1A", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{s.step}</div>
+                          <span>{s.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ padding: 12, background: "var(--surface2)", borderRadius: 8, marginTop: 16 }}>
+                      <div style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 4 }}>Current Balance</div>
+                      <div style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 20 }}>
+                        {info?.symbol}{(wallets.find(w => w.currency === selectedCurrency)?.balance || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      </div>
+                      <div style={{ fontSize: 12, color: "var(--text-dim)" }}>{info?.flag} {selectedCurrency} — {info?.name}</div>
+                    </div>
                   </div>
-                  <div style={{ fontSize: 12, color: "var(--text-dim)" }}>{info?.flag} {selectedWallet} — {info?.name}</div>
                 </div>
               </div>
-            </div>
+            )}
+          </>
+        )}
+
+        {tab === "history" && (
+          <div className="card-lg">
+            <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 16, marginBottom: 16 }}>Deposit History</h3>
+            {loadingHistory ? (
+              <div style={{ textAlign: "center", padding: 40 }}><span className="spinner" /></div>
+            ) : deposits.length === 0 ? (
+              <div className="empty">
+                <div style={{ fontSize: 36, marginBottom: 8 }}>📭</div>
+                <p>No deposits yet. Submit your first deposit request above.</p>
+              </div>
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Reference</th>
+                      <th>Currency</th>
+                      <th>Amount</th>
+                      <th>Sender</th>
+                      <th>Status</th>
+                      <th>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {deposits.map(d => {
+                      const ci = CURRENCY_INFO[d.currency];
+                      return (
+                        <tr key={d.id}>
+                          <td style={{ fontFamily: "monospace", fontSize: 12 }}>{d.reference}</td>
+                          <td>{ci?.flag} {d.currency}</td>
+                          <td style={{ fontWeight: 600 }}>{ci?.symbol}{d.amount.toLocaleString()}</td>
+                          <td>{d.senderName}</td>
+                          <td>
+                            {statusBadge(d.status)}
+                            {d.status === "rejected" && d.rejectionReason && (
+                              <div style={{ fontSize: 11, color: "var(--red)", marginTop: 4 }}>{d.rejectionReason}</div>
+                            )}
+                          </td>
+                          <td style={{ fontSize: 13 }}>{new Date(d.createdAt).toLocaleDateString()}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>

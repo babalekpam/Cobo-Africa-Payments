@@ -10,3 +10,4 @@ export * from "./auditLogs";
 export * from "./apiKeys";
 export * from "./checkoutSessions";
 export * from "./compliance";
+export * from "./depositRequests";
