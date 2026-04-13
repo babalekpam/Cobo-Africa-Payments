@@ -3,6 +3,9 @@ import { eq, and, gte } from "drizzle-orm";
 import { db, walletsTable, transactionsTable, usersTable, notificationsTable, auditLogsTable } from "@workspace/db";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
 import { emailService } from "../services/email";
+import { checkAndCreateCTR } from "../lib/ctr";
+import { generateBankRef, generateMobileRef, generateInternalRef } from "../lib/refgen";
+import { screenAgainstOFAC, assessCountryRisk as checkCountry } from "../lib/ofac";
 
 const router: IRouter = Router();
 const FEE_RATE = 0.005;
@@ -125,19 +128,34 @@ router.post("/transfers/bank", requireAuth, async (req: AuthenticatedRequest, re
     convertedAmount = Number(amount) * fxRate;
   }
 
+  const recipientName = account_name || bank_name || "recipient";
+  const ofacResult = screenAgainstOFAC(recipientName);
+  if (!ofacResult.clear && ofacResult.riskScore >= 80) {
+    res.status(403).json({ success: false, message: "This transfer has been flagged for compliance review. Please contact support.", code: "SANCTIONS_FLAG" });
+    return;
+  }
+  if (recipient_country) {
+    const countryRisk = checkCountry(recipient_country);
+    if (countryRisk.level === "high" || countryRisk.level === "prohibited") {
+      res.status(403).json({ success: false, message: `Transfers to ${recipient_country} are blocked due to sanctions restrictions.`, code: "COUNTRY_BLOCKED" });
+      return;
+    }
+  }
+
   await db.update(walletsTable).set({ balance: String(Number(wallet.balance) - total) }).where(eq(walletsTable.id, wallet.id));
-  const ref = "COBO-BANK-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
-  const desc = description || `Bank transfer to ${account_name || bank_name}${isInternational ? ` (${wallet.currency} → ${recipCurrency})` : ""}`;
+  const ref = generateBankRef();
+  const desc = description || `Bank transfer to ${recipientName}${isInternational ? ` (${wallet.currency} → ${recipCurrency})` : ""}`;
   await db.insert(transactionsTable).values({
     reference: ref, amount: String(amount), currency: wallet.currency, status: "completed", type: "send",
     customerId: req.user!.id, description: desc,
     paymentMethod: "bank",
   });
+  await checkAndCreateCTR(req.user!.id, ref, Number(amount), wallet.currency, "bank_transfer");
   await db.insert(notificationsTable).values({
-    userId: req.user!.id, title: "Transfer Sent", message: `${wallet.currency} ${Number(amount).toLocaleString()} sent to ${account_name || bank_name}${isInternational ? ` (${recipCurrency} ${convertedAmount.toFixed(2)} received)` : ""}`, type: "success",
+    userId: req.user!.id, title: "Transfer Sent", message: `${wallet.currency} ${Number(amount).toLocaleString()} sent to ${recipientName}${isInternational ? ` (${recipCurrency} ${convertedAmount.toFixed(2)} received)` : ""}`, type: "success",
   });
   await db.insert(auditLogsTable).values({ userId: req.user!.id, action: "transfer_bank", ip: req.ip || "unknown", meta: { amount, currency: wallet.currency, recipient_currency: recipCurrency, fx_rate: fxRate, converted_amount: convertedAmount, recipient_country, ref, fee, is_international: isInternational } });
-  emailService.sendTransferSentEmail(user, { amount: Number(amount), currency: wallet.currency, recipient: account_name || bank_name, reference: ref, fee }).catch(() => {});
+  emailService.sendTransferSentEmail(user, { amount: Number(amount), currency: wallet.currency, recipient: recipientName, reference: ref, fee }).catch(() => {});
   res.json({ success: true, message: "Transfer sent", reference: ref, fee, net_amount: Number(amount), recipient_currency: recipCurrency, converted_amount: convertedAmount, fx_rate: fxRate, is_international: isInternational });
 });
 
@@ -165,19 +183,34 @@ router.post("/transfers/mobile", requireAuth, async (req: AuthenticatedRequest, 
     convertedAmount = Number(amount) * fxRate;
   }
 
+  const recipName = recipient_name || phone || "recipient";
+  const ofacMobile = screenAgainstOFAC(recipName);
+  if (!ofacMobile.clear && ofacMobile.riskScore >= 80) {
+    res.status(403).json({ success: false, message: "This transfer has been flagged for compliance review. Please contact support.", code: "SANCTIONS_FLAG" });
+    return;
+  }
+  if (recipient_country) {
+    const countryRisk = checkCountry(recipient_country);
+    if (countryRisk.level === "high" || countryRisk.level === "prohibited") {
+      res.status(403).json({ success: false, message: `Transfers to ${recipient_country} are blocked due to sanctions restrictions.`, code: "COUNTRY_BLOCKED" });
+      return;
+    }
+  }
+
   await db.update(walletsTable).set({ balance: String(Number(wallet.balance) - total) }).where(eq(walletsTable.id, wallet.id));
-  const ref = "COBO-MOMO-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
-  const desc = description || `${provider} to ${recipient_name || phone}${recipCurrency !== wallet.currency ? ` (${wallet.currency} → ${recipCurrency})` : ""}`;
+  const ref = generateMobileRef();
+  const desc = description || `${provider} to ${recipName}${recipCurrency !== wallet.currency ? ` (${wallet.currency} → ${recipCurrency})` : ""}`;
   await db.insert(transactionsTable).values({
     reference: ref, amount: String(amount), currency: wallet.currency, status: "completed", type: "send",
     customerId: req.user!.id, description: desc,
     paymentMethod: provider || "mobile_money",
   });
+  await checkAndCreateCTR(req.user!.id, ref, Number(amount), wallet.currency, "mobile_money");
   await db.insert(notificationsTable).values({
     userId: req.user!.id, title: "Mobile Money Sent", message: `${wallet.currency} ${Number(amount).toLocaleString()} sent via ${provider} to ${phone}${recipCurrency !== wallet.currency ? ` (${recipCurrency} ${convertedAmount.toFixed(2)} received)` : ""}`, type: "success",
   });
   await db.insert(auditLogsTable).values({ userId: req.user!.id, action: "transfer_mobile_money", ip: req.ip || "unknown", meta: { amount, currency: wallet.currency, recipient_currency: recipCurrency, fx_rate: fxRate, converted_amount: convertedAmount, recipient_country, provider, ref } });
-  emailService.sendTransferSentEmail(user, { amount: Number(amount), currency: wallet.currency, recipient: recipient_name || phone, reference: ref, fee }).catch(() => {});
+  emailService.sendTransferSentEmail(user, { amount: Number(amount), currency: wallet.currency, recipient: recipName, reference: ref, fee }).catch(() => {});
   res.json({ success: true, message: "Transfer sent", reference: ref, fee, recipient_currency: recipCurrency, converted_amount: convertedAmount, fx_rate: fxRate });
 });
 
@@ -196,7 +229,7 @@ router.post("/transfers/internal", requireAuth, async (req: AuthenticatedRequest
   }
   await db.update(walletsTable).set({ balance: String(Number(senderWallet.balance) - Number(amount)) }).where(eq(walletsTable.id, senderWallet.id));
   await db.update(walletsTable).set({ balance: String(Number(recipientWallet.balance) + Number(amount)) }).where(eq(walletsTable.id, recipientWallet.id));
-  const ref = "COBO-INT-" + Date.now();
+  const ref = generateInternalRef();
   const desc = note || description || `Internal transfer to ${recipient.email}`;
   await db.insert(transactionsTable).values({ reference: ref, amount: String(amount), currency: senderWallet.currency, status: "completed", type: "send", customerId: req.user!.id, description: desc, paymentMethod: "internal" });
   await db.insert(transactionsTable).values({ reference: ref + "-R", amount: String(amount), currency: senderWallet.currency, status: "completed", type: "deposit", customerId: recipient.id, description: `Internal transfer from ${req.user!.email}`, paymentMethod: "internal" });

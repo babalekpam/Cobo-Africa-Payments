@@ -31,13 +31,14 @@ import Privacy from "./pages/Privacy";
 import Checkout from "./pages/Checkout";
 import Landing from "./pages/Landing";
 import Compliance from "./pages/Compliance";
+import AmlPolicy from "./pages/AmlPolicy";
 import NotFound from "./pages/not-found";
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const [location, setLocation] = useLocation();
 
-  const publicPaths = ["/", "/login", "/register", "/forgot-password", "/reset-password", "/terms", "/privacy", "/pay/"];
+  const publicPaths = ["/", "/login", "/register", "/forgot-password", "/reset-password", "/terms", "/privacy", "/aml-policy", "/pay/"];
 
   useEffect(() => {
     if (!loading && !user && !publicPaths.some(p => p === "/" ? location === "/" : location.startsWith(p))) {
@@ -83,6 +84,7 @@ function AppRouter() {
             <Route path="/reset-password" component={ResetPassword} />
             <Route path="/terms" component={Terms} />
             <Route path="/privacy" component={Privacy} />
+            <Route path="/aml-policy" component={AmlPolicy} />
             <Route path="/pay/:sessionId" component={Checkout} />
             <Route path="/dashboard" component={Dashboard} />
             <Route path="/wallets" component={Wallets} />

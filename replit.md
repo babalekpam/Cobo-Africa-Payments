@@ -63,7 +63,8 @@ lib/
 - `/reports` — Reports & Analytics with status breakdown, volume by type/country, payment methods, top merchants table, export report
 - `/developer` — API documentation and key management
 - `/admin` — Admin panel (admin role only) with user management
-- `/compliance` — Compliance Center (admin only): KYC review queue, sanctions screening, SAR reports, compliance dashboard
+- `/compliance` — Compliance Center (admin only): Overview stats, KYC review queue, OFAC/SDN screening (Jaro-Winkler fuzzy matching), SAR reports, CTR management (auto-generated at $10K threshold), EDD reviews
+- `/aml-policy` — Public BSA/AML Compliance Policy (13 sections, FinCEN MSB framework)
 - `/settings` — Profile editing, password change, 2FA setup/disable (Security tab)
 - `/forgot-password` — Password reset request (public)
 - `/reset-password` — Set new password with token (public)
@@ -140,6 +141,17 @@ Developers can generate API keys and use COBO's Checkout API to collect payments
 Sessions expire after 30 minutes. Webhook payloads include HMAC-SHA256 signature via `X-COBO-Signature` header.
 DB tables: `api_keys` (hashed key storage), `checkout_sessions`, `webhook_events`.
 
+## MSB Compliance (FinCEN)
+
+- **OFAC/SDN Screening**: Real-time name screening with Jaro-Winkler fuzzy matching algorithm; screens at transfer time
+- **Country Sanctions**: High-risk countries (KP, IR, SY, CU, VE, MM, BY, RU) blocked; medium-risk get enhanced screening
+- **CTR (Currency Transaction Reports)**: Auto-generated for single transactions >$10K USD or aggregate daily >$10K; deduplicated per user per day; admin filing workflow
+- **SAR (Suspicious Activity Reports)**: Manual filing by compliance officers; risk levels; resolution tracking
+- **EDD (Enhanced Due Diligence)**: Reviews for PEPs, high-risk jurisdictions, unusual patterns; source of funds, expected volume tracking
+- **BSA/AML Policy**: Public 13-section policy page covering CIP, CDD, transaction monitoring, CTR/SAR filing, OFAC compliance, recordkeeping, training
+- **Compliance libs**: `lib/ctr.ts` (CTR generation), `lib/ofac.ts` (SDN screening + country risk), `lib/refgen.ts` (UUID-based refs)
+- **DB tables**: `ctr_reports`, `edd_reviews`, `sanctions_screening`, `suspicious_activity`
+
 ## Security Features
 
 - **2FA (TOTP)**: Setup via QR code, verify with authenticator app, disable with password
@@ -148,10 +160,11 @@ DB tables: `api_keys` (hashed key storage), `checkout_sessions`, `webhook_events
 - **Audit logging**: All auth events, transfers, settings changes logged
 - **Export auth**: Separate `requireAuthOrQueryToken` middleware only for export endpoints
 - **HTML escaping**: All dynamic fields in receipt HTML are escaped to prevent XSS
+- **OFAC transfer blocking**: All transfers screened against SDN list and country risk; high-risk countries blocked
 
 ## Database
 
-PostgreSQL with tables: `users`, `merchants`, `transactions`, `wallets`, `beneficiaries`, `notifications`, `payment_links`, `kyc_documents`, `audit_logs`, `api_keys`, `checkout_sessions`, `webhook_events`
+PostgreSQL with tables: `users`, `merchants`, `transactions`, `wallets`, `beneficiaries`, `notifications`, `payment_links`, `kyc_documents`, `audit_logs`, `api_keys`, `checkout_sessions`, `webhook_events`, `sanctions_screening`, `suspicious_activity`, `ctr_reports`, `edd_reviews`, `deposits`
 - Users table extended with: firstName, lastName, businessName, businessType, kycStatus, kycLevel, isActive, twoFaSecret, twoFaEnabled, passwordResetToken, passwordResetExpires
 - Audit logs table: userId, action, ip, meta (jsonb), createdAt
 - Seeded with: admin user (Abel Nkawula) with 4 wallets (USD, NGN, XOF, GHS), merchants, and sample transactions

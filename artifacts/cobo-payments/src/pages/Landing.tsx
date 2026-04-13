@@ -369,6 +369,7 @@ export default function Landing() {
                 <span onClick={() => setLocation("/register")} style={{ cursor: "pointer", transition: "color 0.2s" }} onMouseEnter={e => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={e => (e.currentTarget.style.color = "")}>Blog</span>
                 <span onClick={() => setLocation("/terms")} style={{ cursor: "pointer", transition: "color 0.2s" }} onMouseEnter={e => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={e => (e.currentTarget.style.color = "")}>Terms of Service</span>
                 <span onClick={() => setLocation("/privacy")} style={{ cursor: "pointer", transition: "color 0.2s" }} onMouseEnter={e => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={e => (e.currentTarget.style.color = "")}>Privacy Policy</span>
+                <span onClick={() => setLocation("/aml-policy")} style={{ cursor: "pointer", transition: "color 0.2s" }} onMouseEnter={e => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={e => (e.currentTarget.style.color = "")}>BSA/AML Policy</span>
                 <span onClick={() => setLocation("/register")} style={{ cursor: "pointer", transition: "color 0.2s" }} onMouseEnter={e => (e.currentTarget.style.color = "#FFFFFF")} onMouseLeave={e => (e.currentTarget.style.color = "")}>Contact</span>
               </div>
             </div>

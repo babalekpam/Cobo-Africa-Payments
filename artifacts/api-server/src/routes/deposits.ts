@@ -2,14 +2,10 @@ import { Router, type IRouter } from "express";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { db, depositRequestsTable, walletsTable, transactionsTable, notificationsTable } from "@workspace/db";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
+import { checkAndCreateCTR } from "../lib/ctr";
+import { generateDepositRef } from "../lib/refgen";
 
 const router: IRouter = Router();
-
-function generateRef(): string {
-  const ts = Date.now().toString(36).toUpperCase();
-  const rand = Math.random().toString(36).substring(2, 7).toUpperCase();
-  return `DEP-${ts}-${rand}`;
-}
 
 router.post("/deposits", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
   const { currency, amount, method, bankName, senderName, senderAccount, proofUrl, notes } = req.body;
@@ -17,7 +13,7 @@ router.post("/deposits", requireAuth, async (req: AuthenticatedRequest, res): Pr
     res.status(400).json({ success: false, message: "Currency and amount are required" });
     return;
   }
-  const reference = generateRef();
+  const reference = generateDepositRef();
   const [deposit] = await db.insert(depositRequestsTable).values({
     userId: req.user!.id,
     currency: currency.toUpperCase(),
@@ -85,7 +81,7 @@ router.post("/admin/deposits/:id/approve", requireAuth, async (req: Authenticate
     reviewedAt: new Date(),
   }).where(eq(depositRequestsTable.id, id));
 
-  const ref = "COBO-DEP-" + Date.now();
+  const ref = generateDepositRef() + "-CR";
   await db.insert(transactionsTable).values({
     reference: ref,
     amount: String(deposit.amount),
@@ -96,6 +92,8 @@ router.post("/admin/deposits/:id/approve", requireAuth, async (req: Authenticate
     description: `Bank deposit approved (ref: ${deposit.reference})`,
     paymentMethod: deposit.method,
   });
+
+  await checkAndCreateCTR(deposit.userId, ref, Number(deposit.amount), deposit.currency, "deposit");
 
   await db.insert(notificationsTable).values({
     userId: deposit.userId,
