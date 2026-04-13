@@ -16,10 +16,12 @@ import exportsRouter from "./exports";
 import checkoutApiRouter from "./checkoutApi";
 import complianceRouter from "./compliance";
 import depositsRouter from "./deposits";
+import storageRouter from "./storage";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(storageRouter);
 router.use(authRouter);
 router.use(usersRouter);
 router.use(merchantsRouter);

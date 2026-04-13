@@ -50,19 +50,19 @@ lib/
 - `/dashboard` — Stats cards (clickable), wallet breakdown bar chart, monthly transaction activity chart, quick-action buttons (Send/Deposit/Exchange/Payment Link), recent transactions (clickable rows → detail)
 - `/wallets` — Multi-currency wallet management (add wallets, set default)
 - `/send` — Send money globally: US, Canada, 16 European countries, and 53 African countries with FX conversion, bank transfers, mobile money
-- `/deposit` — Deposit/receive money with 3 methods: Bank Transfer (account details), Card Top-Up (form), Mobile Money (collection number); wallet selector; sandbox fund endpoint
+- `/deposit` — Deposit/receive money with 3 methods: Bank Transfer (account details with SWIFT/branch info), Card Payment (Visa/Mastercard form with card number, expiry, CVC), Mobile Money (M-Pesa, MTN MoMo, etc. with provider selector per currency); wallet selector; deposit history
 - `/transactions` — Transaction history with filters, Export CSV button, receipt buttons, clickable rows → detail page
 - `/transactions/:id` — Full transaction detail view with reference, amount, status badge, copy reference, view receipt buttons
 - `/exchange` — FX exchange with rate quotes and currency swap
 - `/payment-links` — Create and manage payment link pages
 - `/beneficiaries` — Saved recipients for quick transfers
-- `/verification` — KYC document submission and verification levels
+- `/verification` — KYC document submission with file upload (JPEG/PNG/WebP/PDF up to 10MB via object storage), document number input, progress bar, verification tips, 3 level cards with limits
 - `/notifications` — Notification center with read/unread management
 - `/merchants` — Merchant management with stats, search, create/delete modal, clickable rows → detail
 - `/merchants/:id` — Merchant detail with profile info, volume/txn stats, status update, recent transactions
 - `/reports` — Reports & Analytics with status breakdown, volume by type/country, payment methods, top merchants table, export report
 - `/developer` — API documentation and key management
-- `/admin` — Admin panel (admin role only) with user management
+- `/admin` — Admin panel (admin role only) with tabs: Overview, Users, Deposits (approve/reject), KYC Review (approve/reject per user), Compliance (OFAC screening, BSA/AML status, CTR/SAR/EDD stats, quick links), Transactions
 - `/compliance` — Compliance Center (admin only): Overview stats, KYC review queue, OFAC/SDN screening (Jaro-Winkler fuzzy matching), SAR reports, CTR management (auto-generated at $10K threshold), EDD reviews
 - `/aml-policy` — Public BSA/AML Compliance Policy (13 sections, FinCEN MSB framework)
 - `/settings` — Profile editing, password change, 2FA setup/disable (Security tab)
@@ -115,7 +115,13 @@ All prefixed with `/api`:
 - `PUT /api/notifications/:id/read` — Mark as read
 - `PUT /api/notifications/read-all` — Mark all as read
 - `GET /api/kyc/documents` — List KYC documents
-- `POST /api/kyc/submit` — Submit KYC document
+- `POST /api/kyc/upload-url` — Get presigned upload URL for KYC document files
+- `POST /api/kyc/submit` — Submit KYC document (supports file_path for uploaded files)
+- `GET /api/compliance/overview` — Compliance dashboard stats (admin only)
+- `POST /api/compliance/kyc/:userId/review` — Approve/reject user KYC (admin only)
+- `GET/POST /api/storage/uploads/request-url` — Object storage presigned upload URLs
+- `GET /api/storage/objects/*` — Serve uploaded objects (authenticated)
+- `GET /api/storage/public-objects/*` — Serve public assets
 - `GET /api/transactions` — List transactions
 - `GET /api/exports/transactions.csv` — CSV export (auth via query token)
 - `GET /api/exports/transactions.json` — JSON export (auth via query token)
@@ -138,12 +144,12 @@ Developers can generate API keys and use COBO's Checkout API to collect payments
 4. Receive webhook notifications at your `webhook_url` when payment completes
 5. Verify payment status via `GET /api/checkout/sessions/:id`
 
-Sessions expire after 30 minutes. Webhook payloads include HMAC-SHA256 signature via `X-COBO-Signature` header.
+Sessions expire after 30 minutes. Webhook payloads include HMAC-SHA256 signature via `X-COBO-Signature` header, `X-COBO-Timestamp`, and `X-COBO-Delivery` (unique ID). Webhooks retry up to 5 times with exponential backoff (0s, 5s, 30s, 2min, 10min).
 DB tables: `api_keys` (hashed key storage), `checkout_sessions`, `webhook_events`.
 
 ## MSB Compliance (FinCEN)
 
-- **OFAC/SDN Screening**: Real-time name screening with Jaro-Winkler fuzzy matching algorithm; screens at transfer time
+- **OFAC/SDN Screening**: Real-time name screening with Jaro-Winkler fuzzy matching against 180+ real SDN entries (terrorist orgs, sanctioned individuals, banks, state entities); screens at transfer time
 - **Country Sanctions**: High-risk countries (KP, IR, SY, CU, VE, MM, BY, RU) blocked; medium-risk get enhanced screening
 - **CTR (Currency Transaction Reports)**: Auto-generated for single transactions >$10K USD or aggregate daily >$10K; deduplicated per user per day; admin filing workflow
 - **SAR (Suspicious Activity Reports)**: Manual filing by compliance officers; risk levels; resolution tracking
@@ -171,9 +177,23 @@ PostgreSQL with tables: `users`, `merchants`, `transactions`, `wallets`, `benefi
 
 ## Email Service
 
-- Uses nodemailer, configured via SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS env vars
-- Graceful no-op: logs to console when no SMTP configured (SMTP_HOST required)
-- Sends: welcome emails, password reset links, password changed confirmations, transfer notifications
+- Uses nodemailer with multi-provider support: SMTP (SMTP_HOST/PORT/USER/PASS), SendGrid (SENDGRID_API_KEY), Mailgun (MAILGUN_SMTP_PASSWORD)
+- Graceful no-op: logs to console when no provider configured
+- Templates: welcome, password reset/changed, transfer sent/received, login alert, deposit approved/rejected, KYC approved/rejected, SAR alert, CTR filed
+
+## Object Storage
+
+- Replit Object Storage for KYC document file uploads
+- Presigned URL upload flow: client requests URL, uploads directly to GCS, stores object path
+- Supported file types: JPEG, PNG, WebP, PDF (max 10MB)
+- Files: `lib/objectStorage.ts`, `lib/objectAcl.ts`, `routes/storage.ts`
+
+## VPS Deployment
+
+- Script: `deploy.sh` — builds frontend + API, deploys to VPS at 74.208.166.77
+- Usage: `./deploy.sh`, `./deploy.sh --frontend-only`, `./deploy.sh --api-only`
+- Frontend: Vite build → scp to `/var/www/vhosts/cob-o.com/httpdocs/`
+- API: esbuild bundle → scp to `/opt/cobo-africa/api/dist/`, PM2 restart
 
 ## Key Commands
 

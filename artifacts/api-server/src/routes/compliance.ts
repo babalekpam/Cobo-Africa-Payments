@@ -192,6 +192,51 @@ router.put("/compliance/edd/:id/complete", requireAuth, async (req: Authenticate
   res.json({ success: true, message: "EDD review completed" });
 });
 
+router.get("/compliance/overview", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id));
+  if (user?.role !== "admin") { res.status(403).json({ success: false, message: "Admin access required" }); return; }
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const [screeningsToday] = await db.select({ count: count() }).from(sanctionsScreeningTable).where(gte(sanctionsScreeningTable.createdAt, today));
+  const [pendingCtrs] = await db.select({ count: count() }).from(ctrReportsTable).where(eq(ctrReportsTable.filingStatus, "pending"));
+  const [openSars] = await db.select({ count: count() }).from(suspiciousActivityTable).where(eq(suspiciousActivityTable.status, "open"));
+  const [pendingKyc] = await db.select({ count: count() }).from(kycDocumentsTable).where(eq(kycDocumentsTable.status, "pending"));
+  const [pendingEdd] = await db.select({ count: count() }).from(eddReviewsTable).where(eq(eddReviewsTable.status, "pending"));
+  res.json({
+    success: true,
+    screeningsToday: screeningsToday.count,
+    pendingCtrs: pendingCtrs.count,
+    openSars: openSars.count,
+    pendingKyc: pendingKyc.count,
+    pendingEdd: pendingEdd.count,
+  });
+});
+
+router.post("/compliance/kyc/:userId/review", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id));
+  if (user?.role !== "admin") { res.status(403).json({ success: false, message: "Admin access required" }); return; }
+  const targetUserId = Number(req.params.userId);
+  const { action, level, reason } = req.body;
+
+  const [targetUser] = await db.select().from(usersTable).where(eq(usersTable.id, targetUserId));
+  if (!targetUser) { res.status(404).json({ success: false, message: "User not found" }); return; }
+
+  if (action === "approve") {
+    const newLevel = level !== undefined ? String(level) : String(Math.min((Number(targetUser.kycLevel) || 0) + 1, 2));
+    await db.update(usersTable).set({ kycStatus: "verified", kycLevel: newLevel }).where(eq(usersTable.id, targetUserId));
+    await db.update(kycDocumentsTable).set({ status: "approved" }).where(and(eq(kycDocumentsTable.userId, targetUserId), eq(kycDocumentsTable.status, "pending")));
+    await db.insert(auditLogsTable).values({ userId: req.user!.id, action: "kyc_approve_user", ip: req.ip || "unknown", meta: { target_user: targetUserId, new_level: newLevel } });
+    res.json({ success: true, message: `User KYC approved at level ${newLevel}` });
+  } else if (action === "reject") {
+    await db.update(usersTable).set({ kycStatus: "rejected" }).where(eq(usersTable.id, targetUserId));
+    await db.update(kycDocumentsTable).set({ status: "rejected", rejectionReason: reason || "Documents insufficient" }).where(and(eq(kycDocumentsTable.userId, targetUserId), eq(kycDocumentsTable.status, "pending")));
+    await db.insert(auditLogsTable).values({ userId: req.user!.id, action: "kyc_reject_user", ip: req.ip || "unknown", meta: { target_user: targetUserId, reason } });
+    res.json({ success: true, message: "User KYC rejected" });
+  } else {
+    res.status(400).json({ success: false, message: "action must be 'approve' or 'reject'" });
+  }
+});
+
 router.get("/compliance/stats", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id));
   if (user?.role !== "admin") { res.status(403).json({ success: false, message: "Admin access required" }); return; }

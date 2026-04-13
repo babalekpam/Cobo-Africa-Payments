@@ -23,6 +23,8 @@ function toUserResponse(user: typeof usersTable.$inferSelect) {
     status: user.status,
     phone: user.phone,
     country: user.country,
+    kycStatus: (user as any).kycStatus || "unverified",
+    kycLevel: Number((user as any).kycLevel || 0),
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };

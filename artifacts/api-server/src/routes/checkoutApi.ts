@@ -63,6 +63,27 @@ function isValidWebhookUrl(url: string): boolean {
 
 const WEBHOOK_SECRET = process.env.WEBHOOK_SIGNING_SECRET || crypto.randomBytes(32).toString("hex");
 
+const WEBHOOK_RETRY_DELAYS = [0, 5000, 30000, 120000, 600000];
+
+async function attemptWebhookDelivery(webhookUrl: string, eventType: string, payload: any): Promise<{ ok: boolean; status: number }> {
+  const signature = crypto.createHmac("sha256", WEBHOOK_SECRET).update(JSON.stringify(payload)).digest("hex");
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const response = await fetch(webhookUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-COBO-Event": eventType,
+      "X-COBO-Signature": signature,
+      "X-COBO-Timestamp": timestamp,
+      "X-COBO-Delivery": crypto.randomUUID(),
+      "User-Agent": "COBO-Webhooks/1.0",
+    },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(15000),
+  });
+  return { ok: response.ok, status: response.status };
+}
+
 async function deliverWebhook(sessionId: number, merchantUserId: number, eventType: string, webhookUrl: string, payload: any) {
   let eventId: number | null = null;
   try {
@@ -82,22 +103,35 @@ async function deliverWebhook(sessionId: number, merchantUserId: number, eventTy
       return;
     }
 
-    const signature = crypto.createHmac("sha256", WEBHOOK_SECRET).update(JSON.stringify(payload)).digest("hex");
-    const response = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-COBO-Event": eventType, "X-COBO-Signature": signature },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(10000),
-    });
-
-    await db.update(webhookEventsTable).set({
-      status: response.ok ? "delivered" : "failed",
-      attempts: 1,
-      lastAttemptAt: new Date(),
-      responseCode: response.status,
-    }).where(eq(webhookEventsTable.id, event.id));
+    let delivered = false;
+    let lastStatus = 0;
+    for (let attempt = 0; attempt < WEBHOOK_RETRY_DELAYS.length; attempt++) {
+      if (attempt > 0) {
+        await new Promise(r => setTimeout(r, WEBHOOK_RETRY_DELAYS[attempt]));
+      }
+      try {
+        const result = await attemptWebhookDelivery(webhookUrl, eventType, payload);
+        lastStatus = result.status;
+        await db.update(webhookEventsTable).set({
+          attempts: attempt + 1,
+          lastAttemptAt: new Date(),
+          responseCode: result.status,
+          status: result.ok ? "delivered" : (attempt === WEBHOOK_RETRY_DELAYS.length - 1 ? "failed" : "retrying"),
+        }).where(eq(webhookEventsTable.id, event.id));
+        if (result.ok) { delivered = true; break; }
+      } catch (err) {
+        await db.update(webhookEventsTable).set({
+          attempts: attempt + 1,
+          lastAttemptAt: new Date(),
+          status: attempt === WEBHOOK_RETRY_DELAYS.length - 1 ? "failed" : "retrying",
+        }).where(eq(webhookEventsTable.id, event.id));
+      }
+    }
+    if (!delivered) {
+      console.warn(`[WEBHOOK] failed after ${WEBHOOK_RETRY_DELAYS.length} attempts: ${webhookUrl} (last status: ${lastStatus})`);
+    }
   } catch (e) {
-    console.error("[WEBHOOK] delivery failed:", e);
+    console.error("[WEBHOOK] delivery error:", e);
     if (eventId) {
       await db.update(webhookEventsTable).set({ status: "failed", attempts: 1, lastAttemptAt: new Date() }).where(eq(webhookEventsTable.id, eventId)).catch(() => {});
     }
