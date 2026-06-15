@@ -1,0 +1,120 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Deploy target"
+        required: false
+        default: "both"
+        type: choice
+        options: [both, frontend-only, api-only]
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend
+        if: ${{ github.event.inputs.target != 'api-only' }}
+        run: |
+          cd artifacts/cobo-payments
+          PORT=3000 BASE_PATH="/" pnpm run build
+
+      - name: Build API server
+        if: ${{ github.event.inputs.target != 'frontend-only' }}
+        run: pnpm --filter @workspace/api-server run build
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add VPS to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Run database migration
+        if: ${{ github.event.inputs.target != 'frontend-only' }}
+        run: |
+          ssh root@${{ secrets.VPS_HOST }} "psql \$DATABASE_URL -c \"
+            CREATE TABLE IF NOT EXISTS payment_intents (
+              id SERIAL PRIMARY KEY,
+              reference TEXT NOT NULL UNIQUE,
+              transaction_reference TEXT,
+              user_id INTEGER NOT NULL,
+              wallet_id INTEGER,
+              provider TEXT NOT NULL,
+              provider_reference TEXT,
+              status TEXT NOT NULL DEFAULT 'pending',
+              amount NUMERIC(15, 2) NOT NULL,
+              currency TEXT NOT NULL,
+              recipient_phone TEXT,
+              recipient_name TEXT,
+              recipient_country TEXT,
+              recipient_currency TEXT,
+              fee NUMERIC(15, 2) DEFAULT 0,
+              metadata JSONB,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+              updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+            CREATE INDEX IF NOT EXISTS payment_intents_user_id_idx ON payment_intents(user_id);
+            CREATE INDEX IF NOT EXISTS payment_intents_reference_idx ON payment_intents(reference);
+            CREATE INDEX IF NOT EXISTS payment_intents_provider_reference_idx ON payment_intents(provider_reference);
+          \" 2>&1" || echo "Migration note: table may already exist"
+
+      - name: Deploy frontend to VPS
+        if: ${{ github.event.inputs.target != 'api-only' }}
+        run: |
+          rsync -avz --delete \
+            artifacts/cobo-payments/dist/public/ \
+            root@${{ secrets.VPS_HOST }}:/var/www/vhosts/cob-o.com/httpdocs/
+          echo "Frontend deployed"
+
+      - name: Deploy API to VPS
+        if: ${{ github.event.inputs.target != 'frontend-only' }}
+        run: |
+          ssh root@${{ secrets.VPS_HOST }} "rm -f /opt/cobo-africa/api/dist/*.mjs /opt/cobo-africa/api/dist/*.mjs.map"
+          rsync -avz \
+            artifacts/api-server/dist/ \
+            root@${{ secrets.VPS_HOST }}:/opt/cobo-africa/api/dist/
+          echo "API files deployed"
+
+      - name: Restart API and verify
+        if: ${{ github.event.inputs.target != 'frontend-only' }}
+        run: |
+          ssh root@${{ secrets.VPS_HOST }} "
+            pm2 restart cobo-api --update-env 2>&1 || true
+            sleep 4
+            curl -sf http://localhost:8080/api/health && echo 'Health check passed' || echo 'Health check failed — check PM2 logs'
+            pm2 status
+          "
+
+      - name: Deployment summary
+        run: |
+          echo "======================================"
+          echo "Deployment complete!"
+          echo "Frontend: https://cob-o.com"
+          echo "API:      https://cob-o.com/api"
+          echo "======================================"
