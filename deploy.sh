@@ -1,11 +1,20 @@
 #!/bin/bash
 set -euo pipefail
 
-VPS_HOST="74.208.166.77"
-VPS_USER="root"
+VPS_HOST="${VPS_SSH_HOST:-74.208.166.77}"
+VPS_USER="${VPS_SSH_USER:-root}"
 FRONTEND_PATH="/var/www/vhosts/cob-o.com/httpdocs/"
 API_PATH="/opt/cobo-africa/api/"
-SSH_CMD="ssh -o StrictHostKeyChecking=no ${VPS_USER}@${VPS_HOST}"
+
+SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+if [ -n "${VPS_SSH_PASSWORD:-}" ]; then
+  export SSHPASS="${VPS_SSH_PASSWORD}"
+  SSH_CMD="sshpass -e ssh ${SSH_OPTS} ${VPS_USER}@${VPS_HOST}"
+  SCP_CMD="sshpass -e scp ${SSH_OPTS}"
+else
+  SSH_CMD="ssh ${SSH_OPTS} ${VPS_USER}@${VPS_HOST}"
+  SCP_CMD="scp ${SSH_OPTS}"
+fi
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -38,7 +47,7 @@ if [ "$DEPLOY_FRONTEND" = true ]; then
   cd ../..
 
   log "Deploying frontend to VPS..."
-  scp -o StrictHostKeyChecking=no -r artifacts/cobo-payments/dist/public/* ${VPS_USER}@${VPS_HOST}:${FRONTEND_PATH}
+  ${SCP_CMD} -r artifacts/cobo-payments/dist/public/* ${VPS_USER}@${VPS_HOST}:${FRONTEND_PATH}
   log "Frontend deployed successfully!"
 fi
 
@@ -47,7 +56,7 @@ if [ "$DEPLOY_API" = true ]; then
   pnpm --filter @workspace/api-server run build 2>&1 | tail -5
 
   log "Running database migrations..."
-  ${SSH_CMD} "psql \$DATABASE_URL -c \"
+  ${SSH_CMD} "set -a; . ${API_PATH}.env; set +a; psql \$DATABASE_URL -c \"
     CREATE TABLE IF NOT EXISTS payment_intents (
       id SERIAL PRIMARY KEY,
       reference TEXT NOT NULL UNIQUE,
@@ -75,7 +84,7 @@ if [ "$DEPLOY_API" = true ]; then
 
   log "Deploying API to VPS..."
   ${SSH_CMD} "rm -f ${API_PATH}dist/*.mjs ${API_PATH}dist/*.mjs.map"
-  scp -o StrictHostKeyChecking=no -r artifacts/api-server/dist/* ${VPS_USER}@${VPS_HOST}:${API_PATH}dist/
+  ${SCP_CMD} -r artifacts/api-server/dist/* ${VPS_USER}@${VPS_HOST}:${API_PATH}dist/
 
   log "Restarting API server on VPS..."
   ${SSH_CMD} "cd ${API_PATH} && pm2 restart cobo-api --update-env 2>&1" || warn "PM2 restart returned non-zero (may still be running)"

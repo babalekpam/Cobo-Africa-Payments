@@ -1,1 +1,2 @@
 - [Importing GitHub branches into a Replit workspace](import-github-branch.md) — git fetch is blocked; use codeload tarball + cp, then re-register artifacts so workflows exist.
+- [COBO VPS deploy (deploy.sh)](vps-deploy.md) — password SSH via sshpass + VPS_SSH_* secrets; migration must source /opt/cobo-africa/api/.env for DATABASE_URL.
