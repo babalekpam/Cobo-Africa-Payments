@@ -1,0 +1,30 @@
+I have a full-stack African payment platform called COBO Africa. The code is on GitHub at babalekpam/Cobo-Africa-Payments on branch claude/africa-payment-platform-analysis-4hfh5s. Import that branch.
+The project is a pnpm monorepo:
+- Backend: artifacts/api-server (Express 5, TypeScript, port 8080)
+- Frontend: artifacts/cobo-payments (React + Vite)
+- Database: lib/db (Drizzle ORM + PostgreSQL)
+Do the following:
+1. Provision a PostgreSQL database and set DATABASE_URL
+2. Set these environment variables:
+   - PORT=8080
+   - DATABASE_URL=(from step 1)
+   - JWT_SECRET=(generate a random 64-char string)
+   - ADMIN_PASSWORD=(choose a strong password)
+   - CLIENT_URL=(your Replit app URL)
+   - NODE_ENV=development
+3. Push the database schema:
+   pnpm --filter @workspace/db run push
+4. Seed the database (creates admin user + sample data):
+   pnpm --filter @workspace/api-server run seed
+5. Set the run command to start both frontend and API together. The API runs on port 8080 and the frontend proxies to it via Vite config.
+6. Build and run the project. The frontend build command is:
+   PORT=3000 BASE_PATH="/" pnpm --filter @workspace/cobo-payments run build
+7. Confirm the app loads at the root URL and the admin can log in at /login with email abel@argilette.com and the ADMIN_PASSWORD you set.
+The platform has: multi-currency wallets (54 African countries), Flutterwave + M-Pesa + MTN MoMo + Airtel Money integrations, USSD gateway, QR code payments, KYC/AML compliance (OFAC screening, CTR/SAR reporting), real-time WebSocket notifications via socket.io, and a React Native mobile app in artifacts/cobo-mobile.
+For real payment processing add these optional env vars (platform runs in mock mode without them):
+- FLUTTERWAVE_SECRET_KEY
+- MPESA_CONSUMER_KEY + MPESA_CONSUMER_SECRET + MPESA_SHORT_CODE + MPESA_PASSKEY
+- MTN_COLLECTION_SUBSCRIPTION_KEY
+- AFRICASTALKING_USERNAME + AFRICASTALKING_API_KEY
+- EXCHANGERATE_API_KEY (free at exchangerate-api.com for live FX rates)
+- WEBHOOK_BASE_URL=(your public Replit URL)
