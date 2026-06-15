@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Layout } from "../components/Layout";
 import { useAuth } from "../context/AuthContext";
 import api from "../lib/api";
+import { usePaymentSocket } from "../hooks/usePaymentSocket";
 
 type Tab = "bank" | "mobile" | "internal";
 
@@ -245,8 +246,17 @@ const CURRENCY_INFO: Record<string, { flag: string; name: string; symbol: string
   DJF: { flag: "🇩🇯", name: "Djiboutian Franc", symbol: "Fdj" },
 };
 
+interface PendingPayment {
+  reference: string;
+  status: "pending" | "completed" | "failed";
+  provider: string;
+  amount: number;
+  currency: string;
+  message: string;
+}
+
 export default function SendMoney() {
-  const { wallets, refreshWallets } = useAuth();
+  const { user, wallets, refreshWallets } = useAuth();
   const [tab, setTab] = useState<Tab>("bank");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
@@ -258,6 +268,8 @@ export default function SendMoney() {
   const [newWalletCurrency, setNewWalletCurrency] = useState("");
   const [addingWallet, setAddingWallet] = useState(false);
   const [walletSearch, setWalletSearch] = useState("");
+  const [pendingPayment, setPendingPayment] = useState<PendingPayment | null>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [form, setForm] = useState<any>({
     walletId: "", amount: "", senderCurrency: "USD",
@@ -301,6 +313,67 @@ export default function SendMoney() {
       .catch(() => { setRate(null); setConvertedAmount(null); })
       .finally(() => setRateLoading(false));
   }, [form.amount, form.senderCurrency, form.recipientCurrency, tab]);
+
+  function resetForm() {
+    setResult(null);
+    setError("");
+    setRate(null);
+    setConvertedAmount(null);
+    setForm((p: any) => ({
+      ...p,
+      amount: "",
+      phone: "",
+      recipient_name: "",
+      bank_name: "",
+      account_number: "",
+      account_name: "",
+      swift_code: "",
+      recipient_email: "",
+      note: "",
+    }));
+  }
+
+  function startPolling(reference: string) {
+    let attempts = 0;
+    pollingRef.current = setInterval(async () => {
+      attempts++;
+      if (attempts > 24) {
+        clearInterval(pollingRef.current!);
+        return;
+      }
+      try {
+        const { data: res } = await api.get(`/transfers/status/${reference}`);
+        if (res.status === "success" || res.status === "completed") {
+          clearInterval(pollingRef.current!);
+          setPendingPayment(prev =>
+            prev ? { ...prev, status: "completed", message: "Payment confirmed!" } : null
+          );
+          await refreshWallets();
+          setTimeout(() => { setPendingPayment(null); resetForm(); }, 3000);
+        } else if (res.status === "failed") {
+          clearInterval(pollingRef.current!);
+          setPendingPayment(prev =>
+            prev ? { ...prev, status: "failed", message: "Payment failed. Funds returned to wallet." } : null
+          );
+        }
+      } catch {}
+    }, 5000);
+  }
+
+  useEffect(() => () => { if (pollingRef.current) clearInterval(pollingRef.current); }, []);
+
+  usePaymentSocket(user?.id ?? null, (update) => {
+    setPendingPayment(prev => {
+      if (!prev || update.reference !== prev.reference) return prev;
+      const next = { ...prev, status: update.status, message: update.message };
+      if (update.status === "completed") {
+        if (pollingRef.current) clearInterval(pollingRef.current);
+        refreshWallets();
+        setTimeout(() => { setPendingPayment(null); resetForm(); }, 3000);
+      }
+      return next;
+    });
+  });
 
   const addNewWallet = async (cur: string) => {
     setAddingWallet(true);
@@ -366,8 +439,20 @@ export default function SendMoney() {
         note: form.note,
       });
       const { data } = await api.post(`/transfers/${tab}`, body);
-      setResult(data);
-      await refreshWallets();
+      if (tab === "mobile" && (data.status === "pending" || data.requiresAction)) {
+        setPendingPayment({
+          reference: data.reference,
+          status: "pending",
+          provider: form.provider || "Mobile Money",
+          amount: Number(form.amount),
+          currency: form.senderCurrency,
+          message: data.message || "Waiting for payment confirmation on your phone...",
+        });
+        startPolling(data.reference);
+      } else {
+        setResult(data);
+        await refreshWallets();
+      }
     } catch (err: any) {
       setError(err.response?.data?.message || "Transfer failed");
     }
@@ -379,6 +464,69 @@ export default function SendMoney() {
     { key: "mobile", label: "Mobile Money", icon: "📱" },
     { key: "internal", label: "COBO User", icon: "👤" },
   ];
+
+  if (pendingPayment) {
+    return (
+      <Layout>
+        <div style={{ maxWidth: 480, margin: "80px auto", padding: "0 1rem", textAlign: "center" }}>
+          <div className="card" style={{ padding: "3rem 2rem" }}>
+            {pendingPayment.status === "pending" && (
+              <>
+                <div className="spinner" style={{ width: 56, height: 56, margin: "0 auto 1.5rem" }} />
+                <h2 style={{ color: "#0F2B4C", marginBottom: "0.75rem" }}>Waiting for Confirmation</h2>
+                <p style={{ color: "#555", marginBottom: "1.5rem", lineHeight: 1.6 }}>
+                  A payment prompt has been sent to your phone.<br />
+                  Please enter your PIN to approve the transfer.
+                </p>
+                <div style={{ background: "#FAF7F2", borderRadius: 12, padding: "1rem", marginBottom: "1.5rem" }}>
+                  <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "#C98A1A" }}>
+                    {pendingPayment.currency} {pendingPayment.amount.toLocaleString()}
+                  </div>
+                  <div style={{ fontSize: "0.875rem", color: "#666", marginTop: "0.25rem" }}>
+                    via {pendingPayment.provider}
+                  </div>
+                  <div style={{ fontSize: "0.75rem", color: "#999", marginTop: "0.5rem" }}>
+                    Ref: {pendingPayment.reference}
+                  </div>
+                </div>
+                <p style={{ fontSize: "0.875rem", color: "#888" }}>
+                  This page will update automatically when payment is confirmed.
+                </p>
+                <button
+                  className="btn"
+                  style={{ marginTop: "1.5rem", opacity: 0.7 }}
+                  onClick={() => {
+                    setPendingPayment(null);
+                    if (pollingRef.current) clearInterval(pollingRef.current);
+                  }}
+                >
+                  Cancel
+                </button>
+              </>
+            )}
+            {pendingPayment.status === "completed" && (
+              <>
+                <div style={{ fontSize: "4rem", marginBottom: "1rem" }}>✅</div>
+                <h2 style={{ color: "#16a34a", marginBottom: "0.75rem" }}>Payment Confirmed!</h2>
+                <p style={{ color: "#555" }}>{pendingPayment.message}</p>
+                <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "#C98A1A", margin: "1rem 0" }}>
+                  {pendingPayment.currency} {pendingPayment.amount.toLocaleString()}
+                </div>
+              </>
+            )}
+            {pendingPayment.status === "failed" && (
+              <>
+                <div style={{ fontSize: "4rem", marginBottom: "1rem" }}>❌</div>
+                <h2 style={{ color: "#dc2626", marginBottom: "0.75rem" }}>Payment Failed</h2>
+                <p style={{ color: "#555", marginBottom: "1.5rem" }}>{pendingPayment.message}</p>
+                <button className="btn btn-primary" onClick={() => setPendingPayment(null)}>Try Again</button>
+              </>
+            )}
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
