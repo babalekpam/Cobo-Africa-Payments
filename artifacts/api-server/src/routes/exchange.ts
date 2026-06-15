@@ -1,47 +1,24 @@
 import { Router, type IRouter } from "express";
 import { eq, and, gte } from "drizzle-orm";
 import { db, walletsTable, transactionsTable, usersTable } from "@workspace/db";
-import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
-import { checkAndCreateCTR } from "../lib/ctr";
-import { generateFxRef } from "../lib/refgen";
+import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth.js";
+import { checkAndCreateCTR } from "../lib/ctr.js";
+import { generateFxRef } from "../lib/refgen.js";
+import { getRate, getAllRates } from "../services/fxRates.js";
 
 const router: IRouter = Router();
 
 const KYC_LIMITS: Record<number, number> = { 0: 100, 1: 5000, 2: 50000 };
 
-const RATES: Record<string, Record<string, number>> = {
-  USD: {
-    NGN: 1580, GHS: 14.5, XOF: 620, XAF: 620, KES: 129, ZAR: 18.9, EGP: 48.5,
-    MAD: 10.1, TZS: 2540, UGX: 3750, ETB: 57.5, RWF: 1290,
-    CDF: 2780, AOA: 830, MZN: 63.8, BWP: 13.6, MWK: 1720, ZMW: 26.5,
-    SDG: 601, TND: 3.12, DZD: 134.5, LYD: 4.85,
-    GMD: 67.5, SLL: 22500, GNF: 8600, CVE: 102, STN: 23.2,
-    SCR: 14.2, MUR: 45.5, MGA: 4520, KMF: 460, DJF: 177.7,
-    ERN: 15, SOS: 571, SSP: 1320, BIF: 2870, LSL: 18.9, SZL: 18.9, NAD: 18.9,
-    LRD: 192, MRU: 39.7,
-    EUR: 0.92, GBP: 0.79, CAD: 1.36, CHF: 0.88, SEK: 10.85, NOK: 10.65,
-    DKK: 6.88, PLN: 4.02, CZK: 23.2,
-  },
-};
-function getRate(from: string, to: string): number | null {
-  if (from === to) return 1;
-  if (RATES[from]?.[to]) return RATES[from][to];
-  if (RATES[to]?.[from]) return 1 / RATES[to][from];
-  if (RATES.USD[from] && RATES.USD[to]) return RATES.USD[to] / RATES.USD[from];
-  if (RATES.USD[from]) return 1 / RATES.USD[from];
-  return null;
-}
-
 router.get("/exchange/rates", requireAuth, async (_req, res): Promise<void> => {
-  const rates: Record<string, number> = { USD: 1 };
-  Object.entries(RATES.USD).forEach(([cur, rate]) => { rates[cur] = rate; });
+  const rates = await getAllRates();
   res.json({ success: true, rates, base: "USD" });
 });
 
 router.post("/exchange/convert", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
-  const { from, to, amount } = req.body;
+  const { from, to, amount } = req.body as { from: string; to: string; amount: number };
   if (!from || !to || !amount || amount <= 0) { res.status(400).json({ success: false, message: "Invalid data" }); return; }
-  const rate = getRate(from, to);
+  const rate = await getRate(from, to);
   if (!rate) { res.status(400).json({ success: false, message: "Rate not available" }); return; }
   const converted = Number(amount) * rate;
   const feePercent = 0.0035;
@@ -51,9 +28,9 @@ router.post("/exchange/convert", requireAuth, async (req: AuthenticatedRequest, 
 });
 
 router.post("/exchange/swap", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
-  const { from, to, amount } = req.body;
+  const { from, to, amount } = req.body as { from: string; to: string; amount: number };
   if (!from || !to || !amount || amount <= 0 || from === to) { res.status(400).json({ success: false, message: "Invalid swap" }); return; }
-  const rate = getRate(from, to);
+  const rate = await getRate(from, to);
   if (!rate) { res.status(400).json({ success: false, message: "Rate not available" }); return; }
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id));
@@ -64,7 +41,8 @@ router.post("/exchange/swap", requireAuth, async (req: AuthenticatedRequest, res
   const todayTxs = await db.select().from(transactionsTable).where(
     and(eq(transactionsTable.customerId, req.user!.id), gte(transactionsTable.createdAt, todayStart))
   );
-  const usedToday = todayTxs.filter(t => t.status !== "failed").reduce((s, t) => s + Number(t.amount || 0), 0);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const usedToday = todayTxs.filter((t: any) => t.status !== "failed").reduce((s: number, t: any) => s + Number(t.amount || 0), 0);
   if (usedToday + Number(amount) > limit) {
     const remaining = Math.max(0, limit - usedToday);
     res.status(403).json({ success: false, message: `Daily limit: $${limit.toLocaleString()}. Used today: $${usedToday.toLocaleString()}. Remaining: $${remaining.toLocaleString()}.${kycLevel < 2 ? " Complete KYC to increase your limit." : ""}`, code: "LIMIT_EXCEEDED" });

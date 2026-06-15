@@ -8,6 +8,7 @@ const NAV_KEYS = [
   { path: "/dashboard", key: "dashboard", icon: "📊" },
   { path: "/wallets", key: "wallets", icon: "💰" },
   { path: "/send", key: "send_money", icon: "💸" },
+  { path: "/receive", key: "receive", icon: "📲" },
   { path: "/deposit", key: "deposit", icon: "📥" },
   { path: "/transactions", key: "transactions", icon: "📜" },
   { path: "/exchange", key: "fx_exchange", icon: "💱" },

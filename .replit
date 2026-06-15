@@ -41,3 +41,9 @@ externalPort = 3003
 
 [nix]
 channel = "stable-25_05"
+
+[userenv]
+
+[userenv.development]
+CLIENT_URL = "https://480e4843-1ff2-4988-8e4c-148c3027c9e1-00-2c53hojoenrb9.janeway.replit.dev"
+NODE_ENV = "development"

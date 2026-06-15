@@ -46,6 +46,33 @@ if [ "$DEPLOY_API" = true ]; then
   log "Building API server..."
   pnpm --filter @workspace/api-server run build 2>&1 | tail -5
 
+  log "Running database migrations..."
+  ${SSH_CMD} "psql \$DATABASE_URL -c \"
+    CREATE TABLE IF NOT EXISTS payment_intents (
+      id SERIAL PRIMARY KEY,
+      reference TEXT NOT NULL UNIQUE,
+      transaction_reference TEXT,
+      user_id INTEGER NOT NULL,
+      wallet_id INTEGER,
+      provider TEXT NOT NULL,
+      provider_reference TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      amount NUMERIC(15, 2) NOT NULL,
+      currency TEXT NOT NULL,
+      recipient_phone TEXT,
+      recipient_name TEXT,
+      recipient_country TEXT,
+      recipient_currency TEXT,
+      fee NUMERIC(15, 2) DEFAULT 0,
+      metadata JSONB,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS payment_intents_user_id_idx ON payment_intents(user_id);
+    CREATE INDEX IF NOT EXISTS payment_intents_reference_idx ON payment_intents(reference);
+    CREATE INDEX IF NOT EXISTS payment_intents_provider_reference_idx ON payment_intents(provider_reference);
+  \" 2>&1" && log "Database migration completed!" || warn "Migration failed — table may already exist or DATABASE_URL not set"
+
   log "Deploying API to VPS..."
   ${SSH_CMD} "rm -f ${API_PATH}dist/*.mjs ${API_PATH}dist/*.mjs.map"
   scp -o StrictHostKeyChecking=no -r artifacts/api-server/dist/* ${VPS_USER}@${VPS_HOST}:${API_PATH}dist/
