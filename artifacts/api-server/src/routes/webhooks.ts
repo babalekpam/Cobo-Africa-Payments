@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, transactionsTable, paymentIntentsTable, walletsTable, notificationsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
+import { emitPaymentUpdate } from "../services/socketio.js";
 
 const router = Router();
 
@@ -52,6 +53,15 @@ router.post("/webhooks/flutterwave", async (req, res): Promise<void> => {
       }).catch(() => {});
 
       logger.info({ ref, provider: "flutterwave" }, "Payment confirmed via webhook");
+
+      emitPaymentUpdate(intent.userId, {
+        reference: intent.transactionReference || ref,
+        status: "completed",
+        amount: Number(intent.amount),
+        currency: intent.currency,
+        provider: "flutterwave",
+        message: "Payment confirmed via Flutterwave",
+      });
     }
   }
 
@@ -111,6 +121,17 @@ router.post("/webhooks/mpesa", async (req, res): Promise<void> => {
         : `Your M-Pesa payment of KES ${Number(intent.amount).toLocaleString()} failed: ${callback.ResultDesc}`,
       type: isSuccess ? "success" : "error",
     }).catch(() => {});
+
+    emitPaymentUpdate(intent.userId, {
+      reference: intent.transactionReference || checkoutRequestId,
+      status: isSuccess ? "completed" : "failed",
+      amount: Number(intent.amount),
+      currency: intent.currency,
+      provider: "mpesa",
+      message: isSuccess
+        ? `M-Pesa confirmed. Receipt: ${mpesaRef}`
+        : `M-Pesa failed: ${callback.ResultDesc}`,
+    });
   }
 
   res.json({ ResultCode: 0, ResultDesc: "Accepted" });
@@ -142,6 +163,17 @@ router.post("/webhooks/mtn", async (req, res): Promise<void> => {
         : `MTN MoMo transfer failed.`,
       type: isSuccess ? "success" : "error",
     }).catch(() => {});
+
+    emitPaymentUpdate(intent.userId, {
+      reference: intent.transactionReference || referenceId,
+      status: isSuccess ? "completed" : "failed",
+      amount: Number(intent.amount),
+      currency: intent.currency,
+      provider: "mtn",
+      message: isSuccess
+        ? `MTN MoMo confirmed. Ref: ${financialTransactionId || referenceId}`
+        : "MTN MoMo transfer failed.",
+    });
   }
 
   res.json({ message: "ok" });
@@ -175,6 +207,15 @@ router.post("/webhooks/airtel", async (req, res): Promise<void> => {
       message: isSuccess ? "Airtel Money transfer confirmed." : "Airtel Money transfer failed.",
       type: isSuccess ? "success" : "error",
     }).catch(() => {});
+
+    emitPaymentUpdate(intent.userId, {
+      reference: intent.transactionReference || ref,
+      status: isSuccess ? "completed" : "failed",
+      amount: Number(intent.amount),
+      currency: intent.currency,
+      provider: "airtel",
+      message: isSuccess ? "Airtel Money transfer confirmed." : "Airtel Money transfer failed.",
+    });
   }
 
   res.json({ message: "ok" });
