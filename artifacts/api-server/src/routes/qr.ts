@@ -17,7 +17,7 @@ router.get("/qr/receive", requireAuth, async (req: AuthenticatedRequest, res): P
   const paymentUrl = `${baseUrl}/pay?${params.toString()}`;
 
   const qrData = JSON.stringify({
-    type: "cobo_payment",
+    type: "iapay_payment",
     version: 1,
     recipient: user.email,
     name: `${user.firstName} ${user.lastName}`,

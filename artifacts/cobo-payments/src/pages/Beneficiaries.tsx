@@ -67,7 +67,7 @@ export default function Beneficiaries() {
               <div className="input-group" style={{ marginBottom: 16 }}>
                 <label className="input-label">Type</label>
                 <select className="select" value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))}>
-                  <option value="bank">Bank</option><option value="mobile">Mobile Money</option><option value="internal">COBO User</option>
+                  <option value="bank">Bank</option><option value="mobile">Mobile Money</option><option value="internal">IAPAY User</option>
                 </select>
               </div>
               {form.type === "bank" && <>

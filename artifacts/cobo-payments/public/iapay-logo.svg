@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="512" viewBox="0 0 1200 512" role="img" aria-label="IAPAY - Inter-Africa Pay">
+  <g>
+  <defs>
+    <!-- single flow trajectory shared by the carve and the gold exit so they align exactly -->
+    <mask id="cut">
+      <rect width="512" height="512" fill="#fff"/>
+      <path d="M300,332 C332,268 362,196 398,128" fill="none" stroke="#000" stroke-width="34" stroke-linecap="round"/>
+    </mask>
+  </defs>
+
+  <!-- Africa silhouette: anchor points projected from real coastline coordinates -->
+  <g mask="url(#cut)">
+    <path fill="#0F2B4C" stroke="#0F2B4C" stroke-width="14" stroke-linejoin="round" d="
+      M101,23
+      L209,16
+      L276,49
+      L343,55
+      L370,62
+      L430,175
+      L486,179
+      L446,242
+      L408,281
+      L405,299
+      L376,383
+      L360,423
+      L349,448
+      L276,479
+      L265,474
+      L239,403
+      L230,312
+      L221,286
+      L207,229
+      L164,213
+      L114,221
+      L69,214
+      L24,160
+      L33,139
+      L90,39
+      Z"/>
+  </g>
+
+  <!-- gold exit: identical trajectory, showing only the last 40% via dash pattern -->
+  <path d="M300,332 C332,268 362,196 398,128" fill="none" stroke="#C98A1A" stroke-width="34"
+        stroke-linecap="round" pathLength="100" stroke-dasharray="40 60" stroke-dashoffset="40"/>
+  <polygon fill="#C98A1A" points="430,80 422,151 368,115"/>
+
+  <!-- Madagascar -->
+  <ellipse cx="452" cy="380" rx="20" ry="48" fill="#C98A1A" transform="rotate(18 452 380)"/>
+</g>
+  <text x="536" y="286" font-family="'Plus Jakarta Sans','DM Sans',-apple-system,'Segoe UI',Arial,sans-serif" font-size="196" font-weight="800" letter-spacing="4" fill="#0F2B4C">IAPAY</text>
+  <text x="545" y="360" font-family="'Plus Jakarta Sans','DM Sans',-apple-system,'Segoe UI',Arial,sans-serif" font-size="42" font-weight="600" letter-spacing="17" fill="#C98A1A">INTER-AFRICA PAY</text>
+</svg>

@@ -126,7 +126,7 @@ export default function Checkout() {
     <div style={styles.container}>
       <div style={styles.card}>
         <div style={styles.logoRow}>
-          <span style={styles.logo}>COBO</span>
+          <span style={styles.logo}>IAPAY</span>
           <span style={styles.logoBadge}>Checkout</span>
         </div>
 
@@ -200,8 +200,8 @@ export default function Checkout() {
 
         <div style={styles.footer}>
           <span style={{ fontSize: 11, color: "#9A8F75" }}>Secured by</span>
-          <span style={{ fontSize: 13, fontWeight: 700, color: "#C98A1A" }}>COBO</span>
-          <span style={{ fontSize: 11, color: "#9A8F75" }}>Africa Payments</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#C98A1A" }}>IAPAY</span>
+          <span style={{ fontSize: 11, color: "#9A8F75" }}>Inter-Africa Pay</span>
         </div>
       </div>
     </div>

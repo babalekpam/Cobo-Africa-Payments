@@ -67,7 +67,7 @@ export default function Reports() {
 
   const exportReport = () => {
     const lines = [
-      "COBO Africa Payments - Report",
+      "IAPAY (Inter-Africa Pay) - Report",
       `Generated: ${new Date().toLocaleString()}`,
       "",
       "=== Summary ===",

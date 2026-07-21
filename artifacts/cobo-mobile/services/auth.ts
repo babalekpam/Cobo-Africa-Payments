@@ -1,7 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { api, AuthResponse, User } from './api';
 
-const TOKEN_KEY = 'cobo_token';
+const TOKEN_KEY = 'iapay_token';
 const USER_KEY = 'cobo_user';
 
 export const authService = {

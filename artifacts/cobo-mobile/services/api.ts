@@ -4,7 +4,7 @@ const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8080';
 
 async function getToken(): Promise<string | null> {
   try {
-    return await SecureStore.getItemAsync('cobo_token');
+    return await SecureStore.getItemAsync('iapay_token');
   } catch {
     return null;
   }

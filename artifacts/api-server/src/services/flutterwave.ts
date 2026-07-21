@@ -49,7 +49,7 @@ export async function chargeMobileMoney(params: {
         fullname: params.name,
         tx_ref: params.reference,
         redirect_url: params.redirectUrl || "https://cob-o.com/payment-complete",
-        meta: { source: "cobo_africa" },
+        meta: { source: "iapay" },
       }),
     });
 

@@ -3,6 +3,7 @@ import { eq, and, count, sum, sql, desc, gt } from "drizzle-orm";
 import { db, usersTable, walletsTable, transactionsTable, notificationsTable, kycDocumentsTable, auditLogsTable } from "@workspace/db";
 import { LoginBody } from "@workspace/api-zod";
 import { hashPassword, comparePassword, signToken } from "../lib/auth";
+import { validatePassword } from "../lib/security.js";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
 import { emailService } from "../services/email";
 import crypto from "crypto";
@@ -38,6 +39,11 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     res.status(400).json({ success: false, message: "Missing required fields" });
     return;
   }
+  const passwordError = validatePassword(password);
+  if (passwordError) {
+    res.status(400).json({ success: false, message: passwordError });
+    return;
+  }
   const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, email));
   if (existing) { res.status(409).json({ success: false, message: "Email already registered" }); return; }
   const passwordHash = hashPassword(password);
@@ -63,9 +69,9 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   if (id_type && id_number) {
     await db.insert(kycDocumentsTable).values({ userId: user.id, docType: id_type, docUrl: id_number });
     await db.update(usersTable).set({ kycStatus: "submitted" }).where(eq(usersTable.id, user.id));
-    await db.insert(notificationsTable).values({ userId: user.id, title: "Welcome to COBO!", message: "Your account is ready. Your ID verification is being reviewed by our compliance team.", type: "success" });
+    await db.insert(notificationsTable).values({ userId: user.id, title: "Welcome to IAPAY!", message: "Your account is ready. Your ID verification is being reviewed by our compliance team.", type: "success" });
   } else {
-    await db.insert(notificationsTable).values({ userId: user.id, title: "Welcome to COBO!", message: "Your account is ready. Please verify your identity to unlock full features.", type: "success" });
+    await db.insert(notificationsTable).values({ userId: user.id, title: "Welcome to IAPAY!", message: "Your account is ready. Please verify your identity to unlock full features.", type: "success" });
   }
   const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, user.id));
   const token = signToken({ id: user.id, email: user.email, role: user.role });
@@ -130,7 +136,8 @@ router.put("/auth/profile", requireAuth, async (req: AuthenticatedRequest, res):
 
 router.post("/auth/change-password", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
   const { current_password, new_password } = req.body;
-  if (!current_password || !new_password || new_password.length < 8) { res.status(400).json({ success: false, message: "Invalid password data" }); return; }
+  const pwErr = !current_password ? "Current password required" : validatePassword(new_password);
+  if (pwErr) { res.status(400).json({ success: false, message: pwErr }); return; }
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id));
   if (!comparePassword(current_password, user.passwordHash)) { res.status(400).json({ success: false, message: "Current password incorrect" }); return; }
   await db.update(usersTable).set({ passwordHash: hashPassword(new_password) }).where(eq(usersTable.id, req.user!.id));
@@ -158,8 +165,9 @@ router.post("/auth/forgot-password", async (req, res): Promise<void> => {
 
 router.post("/auth/reset-password", async (req, res): Promise<void> => {
   const { token, new_password } = req.body;
-  if (!token || !new_password || new_password.length < 8) {
-    res.status(400).json({ success: false, message: "Token and new password (min 8 chars) required" });
+  const resetPwErr = !token ? "Reset token required" : validatePassword(new_password);
+  if (resetPwErr) {
+    res.status(400).json({ success: false, message: resetPwErr });
     return;
   }
   const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
@@ -181,7 +189,7 @@ router.post("/auth/reset-password", async (req, res): Promise<void> => {
 router.post("/auth/2fa/setup", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id));
   if (user.twoFaEnabled === "true") { res.status(400).json({ success: false, message: "2FA already enabled" }); return; }
-  const secret = speakeasy.generateSecret({ name: `COBO (${user.email})`, length: 20 });
+  const secret = speakeasy.generateSecret({ name: `IAPAY (${user.email})`, length: 20 });
   await db.update(usersTable).set({ twoFaSecret: secret.base32 }).where(eq(usersTable.id, req.user!.id));
   const qr_code = await QRCode.toDataURL(secret.otpauth_url!);
   res.json({ success: true, secret: secret.base32, qr_code });

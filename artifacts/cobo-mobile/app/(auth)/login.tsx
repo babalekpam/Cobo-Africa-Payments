@@ -90,7 +90,7 @@ export default function LoginScreen() {
             >
               <Text style={styles.logoText}>C</Text>
             </LinearGradient>
-            <Text style={styles.brandName}>COBO Africa</Text>
+            <Text style={styles.brandName}>IAPAY</Text>
             <Text style={styles.brandTagline}>Africa's Payment Platform</Text>
           </View>
 

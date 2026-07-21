@@ -7,7 +7,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 function genRef() {
   const ts = Date.now().toString(36).toUpperCase();
   const rand = Math.random().toString(36).substring(2, 7).toUpperCase();
-  return `COBO-${ts}-${rand}`;
+  return `IAPAY-${ts}-${rand}`;
 }
 
 async function seed() {
@@ -21,7 +21,7 @@ async function seed() {
     await client.query(`
       INSERT INTO users (email, name, password_hash, role, status, phone, country) VALUES
         ('abel@argilette.com', 'Abel Nkawula', $1, 'admin', 'active', '+228 90 123 456', 'Togo'),
-        ('ops@cobo.africa', 'Operations Manager', $1, 'admin', 'active', '+234800000000', 'Nigeria'),
+        ('ops@iapay.africa', 'Operations Manager', $1, 'admin', 'active', '+234800000000', 'Nigeria'),
         ('merchant1@jumia.africa', 'Jumia Kenya Rep', $2, 'merchant', 'active', '+254711223344', 'Kenya'),
         ('customer1@gmail.com', 'Amina Osei', $2, 'customer', 'active', '+233244100200', 'Ghana'),
         ('customer2@gmail.com', 'Kwame Mensah', $2, 'customer', 'active', '+233244100201', 'Ghana'),
@@ -71,7 +71,7 @@ async function seed() {
       
       await client.query(
         'INSERT INTO transactions (reference, amount, currency, status, type, merchant_id, country, payment_method, description, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (reference) DO NOTHING',
-        [ref, amount, currency, status, type, merchant.id, country, method, `COBO payment transaction #${i+1}`, createdAt]
+        [ref, amount, currency, status, type, merchant.id, country, method, `IAPAY payment transaction #${i+1}`, createdAt]
       );
     }
     console.log("Transactions seeded (90 rows)");

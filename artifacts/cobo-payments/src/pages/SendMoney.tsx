@@ -462,7 +462,7 @@ export default function SendMoney() {
   const tabs: { key: Tab; label: string; icon: string }[] = [
     { key: "bank", label: "Bank Transfer", icon: "🏦" },
     { key: "mobile", label: "Mobile Money", icon: "📱" },
-    { key: "internal", label: "COBO User", icon: "👤" },
+    { key: "internal", label: "IAPAY User", icon: "👤" },
   ];
 
   if (pendingPayment) {
@@ -693,7 +693,7 @@ export default function SendMoney() {
               )}
 
               <div style={{ height: 1, background: "var(--surface2)", margin: "20px 0" }} />
-              <SectionTitle>{tab === "bank" ? "Bank Details" : tab === "mobile" ? "Mobile Wallet" : "COBO Recipient"}</SectionTitle>
+              <SectionTitle>{tab === "bank" ? "Bank Details" : tab === "mobile" ? "Mobile Wallet" : "IAPAY Recipient"}</SectionTitle>
 
               {tab === "bank" && (
                 <>
@@ -764,7 +764,7 @@ export default function SendMoney() {
                 <>
                   <div className="input-group" style={{ marginBottom: 16 }}>
                     <label className="input-label">Recipient Email</label>
-                    <input className="input" type="email" value={form.recipient_email} onChange={e => set("recipient_email", e.target.value)} placeholder="user@cobo.africa" />
+                    <input className="input" type="email" value={form.recipient_email} onChange={e => set("recipient_email", e.target.value)} placeholder="user@iapay.africa" />
                   </div>
                   <div className="input-group" style={{ marginBottom: 16 }}>
                     <label className="input-label">Note (optional)</label>

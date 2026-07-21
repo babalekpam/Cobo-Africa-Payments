@@ -20,6 +20,7 @@ import storageRouter from "./storage.js";
 import webhookRouter from "./webhooks.js";
 import ussdRouter from "./ussd.js";
 import qrRouter from "./qr.js";
+import schemeRouter from "./scheme.js";
 
 const router: IRouter = Router();
 
@@ -46,5 +47,6 @@ router.use(checkoutApiRouter);
 router.use(complianceRouter);
 router.use(depositsRouter);
 router.use(qrRouter);
+router.use(schemeRouter);
 
 export default router;

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, gte } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db, walletsTable, transactionsTable, usersTable, notificationsTable, auditLogsTable, paymentIntentsTable } from "@workspace/db";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth.js";
 import { emailService } from "../services/email.js";
@@ -8,45 +8,18 @@ import { generateBankRef, generateMobileRef, generateInternalRef } from "../lib/
 import { screenAgainstOFAC, assessCountryRisk as checkCountry } from "../lib/ofac.js";
 import { getRate } from "../services/fxRates.js";
 import { initiateTransfer } from "../services/paymentGateway.js";
+import { checkDailyLimit, sentTodayUSD, KYC_LIMITS } from "../lib/limits.js";
+import { getCallbackSecret } from "../lib/security.js";
 
 const router: IRouter = Router();
 const FEE_RATE = 0.005;
 const MIN_FEE = 0.25;
 const INTL_FLAT_FEE = 0.99;
-const KYC_LIMITS: Record<number, number> = { 0: 100, 1: 5000, 2: 50000 };
 
 function calcFee(amount: number, type: string, isInternational: boolean = false) {
   if (type === "internal") return 0;
   const percentFee = Math.max(amount * FEE_RATE, MIN_FEE);
   return isInternational ? percentFee + INTL_FLAT_FEE : percentFee;
-}
-
-async function checkDailyLimit(userId: number, kycLevel: number, amountUSD: number) {
-  const limit = KYC_LIMITS[kycLevel] || 100;
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-
-  const todayTxs = await db.select().from(transactionsTable).where(
-    and(
-      eq(transactionsTable.customerId, userId),
-      eq(transactionsTable.type, "send"),
-      gte(transactionsTable.createdAt, todayStart)
-    )
-  );
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sentToday = todayTxs.filter((t: any) => t.status !== "failed").reduce((s: number, t: any) => s + Number(t.amount || 0), 0);
-
-  if (sentToday + amountUSD > limit) {
-    const remaining = Math.max(0, limit - sentToday);
-    return {
-      allowed: false,
-      message: `Daily limit: $${limit.toLocaleString()}. Sent today: $${sentToday.toLocaleString()}. Remaining: $${remaining.toLocaleString()}.${kycLevel < 2 ? " Complete KYC to increase your limit." : ""}`,
-      code: "LIMIT_EXCEEDED",
-      limit,
-      sent_today: sentToday,
-    };
-  }
-  return { allowed: true, limit, sent_today: sentToday };
 }
 
 async function getWallet(userId: number, walletId?: number, currency?: string) {
@@ -68,14 +41,7 @@ router.get("/transfers/fee", requireAuth, async (req: AuthenticatedRequest, res)
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id));
   const kycLevel = Number(user?.kycLevel || 0);
   const limit = KYC_LIMITS[kycLevel] || 100;
-
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const todayTxs = await db.select().from(transactionsTable).where(
-    and(eq(transactionsTable.customerId, req.user!.id), eq(transactionsTable.type, "send"), gte(transactionsTable.createdAt, todayStart))
-  );
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sentToday = todayTxs.filter((t: any) => t.status !== "failed").reduce((s: number, t: any) => s + Number(t.amount || 0), 0);
+  const sentToday = await sentTodayUSD(req.user!.id);
 
   res.json({
     success: true, amount, fee, fee_percent: type === "internal" ? 0 : FEE_RATE * 100,
@@ -197,12 +163,13 @@ router.post("/transfers/mobile", requireAuth, async (req: AuthenticatedRequest, 
   });
 
   const webhookBase = process.env.WEBHOOK_BASE_URL || "https://api.cob-o.com";
+  // ?cb= proves the callback came through a URL only we and the provider know
   const callbackUrl = `${webhookBase}/api/webhooks/${
     (provider || "").toLowerCase().includes("pesa") || wallet.currency === "KES" ? "mpesa" :
     (provider || "").toLowerCase().includes("mtn") ? "mtn" :
     (provider || "").toLowerCase().includes("airtel") ? "airtel" :
     "flutterwave"
-  }`;
+  }?cb=${getCallbackSecret()}`;
 
   const gatewayResult = await initiateTransfer({
     amount: Number(amount),
@@ -287,7 +254,7 @@ router.post("/transfers/internal", requireAuth, async (req: AuthenticatedRequest
   const recipientEmail = recipient_email || email;
   if (!recipientEmail || !amount || Number(amount) <= 0) { res.status(400).json({ success: false, message: "Invalid data" }); return; }
   const [recipient] = await db.select().from(usersTable).where(eq(usersTable.email, recipientEmail));
-  if (!recipient) { res.status(404).json({ success: false, message: "Recipient not found on COBO" }); return; }
+  if (!recipient) { res.status(404).json({ success: false, message: "Recipient not found on IAPAY" }); return; }
   if (recipient.id === req.user!.id) { res.status(400).json({ success: false, message: "Cannot send to yourself" }); return; }
   const senderWallet = await getWallet(req.user!.id, wallet_id ? Number(wallet_id) : undefined, currency ?? undefined);
   if (!senderWallet || Number(senderWallet.balance) < Number(amount)) { res.status(400).json({ success: false, message: "Insufficient funds" }); return; }

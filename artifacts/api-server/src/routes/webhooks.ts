@@ -1,15 +1,39 @@
-import { Router } from "express";
+import { Router, type Request, type Response, type NextFunction } from "express";
 import { db, transactionsTable, paymentIntentsTable, walletsTable, notificationsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 import { emitPaymentUpdate } from "../services/socketio.js";
+import { isProduction, safeEqual, verifyCallbackSecret } from "../lib/security.js";
 
 const router = Router();
 
+// Mobile-money providers don't sign their callbacks, so every callback URL we
+// register carries an unguessable ?cb= secret (set at initiation time in
+// transfers.ts). Fail closed: a webhook that can't prove its origin must never
+// be able to mark payments successful and release locked funds.
+function requireCallbackSecret(req: Request, res: Response, next: NextFunction): void {
+  if (verifyCallbackSecret(req.query.cb)) { next(); return; }
+  if (!isProduction()) {
+    logger.warn({ path: req.path }, "Webhook accepted WITHOUT callback secret (non-production only)");
+    next();
+    return;
+  }
+  logger.warn({ path: req.path, ip: req.ip }, "Rejected webhook with missing/invalid callback secret");
+  res.status(401).json({ message: "Unauthorized" });
+}
+
 router.post("/webhooks/flutterwave", async (req, res): Promise<void> => {
-  const signature = req.headers["verif-hash"] as string;
-  if (process.env.FLUTTERWAVE_WEBHOOK_HASH && signature !== process.env.FLUTTERWAVE_WEBHOOK_HASH) {
-    res.status(401).json({ message: "Invalid signature" });
+  // Flutterwave sends the configured hash in verif-hash — required, timing-safe
+  const signature = req.headers["verif-hash"];
+  const expected = process.env.FLUTTERWAVE_WEBHOOK_HASH;
+  if (expected) {
+    if (typeof signature !== "string" || !safeEqual(signature, expected)) {
+      res.status(401).json({ message: "Invalid signature" });
+      return;
+    }
+  } else if (isProduction()) {
+    logger.error("FLUTTERWAVE_WEBHOOK_HASH not configured — rejecting webhook (fail closed)");
+    res.status(401).json({ message: "Webhook verification not configured" });
     return;
   }
 
@@ -68,7 +92,7 @@ router.post("/webhooks/flutterwave", async (req, res): Promise<void> => {
   res.json({ status: "ok" });
 });
 
-router.post("/webhooks/mpesa", async (req, res): Promise<void> => {
+router.post("/webhooks/mpesa", requireCallbackSecret, async (req, res): Promise<void> => {
   const callback = (req.body as { Body?: { stkCallback?: { MerchantRequestID?: string; CheckoutRequestID?: string; ResultCode?: number; ResultDesc?: string; CallbackMetadata?: { Item?: Array<{ Name: string; Value?: unknown }> } } } })?.Body?.stkCallback;
   if (!callback) { res.json({ ResultCode: 0, ResultDesc: "Accepted" }); return; }
 
@@ -137,7 +161,7 @@ router.post("/webhooks/mpesa", async (req, res): Promise<void> => {
   res.json({ ResultCode: 0, ResultDesc: "Accepted" });
 });
 
-router.post("/webhooks/mtn", async (req, res): Promise<void> => {
+router.post("/webhooks/mtn", requireCallbackSecret, async (req, res): Promise<void> => {
   const { referenceId, status, financialTransactionId } = req.body as { referenceId?: string; status?: string; financialTransactionId?: string };
   if (!referenceId) { res.json({ message: "ok" }); return; }
 
@@ -179,7 +203,7 @@ router.post("/webhooks/mtn", async (req, res): Promise<void> => {
   res.json({ message: "ok" });
 });
 
-router.post("/webhooks/airtel", async (req, res): Promise<void> => {
+router.post("/webhooks/airtel", requireCallbackSecret, async (req, res): Promise<void> => {
   const { transaction } = req.body as { transaction?: { id?: string; status?: string } };
   if (!transaction) { res.json({ message: "ok" }); return; }
 

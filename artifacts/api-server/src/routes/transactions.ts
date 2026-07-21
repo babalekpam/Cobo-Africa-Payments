@@ -15,7 +15,7 @@ const router: IRouter = Router();
 function generateReference(): string {
   const ts = Date.now().toString(36).toUpperCase();
   const rand = Math.random().toString(36).substring(2, 7).toUpperCase();
-  return `COBO-${ts}-${rand}`;
+  return `IAPAY-${ts}-${rand}`;
 }
 
 async function enrichTransaction(tx: typeof transactionsTable.$inferSelect) {

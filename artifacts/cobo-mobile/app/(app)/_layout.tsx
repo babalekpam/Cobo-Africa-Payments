@@ -59,6 +59,15 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
+        name="iapay"
+        options={{
+          title: 'IAPAY',
+          tabBarIcon: ({ focused, size }) => (
+            <TabIcon name="flash" focused={focused} size={size} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="send"
         options={{
           title: 'Send',

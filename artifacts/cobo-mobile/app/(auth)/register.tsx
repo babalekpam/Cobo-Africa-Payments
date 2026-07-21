@@ -154,7 +154,7 @@ export default function RegisterScreen() {
             </Link>
             <View>
               <Text style={styles.title}>Create Account</Text>
-              <Text style={styles.subtitle}>Join COBO Africa today</Text>
+              <Text style={styles.subtitle}>Join IAPAY today</Text>
             </View>
           </View>
 

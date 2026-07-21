@@ -20,7 +20,7 @@ export default function Developer() {
   const [createdKey, setCreatedKey] = useState("");
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<"keys" | "docs" | "webhooks">("keys");
-  const token = localStorage.getItem("cobo_token");
+  const token = localStorage.getItem("iapay_token");
 
   const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
 
@@ -64,7 +64,7 @@ export default function Developer() {
       <div className="page fade-in">
         <div className="page-header">
           <h1 className="page-title">Developer API</h1>
-          <p className="page-subtitle">Integrate COBO payments into your applications — like Stripe, built for Africa</p>
+          <p className="page-subtitle">Integrate IAPAY payments into your applications — like Stripe, built for Africa</p>
         </div>
 
         <div style={{ display: "flex", gap: 0, marginBottom: 24, borderBottom: "2px solid var(--surface2)" }}>
@@ -196,7 +196,7 @@ export default function Developer() {
                 <strong>2.</strong> Redirect your customer to the <code style={{ background: "var(--surface2)", padding: "2px 6px", borderRadius: 4 }}>checkout_url</code>. They'll see a hosted payment page branded with your business name.
               </p>
               <p style={{ fontSize: 14, color: "var(--text-dim)", lineHeight: 1.7, marginTop: 8 }}>
-                <strong>3.</strong> When payment completes, COBO will redirect to your <code style={{ background: "var(--surface2)", padding: "2px 6px", borderRadius: 4 }}>success_url</code> and send a webhook to your server.
+                <strong>3.</strong> When payment completes, IAPAY will redirect to your <code style={{ background: "var(--surface2)", padding: "2px 6px", borderRadius: 4 }}>success_url</code> and send a webhook to your server.
               </p>
             </div>
 
@@ -249,7 +249,7 @@ export default function Developer() {
             <div className="card-lg" style={{ marginBottom: 20 }}>
               <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 18, marginBottom: 8, color: "var(--gold)" }}>Webhooks</h3>
               <p style={{ fontSize: 14, color: "var(--text-dim)", lineHeight: 1.7, marginBottom: 16 }}>
-                COBO sends webhook notifications to your server when payment events occur. Include a <code style={{ background: "var(--surface2)", padding: "2px 6px", borderRadius: 4 }}>webhook_url</code> when creating a checkout session.
+                IAPAY sends webhook notifications to your server when payment events occur. Include a <code style={{ background: "var(--surface2)", padding: "2px 6px", borderRadius: 4 }}>webhook_url</code> when creating a checkout session.
               </p>
               <CodeBlock title="Webhook Payload — checkout.session.paid" code={`{
   "event": "checkout.session.paid",
@@ -270,8 +270,8 @@ export default function Developer() {
                 <table>
                   <thead><tr><th>Header</th><th>Description</th></tr></thead>
                   <tbody>
-                    <tr><td style={{ fontFamily: "monospace", fontSize: 12 }}>X-COBO-Event</td><td>Event type (e.g. checkout.session.paid)</td></tr>
-                    <tr><td style={{ fontFamily: "monospace", fontSize: 12 }}>X-COBO-Signature</td><td>HMAC-SHA256 signature for payload verification</td></tr>
+                    <tr><td style={{ fontFamily: "monospace", fontSize: 12 }}>X-IAPAY-Event</td><td>Event type (e.g. checkout.session.paid)</td></tr>
+                    <tr><td style={{ fontFamily: "monospace", fontSize: 12 }}>X-IAPAY-Signature</td><td>HMAC-SHA256 signature for payload verification</td></tr>
                     <tr><td style={{ fontFamily: "monospace", fontSize: 12 }}>Content-Type</td><td>application/json</td></tr>
                   </tbody>
                 </table>

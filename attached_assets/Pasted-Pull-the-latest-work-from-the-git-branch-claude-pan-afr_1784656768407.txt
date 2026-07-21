@@ -1,0 +1,15 @@
+Pull the latest work from the git branch claude/pan-african-payment-system-wpnymd (tip commit 3c0e0aa) and get the app running in Replit. Do not rewrite or "improve" the code — just sync, configure, and run it.
+
+What this branch contains (context, not a to-do list):
+The platform has been rebranded from COBO to IAPAY (Inter-Africa Pay) and now includes the IAPAY scheme — a Pix-style pan-African instant payment rail: alias directory ("IAPAY keys": phone/email/national ID/merchant/random, OTP-verified), a 24/7 instant payment switch with cross-currency FX and OFAC screening, an EMVCo-compatible QR standard with CRC-16, a 15-institution participant registry, multilateral net settlement on a 4-hour cycle, returns/disputes, USSD access, a mobile (Expo) screen, a new SVG logo suite, and a security-hardening pass (authenticated WebSockets, fail-closed webhooks, rate limits, lockouts, helmet, CORS allowlist). Read replit.md — it documents everything, including all routes and tables.
+
+Steps:
+
+git fetch origin claude/pan-african-payment-system-wpnymd && git checkout claude/pan-african-payment-system-wpnymd (or merge it into main if that's the Replit run branch).
+pnpm install
+Push the new database schema: pnpm --filter @workspace/db run push (new tables: scheme_participants, payment_aliases, scheme_transfers, settlement_batches, settlement_positions, scheme_disputes; new columns on payment_aliases).
+Ensure these Replit Secrets exist — required: DATABASE_URL, JWT_SECRET, PORT, ADMIN_PASSWORD. Security (new, needed in production mode — endpoints fail closed without them): WEBHOOK_CALLBACK_SECRET, FLUTTERWAVE_WEBHOOK_HASH, USSD_GATEWAY_SECRET, WEBHOOK_SIGNING_SECRET, CORS_ORIGINS. Optional: JWT_EXPIRES_IN (default 24h), SETTLEMENT_INTERVAL_HOURS (default 4), SMS via AT_API_KEY+AT_USERNAME or TWILIO_ACCOUNT_SID+TWILIO_AUTH_TOKEN+TWILIO_FROM, SMTP vars for email. In the Replit dev workspace (NODE_ENV not "production") the app runs fine without the security secrets and OTPs are returned as dev_code for testing.
+Run: pnpm --filter @workspace/api-server run dev (API, port 8080) and pnpm --filter @workspace/cobo-payments run dev (frontend).
+Verify: pnpm --filter @workspace/api-server run test must show 13/13 passing; log in, open the ⚡ IAPAY page, register a key (email type shows a sandbox code), verify it, and send an instant payment between two test users.
+Note: folder/package names still use cobo-* intentionally (infrastructure identifiers); all user-facing branding is IAPAY. Don't rename them.
+

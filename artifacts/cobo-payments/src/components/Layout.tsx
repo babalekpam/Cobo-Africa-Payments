@@ -7,6 +7,7 @@ import api from "../lib/api";
 const NAV_KEYS = [
   { path: "/dashboard", key: "dashboard", icon: "📊" },
   { path: "/wallets", key: "wallets", icon: "💰" },
+  { path: "/iapay", key: "iapay", icon: "⚡" },
   { path: "/send", key: "send_money", icon: "💸" },
   { path: "/receive", key: "receive", icon: "📲" },
   { path: "/deposit", key: "deposit", icon: "📥" },
@@ -52,7 +53,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         boxShadow: "2px 0 20px rgba(15,43,76,0.15)",
       }} className="sidebar">
         <div style={{ padding: "20px 16px 12px", borderBottom: "1px solid var(--sidebar-border)" }}>
-          <img src={`${import.meta.env.BASE_URL}cobo-brand-logo.png`} alt="COBO Africa Payments" style={{ width: "100%", maxWidth: 200, borderRadius: 8 }} />
+          <img src={`${import.meta.env.BASE_URL}iapay-logo-dark.svg`} alt="IAPAY (Inter-Africa Pay)" style={{ width: "100%", maxWidth: 200, borderRadius: 8 }} />
         </div>
 
         <div style={{ padding: "16px", borderBottom: "1px solid var(--sidebar-border)" }}>

@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 
-export function generateRef(prefix: string = "COBO"): string {
+export function generateRef(prefix: string = "IAPAY"): string {
   const uuid = randomUUID().replace(/-/g, "").substring(0, 12).toUpperCase();
   const ts = Date.now().toString(36).toUpperCase().slice(-6);
   return `${prefix}-${ts}-${uuid}`;

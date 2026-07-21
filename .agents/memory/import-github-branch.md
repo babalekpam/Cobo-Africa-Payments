@@ -14,3 +14,4 @@ description: How to fully replace a Replit pnpm-workspace with a GitHub branch w
 - A corrupted/partial pnpm extraction (e.g. `vite/dist/node/chunks/` missing → frontend 500 "Cannot find module .../chunks/dist.js") is fixed by `pnpm install --force` (re-fetches and re-links).
 - An `api-server` with a `seed.ts` but no `seed` npm script: add `"seed": "tsx src/seed.ts"` + `tsx` devDep (already in the catalog) rather than running a standalone `.mjs` (pnpm isolation breaks bare `node seed.mjs` resolving `pg`).
 - Imported branches may ship broken `tsc`/typecheck while still running fine, because api-server dev/build uses esbuild (no typecheck gate). Verify runtime via the proxy at `localhost:80` (`/api/healthz`, `/`, `/socket.io/?EIO=4&transport=polling`), not typecheck.
+- Tarball overlay with `cp -a` does not remove files deleted in the branch — after syncing, diff `git ls-files` vs tarball file list and delete stragglers.

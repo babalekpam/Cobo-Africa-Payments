@@ -46,14 +46,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const loadUser = async () => {
-    const token = localStorage.getItem("cobo_token");
+    const token = localStorage.getItem("iapay_token");
     if (!token) { setLoading(false); return; }
     try {
       const { data } = await api.get("/auth/me");
       setUser(data.user);
       setWallets(data.wallets || []);
     } catch {
-      localStorage.removeItem("cobo_token");
+      localStorage.removeItem("iapay_token");
     }
     setLoading(false);
   };
@@ -67,20 +67,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       err.response = { data };
       throw err;
     }
-    localStorage.setItem("cobo_token", data.token);
+    localStorage.setItem("iapay_token", data.token);
     setUser(data.user);
     setWallets(data.wallets || []);
   };
 
   const register = async (formData: any) => {
     const { data } = await api.post("/auth/register", formData);
-    localStorage.setItem("cobo_token", data.token);
+    localStorage.setItem("iapay_token", data.token);
     setUser(data.user);
     setWallets(data.wallets || []);
   };
 
   const logout = () => {
-    localStorage.removeItem("cobo_token");
+    localStorage.removeItem("iapay_token");
     setUser(null);
     setWallets([]);
   };

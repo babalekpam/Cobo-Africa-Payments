@@ -26,7 +26,7 @@ function PrivacyContent() {
         <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 18, margin: "0 0 12px", color: "var(--gold)" }}>7. Cookies</h3>
         <p style={{ marginBottom: 20 }}>We use essential cookies for authentication and session management. We do not use tracking cookies for advertising purposes.</p>
         <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 18, margin: "0 0 12px", color: "var(--gold)" }}>8. Contact</h3>
-        <p>For privacy inquiries, contact our Data Protection Officer at <span style={{ color: "var(--gold)", fontWeight: 600 }}>privacy@cobo.africa</span></p>
+        <p>For privacy inquiries, contact our Data Protection Officer at <span style={{ color: "var(--gold)", fontWeight: 600 }}>privacy@iapay.africa</span></p>
       </div>
       <div style={{ marginTop: 16, fontSize: 13 }}>
         <a href="#" onClick={e => { e.preventDefault(); setLocation("/login"); }} style={{ color: "var(--gold)", textDecoration: "none" }}>Back to login</a>
