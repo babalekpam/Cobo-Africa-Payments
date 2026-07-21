@@ -181,7 +181,7 @@ export default function Receive() {
             {qrDataUrl && (
               <a
                 href={qrDataUrl}
-                download={`cobo-qr-${currency}.png`}
+                download={`iapay-qr-${currency}.png`}
                 className="btn"
                 style={{
                   flex: 1,

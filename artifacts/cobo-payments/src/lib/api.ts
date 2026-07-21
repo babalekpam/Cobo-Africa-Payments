@@ -1,8 +1,8 @@
 const API_BASE = "/api";
 
-async function request(method: string, path: string, body?: any) {
-  const token = localStorage.getItem("cobo_token");
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+async function request(method: string, path: string, body?: any, extraHeaders?: Record<string, string>) {
+  const token = localStorage.getItem("iapay_token");
+  const headers: Record<string, string> = { "Content-Type": "application/json", ...(extraHeaders || {}) };
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
   const res = await fetch(`${API_BASE}${path}`, {
@@ -22,7 +22,7 @@ async function request(method: string, path: string, body?: any) {
 
 const api = {
   get: (path: string) => request("GET", path),
-  post: (path: string, body?: any) => request("POST", path, body),
+  post: (path: string, body?: any, headers?: Record<string, string>) => request("POST", path, body, headers),
   put: (path: string, body?: any) => request("PUT", path, body),
   patch: (path: string, body?: any) => request("PATCH", path, body),
   delete: (path: string) => request("DELETE", path),

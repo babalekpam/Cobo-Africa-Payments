@@ -357,7 +357,7 @@ export async function customFetch<T = unknown>(
       headers.set("authorization", `Bearer ${token}`);
     }
   } else if (!headers.has("authorization")) {
-    const localToken = typeof window !== "undefined" ? window.localStorage.getItem("cobo_token") : null;
+    const localToken = typeof window !== "undefined" ? window.localStorage.getItem("iapay_token") : null;
     if (localToken) {
       headers.set("authorization", `Bearer ${localToken}`);
     }

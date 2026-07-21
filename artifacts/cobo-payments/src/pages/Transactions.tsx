@@ -20,7 +20,7 @@ export default function Transactions() {
   }, [filter]);
 
   const exportCSV = () => {
-    const token = localStorage.getItem("cobo_token");
+    const token = localStorage.getItem("iapay_token");
     const params = new URLSearchParams();
     if (filter.status) params.set("status", filter.status);
     if (filter.type) params.set("type", filter.type);
@@ -80,7 +80,7 @@ export default function Transactions() {
                       <td style={{ color: "var(--text-dim)", fontSize: 13, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.description || tx.paymentMethod || "—"}</td>
                       <td style={{ color: "var(--text-dim)", fontSize: 13 }}>{new Date(tx.createdAt).toLocaleDateString()}</td>
                       <td>
-                        <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); const token = localStorage.getItem("cobo_token"); window.open(`/api/exports/receipt/${tx.id}?token=${token}`, "_blank"); }} title="View Receipt" style={{ padding: "4px 8px", fontSize: 12 }}>
+                        <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); const token = localStorage.getItem("iapay_token"); window.open(`/api/exports/receipt/${tx.id}?token=${token}`, "_blank"); }} title="View Receipt" style={{ padding: "4px 8px", fontSize: 12 }}>
                           🧾
                         </button>
                       </td>

@@ -67,7 +67,7 @@ export async function initiateTransfer(params: {
       phone,
       amount: params.amount,
       reference: params.reference,
-      description: `COBO transfer to ${params.name}`,
+      description: `IAPAY transfer to ${params.name}`,
       callbackUrl: params.callbackUrl,
     });
     return {
@@ -86,7 +86,7 @@ export async function initiateTransfer(params: {
       currency: params.currency,
       phone: params.phone,
       reference: params.reference,
-      payerMessage: `COBO payment from ${params.name}`,
+      payerMessage: `IAPAY payment from ${params.name}`,
       payeeNote: `Ref: ${params.reference}`,
       callbackUrl: params.callbackUrl,
     });

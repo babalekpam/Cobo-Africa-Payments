@@ -446,7 +446,7 @@ export default function Admin() {
                     <div style={{ marginTop: 20, padding: 16, background: "rgba(27,158,90,0.05)", borderRadius: 10, border: "1px solid rgba(27,158,90,0.15)" }}>
                       <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8, color: "#1B9E5A" }}>MSB Registration</div>
                       <div style={{ fontSize: 13, color: "var(--text-dim)", lineHeight: 1.6 }}>
-                        COBO Africa Payments is registered as a Money Services Business (MSB) with the US Financial Crimes Enforcement Network (FinCEN). Our compliance program covers BSA/AML, CTR filing, SAR reporting, OFAC screening, and Enhanced Due Diligence.
+                        IAPAY (Inter-Africa Pay) is registered as a Money Services Business (MSB) with the US Financial Crimes Enforcement Network (FinCEN). Our compliance program covers BSA/AML, CTR filing, SAR reporting, OFAC screening, and Enhanced Due Diligence.
                       </div>
                     </div>
                   </div>

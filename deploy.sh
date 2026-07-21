@@ -28,7 +28,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-log "Starting COBO Africa deployment to ${VPS_HOST}..."
+log "Starting IAPAY Africa deployment to ${VPS_HOST}..."
 log "Frontend: ${DEPLOY_FRONTEND} | API: ${DEPLOY_API}"
 
 if [ "$DEPLOY_FRONTEND" = true ]; then
@@ -71,6 +71,96 @@ if [ "$DEPLOY_API" = true ]; then
     CREATE INDEX IF NOT EXISTS payment_intents_user_id_idx ON payment_intents(user_id);
     CREATE INDEX IF NOT EXISTS payment_intents_reference_idx ON payment_intents(reference);
     CREATE INDEX IF NOT EXISTS payment_intents_provider_reference_idx ON payment_intents(provider_reference);
+    CREATE TABLE IF NOT EXISTS scheme_participants (
+      id SERIAL PRIMARY KEY,
+      code TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'fintech',
+      country TEXT NOT NULL,
+      currency TEXT NOT NULL,
+      api_url TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      settlement_balance NUMERIC(18, 2) NOT NULL DEFAULT 0,
+      joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS payment_aliases (
+      id SERIAL PRIMARY KEY,
+      alias_type TEXT NOT NULL,
+      alias_value TEXT NOT NULL UNIQUE,
+      user_id INTEGER NOT NULL,
+      participant_id INTEGER NOT NULL,
+      account_ref TEXT NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'USD',
+      status TEXT NOT NULL DEFAULT 'active',
+      verification_code TEXT,
+      verification_expires TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    ALTER TABLE payment_aliases ADD COLUMN IF NOT EXISTS verification_code TEXT;
+    ALTER TABLE payment_aliases ADD COLUMN IF NOT EXISTS verification_expires TIMESTAMPTZ;
+    CREATE INDEX IF NOT EXISTS payment_aliases_user_id_idx ON payment_aliases(user_id);
+    CREATE TABLE IF NOT EXISTS scheme_transfers (
+      id SERIAL PRIMARY KEY,
+      reference TEXT NOT NULL UNIQUE,
+      end_to_end_id TEXT NOT NULL UNIQUE,
+      sender_user_id INTEGER,
+      sender_participant_id INTEGER NOT NULL,
+      sender_alias TEXT,
+      recipient_alias TEXT NOT NULL,
+      recipient_user_id INTEGER,
+      recipient_participant_id INTEGER NOT NULL,
+      amount NUMERIC(18, 2) NOT NULL,
+      currency TEXT NOT NULL,
+      recipient_amount NUMERIC(18, 2) NOT NULL,
+      recipient_currency TEXT NOT NULL,
+      fx_rate NUMERIC(18, 8),
+      fee NUMERIC(18, 2) NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'initiated',
+      status_reason TEXT,
+      qr_ref TEXT,
+      settlement_batch_id INTEGER,
+      metadata JSONB,
+      initiated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      cleared_at TIMESTAMPTZ,
+      settled_at TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS scheme_transfers_sender_idx ON scheme_transfers(sender_user_id);
+    CREATE INDEX IF NOT EXISTS scheme_transfers_recipient_idx ON scheme_transfers(recipient_user_id);
+    CREATE INDEX IF NOT EXISTS scheme_transfers_batch_idx ON scheme_transfers(settlement_batch_id);
+    CREATE TABLE IF NOT EXISTS settlement_batches (
+      id SERIAL PRIMARY KEY,
+      batch_ref TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL DEFAULT 'open',
+      transfer_count INTEGER NOT NULL DEFAULT 0,
+      total_gross_usd NUMERIC(18, 2) NOT NULL DEFAULT 0,
+      opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      closed_at TIMESTAMPTZ,
+      settled_at TIMESTAMPTZ
+    );
+    CREATE TABLE IF NOT EXISTS settlement_positions (
+      id SERIAL PRIMARY KEY,
+      batch_id INTEGER NOT NULL,
+      participant_id INTEGER NOT NULL,
+      currency TEXT NOT NULL,
+      total_debit NUMERIC(18, 2) NOT NULL DEFAULT 0,
+      total_credit NUMERIC(18, 2) NOT NULL DEFAULT 0,
+      net_position NUMERIC(18, 2) NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS settlement_positions_batch_idx ON settlement_positions(batch_id);
+    CREATE TABLE IF NOT EXISTS scheme_disputes (
+      id SERIAL PRIMARY KEY,
+      transfer_reference TEXT NOT NULL,
+      opened_by_user_id INTEGER NOT NULL,
+      reason TEXT NOT NULL,
+      description TEXT,
+      status TEXT NOT NULL DEFAULT 'open',
+      resolution_note TEXT,
+      resolved_by_user_id INTEGER,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      resolved_at TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS scheme_disputes_reference_idx ON scheme_disputes(transfer_reference);
   \" 2>&1" && log "Database migration completed!" || warn "Migration failed — table may already exist or DATABASE_URL not set"
 
   log "Deploying API to VPS..."

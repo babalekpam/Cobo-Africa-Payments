@@ -6,13 +6,13 @@ export default function AmlPolicy() {
   const sections = [
     {
       title: "1. Introduction & Purpose",
-      content: `COBO Africa Payments Ltd ("COBO", "we", "our") is committed to preventing money laundering, terrorist financing, and other financial crimes. This Bank Secrecy Act (BSA) and Anti-Money Laundering (AML) Policy establishes the framework, procedures, and controls that COBO implements to comply with all applicable federal and state regulations, including the Bank Secrecy Act, the USA PATRIOT Act, and FinCEN regulations governing Money Services Businesses (MSBs).
+      content: `IAPAY (Inter-Africa Pay) Ltd ("IAPAY", "we", "our") is committed to preventing money laundering, terrorist financing, and other financial crimes. This Bank Secrecy Act (BSA) and Anti-Money Laundering (AML) Policy establishes the framework, procedures, and controls that IAPAY implements to comply with all applicable federal and state regulations, including the Bank Secrecy Act, the USA PATRIOT Act, and FinCEN regulations governing Money Services Businesses (MSBs).
 
-This policy applies to all COBO employees, officers, agents, and third-party service providers involved in the processing, transmission, or handling of funds.`
+This policy applies to all IAPAY employees, officers, agents, and third-party service providers involved in the processing, transmission, or handling of funds.`
     },
     {
       title: "2. Regulatory Framework",
-      content: `COBO operates as a registered Money Services Business (MSB) with the Financial Crimes Enforcement Network (FinCEN). Our compliance program addresses requirements under:
+      content: `IAPAY operates as a registered Money Services Business (MSB) with the Financial Crimes Enforcement Network (FinCEN). Our compliance program addresses requirements under:
 
 \u2022 Bank Secrecy Act (BSA) — 31 USC 5311 et seq.
 \u2022 USA PATRIOT Act — Title III (Anti-Money Laundering)
@@ -25,7 +25,7 @@ FinCEN Registration Number: [To be added upon issuance]`
     },
     {
       title: "3. BSA/AML Compliance Officer",
-      content: `COBO designates a qualified BSA/AML Compliance Officer responsible for:
+      content: `IAPAY designates a qualified BSA/AML Compliance Officer responsible for:
 
 \u2022 Day-to-day administration of this compliance program
 \u2022 Ensuring all employees receive adequate AML training
@@ -38,7 +38,7 @@ The Compliance Officer reports directly to senior management and has full author
     },
     {
       title: "4. Customer Identification Program (CIP)",
-      content: `Before establishing a business relationship or conducting transactions, COBO collects and verifies the identity of each customer through our multi-tiered Know Your Customer (KYC) process:
+      content: `Before establishing a business relationship or conducting transactions, IAPAY collects and verifies the identity of each customer through our multi-tiered Know Your Customer (KYC) process:
 
 Tier 0 — Basic Registration: Full name, email address, phone number. Transaction limit: $100/day.
 
@@ -50,7 +50,7 @@ All identity documents are verified, and customer information is screened agains
     },
     {
       title: "5. Customer Due Diligence (CDD)",
-      content: `COBO performs risk-based Customer Due Diligence on all customers:
+      content: `IAPAY performs risk-based Customer Due Diligence on all customers:
 
 \u2022 Standard Due Diligence: Identity verification, sanctions screening, and transaction monitoring for all customers.
 
@@ -65,7 +65,7 @@ EDD measures include: source of funds/wealth verification, purpose of account, e
     },
     {
       title: "6. Transaction Monitoring",
-      content: `COBO maintains automated and manual transaction monitoring systems designed to detect suspicious activity:
+      content: `IAPAY maintains automated and manual transaction monitoring systems designed to detect suspicious activity:
 
 \u2022 Real-time screening of all transactions against OFAC SDN lists
 \u2022 Velocity monitoring (daily, weekly, monthly transaction limits)
@@ -78,16 +78,16 @@ All alerts are reviewed by the compliance team within 24 hours and escalated as 
     },
     {
       title: "7. Currency Transaction Reports (CTRs)",
-      content: `COBO files Currency Transaction Reports (CTRs) with FinCEN for:
+      content: `IAPAY files Currency Transaction Reports (CTRs) with FinCEN for:
 
 \u2022 Any single transaction exceeding $10,000 (or its foreign currency equivalent)
 \u2022 Multiple transactions by or on behalf of the same person totaling more than $10,000 in a single business day (aggregate reporting)
 
-CTRs are filed within 15 calendar days of the transaction date using FinCEN's BSA E-Filing System. COBO does not inform the customer that a CTR has been filed.`
+CTRs are filed within 15 calendar days of the transaction date using FinCEN's BSA E-Filing System. IAPAY does not inform the customer that a CTR has been filed.`
     },
     {
       title: "8. Suspicious Activity Reports (SARs)",
-      content: `COBO files Suspicious Activity Reports (SARs) with FinCEN when:
+      content: `IAPAY files Suspicious Activity Reports (SARs) with FinCEN when:
 
 \u2022 A transaction involves $2,000 or more and the MSB knows, suspects, or has reason to suspect the transaction:
   — Involves funds derived from illegal activity
@@ -98,11 +98,11 @@ CTRs are filed within 15 calendar days of the transaction date using FinCEN's BS
 \u2022 There is evidence of potential terrorist financing
 \u2022 Suspicious patterns are identified through our monitoring systems
 
-SARs are filed within 30 calendar days of detecting the suspicious activity. All SAR filings are confidential — COBO does not disclose SAR filings to any person involved in the transaction.`
+SARs are filed within 30 calendar days of detecting the suspicious activity. All SAR filings are confidential — IAPAY does not disclose SAR filings to any person involved in the transaction.`
     },
     {
       title: "9. OFAC Compliance",
-      content: `COBO screens all customers, beneficiaries, and counterparties against the Office of Foreign Assets Control (OFAC) Specially Designated Nationals and Blocked Persons List (SDN List), including:
+      content: `IAPAY screens all customers, beneficiaries, and counterparties against the Office of Foreign Assets Control (OFAC) Specially Designated Nationals and Blocked Persons List (SDN List), including:
 
 \u2022 Real-time name screening using fuzzy matching algorithms (Jaro-Winkler similarity)
 \u2022 Country/jurisdiction screening against embargoed and sanctioned countries
@@ -113,7 +113,7 @@ Prohibited jurisdictions include but are not limited to: North Korea (DPRK), Ira
     },
     {
       title: "10. Recordkeeping & Retention",
-      content: `COBO maintains comprehensive records in compliance with BSA requirements:
+      content: `IAPAY maintains comprehensive records in compliance with BSA requirements:
 
 \u2022 Customer identification records: Retained for 5 years after the account is closed
 \u2022 Transaction records: Retained for 5 years from the date of the transaction
@@ -123,11 +123,11 @@ Prohibited jurisdictions include but are not limited to: North Korea (DPRK), Ira
 \u2022 Training records: Retained for 5 years after the training date
 \u2022 Risk assessments and audit reports: Retained for 5 years
 
-All records are stored securely with appropriate access controls and encryption. COBO does not permanently delete transaction data, customer records, or compliance documents within the 5-year retention period.`
+All records are stored securely with appropriate access controls and encryption. IAPAY does not permanently delete transaction data, customer records, or compliance documents within the 5-year retention period.`
     },
     {
       title: "11. Employee Training",
-      content: `All COBO employees receive BSA/AML training:
+      content: `All IAPAY employees receive BSA/AML training:
 
 \u2022 Initial training upon hiring (within 30 days)
 \u2022 Annual refresher training
@@ -138,7 +138,7 @@ Training covers: recognizing suspicious activity, understanding reporting obliga
     },
     {
       title: "12. Independent Testing",
-      content: `COBO's BSA/AML compliance program is subject to independent testing:
+      content: `IAPAY's BSA/AML compliance program is subject to independent testing:
 
 \u2022 Annual independent audit by a qualified third party
 \u2022 Testing scope includes: adequacy of policies and procedures, effectiveness of controls, compliance with regulatory requirements, and adequacy of employee training
@@ -154,7 +154,7 @@ Failure to comply with BSA/AML requirements may result in:
 \u2022 Civil money penalties
 \u2022 Criminal prosecution
 
-For compliance inquiries, contact: compliance@cobo.africa`
+For compliance inquiries, contact: compliance@iapay.africa`
     },
   ];
 
@@ -167,7 +167,7 @@ For compliance inquiries, contact: compliance@cobo.africa`
       }}>
         <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
-            <img src={`${import.meta.env.BASE_URL}cobo-brand-logo.png`} alt="COBO" style={{ height: 40, borderRadius: 6, marginBottom: 12 }} />
+            <img src={`${import.meta.env.BASE_URL}iapay-logo.svg`} alt="IAPAY" style={{ height: 40, borderRadius: 6, marginBottom: 12 }} />
             <h1 style={{ fontFamily: "var(--font-heading)", fontWeight: 800, fontSize: 26, marginBottom: 4 }}>BSA/AML Compliance Policy</h1>
             <p style={{ fontSize: 14, opacity: 0.75 }}>Bank Secrecy Act & Anti-Money Laundering Program</p>
           </div>
@@ -180,7 +180,7 @@ For compliance inquiries, contact: compliance@cobo.africa`
 
       <main style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px 80px" }}>
         <div style={{ padding: "16px 20px", background: "rgba(201,138,26,0.08)", border: "1px solid var(--border-gold)", borderRadius: 10, marginBottom: 32, fontSize: 13, color: "var(--text-dim)" }}>
-          <strong style={{ color: "var(--gold)" }}>Effective Date:</strong> This policy is effective as of the date of COBO's MSB registration and is reviewed and updated annually, or as needed to reflect changes in regulations.
+          <strong style={{ color: "var(--gold)" }}>Effective Date:</strong> This policy is effective as of the date of IAPAY's MSB registration and is reviewed and updated annually, or as needed to reflect changes in regulations.
           <br /><strong style={{ color: "var(--gold)" }}>Last Updated:</strong> {new Date().toLocaleDateString("en-US", { year: "numeric", month: "long" })}
         </div>
 
@@ -203,9 +203,9 @@ For compliance inquiries, contact: compliance@cobo.africa`
         <div style={{ marginTop: 48, padding: "20px 24px", background: "var(--surface)", borderRadius: 10, border: "1px solid var(--border)" }}>
           <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 16, marginBottom: 8 }}>Contact</h3>
           <p style={{ fontSize: 13, color: "var(--text-dim)", lineHeight: 1.7 }}>
-            For questions about this policy or to report suspicious activity, contact the COBO Compliance Team:
-            <br />Email: compliance@cobo.africa
-            <br />COBO Africa Payments Ltd
+            For questions about this policy or to report suspicious activity, contact the IAPAY Compliance Team:
+            <br />Email: compliance@iapay.africa
+            <br />IAPAY (Inter-Africa Pay) Ltd
           </p>
         </div>
       </main>
@@ -216,7 +216,7 @@ For compliance inquiries, contact: compliance@cobo.africa`
           <span onClick={() => setLocation("/privacy")} style={{ cursor: "pointer" }}>Privacy Policy</span>
           <span onClick={() => setLocation("/aml-policy")} style={{ cursor: "pointer", color: "var(--gold)" }}>BSA/AML Policy</span>
         </div>
-        <div style={{ marginTop: 12 }}>&copy; {new Date().getFullYear()} COBO Africa Payments Ltd. All rights reserved.</div>
+        <div style={{ marginTop: 12 }}>&copy; {new Date().getFullYear()} IAPAY (Inter-Africa Pay) Ltd. All rights reserved.</div>
       </footer>
     </div>
   );

@@ -55,7 +55,7 @@ router.post("/wallets/fund", requireAuth, async (req: AuthenticatedRequest, res)
   }
   const newBalance = Number(wallet.balance) + Number(amount);
   await db.update(walletsTable).set({ balance: String(newBalance) }).where(eq(walletsTable.id, wallet.id));
-  const ref = "COBO-FUND-" + Date.now();
+  const ref = "IAPAY-FUND-" + Date.now();
   await db.insert(transactionsTable).values({
     reference: ref, amount: String(amount), currency: cur, status: "completed",
     type: "deposit", customerId: req.user!.id, description: "Sandbox wallet funding",

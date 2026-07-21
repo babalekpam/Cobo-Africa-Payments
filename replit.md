@@ -1,8 +1,8 @@
-# COBO Africa Payments Platform
+# IAPAY (Inter-Africa Pay) Platform
 
 ## Overview
 
-Full-stack fintech wallet platform for managing payments, wallets, FX exchange, and transfers across Africa. Built as a pnpm monorepo with Express API + React frontend. Features a cream/warm white theme with gold accents, dark sidebar, and Plus Jakarta Sans/DM Sans fonts.
+IAPAY (Inter-Africa Pay) — full-stack pan-African payment platform for managing payments, wallets, FX exchange, and transfers across Africa. Built as a pnpm monorepo with Express API + React frontend. Features a cream/warm white theme with gold accents, dark sidebar, and Plus Jakarta Sans/DM Sans fonts.
 
 ## Admin Credentials
 - Email: `abel@argilette.com`
@@ -19,7 +19,7 @@ Full-stack fintech wallet platform for managing payments, wallets, FX exchange, 
 - **Validation**: Zod (`zod/v4`)
 - **Build**: esbuild (CJS bundle)
 - **Frontend**: React + Vite, custom CSS (no Tailwind/shadcn)
-- **Auth**: JWT (stored in localStorage as `cobo_token`)
+- **Auth**: JWT (stored in localStorage as `iapay_token`)
 - **HTTP client**: custom api.ts fetch wrapper with auto-injected Bearer token
 - **2FA**: speakeasy (TOTP) + qrcode
 - **Email**: nodemailer (graceful no-op when SMTP not configured)
@@ -76,7 +76,7 @@ lib/
 ## i18n (Multi-language)
 
 - Languages: English (en), French (fr), Portuguese (pt), Arabic (ar), Swahili (sw)
-- LangProvider wraps app, language stored as `cobo_lang` in localStorage
+- LangProvider wraps app, language stored as `iapay_lang` in localStorage
 - LanguageSwitcher select in sidebar footer
 - All sidebar nav labels use `t()` translation function
 
@@ -101,7 +101,7 @@ All prefixed with `/api`:
 - `POST /api/wallets/fund` — Fund wallet (sandbox)
 - `POST /api/transfers/bank` — Bank transfer (KYC daily limits enforced)
 - `POST /api/transfers/mobile` — Mobile money transfer (KYC daily limits enforced)
-- `POST /api/transfers/internal` — Internal COBO user transfer (KYC daily limits enforced)
+- `POST /api/transfers/internal` — Internal IAPAY user transfer (KYC daily limits enforced)
 - `GET /api/exchange/rates` — FX rates
 - `POST /api/exchange/convert` — Get conversion quote
 - `POST /api/exchange/swap` — Execute currency swap
@@ -135,16 +135,44 @@ All prefixed with `/api`:
 - `GET /api/pay/:sessionId/info` — Get checkout info (public)
 - `POST /api/pay/:sessionId/complete` — Complete payment (public)
 
+## IAPAY — Pan-African Instant Payment Scheme
+
+The platform operates the **IAPAY scheme** (Inter-Africa Pay), a Pix/UnionPay-style payment rail for Africa:
+
+- **IAPAY Keys** (like Pix keys): users register up to 5 aliases — phone, email, national ID, merchant ID, or random UUID — in a network-wide directory. A key resolves to the holder's institution + account; lookups return masked holder names for privacy. **Ownership is verified**: phone/email keys require a 6-digit OTP delivered to the claimed phone/email (SHA-256-hashed, 15-min expiry; `POST /api/scheme/aliases/:id/verify`; sandbox returns `dev_code` outside production); national ID keys require verified KYC; only `active` keys resolve or generate QRs. SMS goes via `services/sms.ts` (Africa's Talking `AT_API_KEY`/`AT_USERNAME` or Twilio `TWILIO_*` env vars; console no-op otherwise).
+- **Instant switch**: `POST /api/scheme/pay` clears payments 24/7 with zero fees, cross-currency FX at scheme rates, OFAC screening at the switch, ISO 20022-style end-to-end IDs (`E<participant><date><uuid>`), WebSocket + email notifications. **Hardened**: KYC daily limits enforced in USD terms (shared `lib/limits.ts`, same tiers as all other rails); clearing runs in a single DB transaction with `SELECT ... FOR UPDATE` on the sender wallet + set-based balance increments (no double-spend, no half-cleared payments); `Idempotency-Key` header support (scoped per user) so client retries never clear twice; `transferRateLimit` on pay and `directoryLookupRateLimit` (15/min) on `/api/scheme/resolve` to prevent directory scraping.
+- **IAPAY QR**: EMVCo merchant-presented-mode compatible TLV QR standard (GUI `africa.iapay`) with CRC-16/CCITT-FALSE — like Brazil's BR Code. Static (any amount) and dynamic (fixed amount) codes.
+- **Participants**: 15 seeded member institutions (banks, mobile money operators, fintechs) across KE, NG, GH, UG, CI, ZA, ET, SN, TZ, RW, MA, EG. Seeded idempotently at server boot (`ensureSchemeParticipants`). Admins can add more.
+- **Clearing & settlement**: cleared transfers accumulate in an open settlement batch; multilateral netting per participant per currency (deferred net settlement, like card schemes/PAPSS) updates participants' USD settlement balances. Cycles close **automatically** every `SETTLEMENT_INTERVAL_HOURS` (default 4h; ≤0 disables; `services/scheme/scheduler.ts`) — empty batches stay open. Manual close remains at `POST /api/scheme/settlement/close` (admin). Netting math is pure/unit-tested in `services/scheme/netting.ts`.
+- **Returns & disputes** (Pix devolução + MED equivalent, `services/scheme/returns.ts`): the recipient can voluntarily return a payment within 90 days (`POST /api/scheme/transfers/:reference/return`) — money travels back along the original path in an atomic reverse transfer (`RTN-*`), and the original is marked `returned`. The sender can open a dispute (`POST /api/scheme/transfers/:reference/dispute`, reasons: fraud/error/duplicate/other); the scheme operator resolves via `POST /api/scheme/disputes/:id/resolve` with `action: refund|deny` — refund forces the return. `GET /api/scheme/disputes` lists own disputes (admins: `?all=1`). DB table: `scheme_disputes`.
+- **USSD**: main menu option 5 "IAPAY Instant Pay" — pay any IAPAY key or list your keys from a feature phone; payments go through the same switch engine (limits, OFAC, atomic clearing).
+- **Web QR scanning**: Scan tab on `/iapay` uses the camera (jsQR + getUserMedia) to read IAPAY QR codes and prefill the payment form; manual payload paste as fallback. Recent-activity list has "Return payment" (recipient) and "Report a problem" (sender → dispute) actions.
+- **Mobile**: cobo-mobile has an IAPAY tab (`app/(app)/iapay.tsx`) — pay-by-key with directory lookup and key management incl. OTP verification; idempotency key sent via `idempotency_key` body field (the pay endpoint accepts header or body).
+- **Tests**: `pnpm --filter @workspace/api-server run test` — node:test suites (bundled with esbuild) covering the IAPAY QR codec (round-trip, CRC tamper, foreign-GUI rejection, CCITT-FALSE known vector) and multilateral netting invariants.
+
+Scheme routes (all under `/api`):
+- `GET/POST /api/scheme/aliases`, `DELETE /api/scheme/aliases/:id` — manage IAPAY keys
+- `GET /api/scheme/resolve?key=` — directory lookup (masked)
+- `POST /api/scheme/pay` — instant payment by key
+- `GET /api/scheme/transfers`, `GET /api/scheme/transfers/:reference` — scheme transfer history/status
+- `POST /api/scheme/qr/generate`, `POST /api/scheme/qr/decode` — IAPAY QR
+- `GET /api/scheme/participants`, `GET /api/scheme/stats` — network registry & stats
+- Admin: `POST /api/scheme/participants`, `POST /api/scheme/settlement/close`, `GET /api/scheme/settlement/batches[/:id]`
+
+DB tables: `scheme_participants`, `payment_aliases`, `scheme_transfers`, `settlement_batches`, `settlement_positions` (schema in `lib/db/src/schema/scheme.ts`; DDL also in deploy.sh migration block).
+Backend code: `api-server/src/services/scheme/` (directory.ts, switchEngine.ts, settlement.ts, qrStandard.ts, participants.ts) + `routes/scheme.ts`.
+Frontend: `/iapay` page (⚡ nav item) with tabs: Pay a key, My keys, Receive (IAPAY QR), Network.
+
 ## Checkout API (Stripe-like)
 
-Developers can generate API keys and use COBO's Checkout API to collect payments from their platforms:
+Developers can generate API keys and use IAPAY's Checkout API to collect payments from their platforms:
 1. Create an API key from the Developer page (test or live mode)
 2. `POST /api/checkout/sessions` with Bearer API key to create a checkout session
 3. Redirect customers to the `checkout_url` — a hosted payment page
 4. Receive webhook notifications at your `webhook_url` when payment completes
 5. Verify payment status via `GET /api/checkout/sessions/:id`
 
-Sessions expire after 30 minutes. Webhook payloads include HMAC-SHA256 signature via `X-COBO-Signature` header, `X-COBO-Timestamp`, and `X-COBO-Delivery` (unique ID). Webhooks retry up to 5 times with exponential backoff (0s, 5s, 30s, 2min, 10min).
+Sessions expire after 30 minutes. Webhook payloads include HMAC-SHA256 signature via `X-IAPAY-Signature` header, `X-IAPAY-Timestamp`, and `X-IAPAY-Delivery` (unique ID). Webhooks retry up to 5 times with exponential backoff (0s, 5s, 30s, 2min, 10min).
 DB tables: `api_keys` (hashed key storage), `checkout_sessions`, `webhook_events`.
 
 ## MSB Compliance (FinCEN)
@@ -157,6 +185,19 @@ DB tables: `api_keys` (hashed key storage), `checkout_sessions`, `webhook_events
 - **BSA/AML Policy**: Public 13-section policy page covering CIP, CDD, transaction monitoring, CTR/SAR filing, OFAC compliance, recordkeeping, training
 - **Compliance libs**: `lib/ctr.ts` (CTR generation), `lib/ofac.ts` (SDN screening + country risk), `lib/refgen.ts` (UUID-based refs)
 - **DB tables**: `ctr_reports`, `edd_reviews`, `sanctions_screening`, `suspicious_activity`
+
+## Security Hardening (2026-07 audit)
+
+- **WebSockets authenticated**: socket.io handshake requires the JWT (`auth: { token }`); clients are joined only to their own `user:<id>` room derived from the verified token — subscribe payloads are ignored. Web client sends the token from `iapay_token`.
+- **Webhooks fail closed**: Flutterwave requires `FLUTTERWAVE_WEBHOOK_HASH` (timing-safe compare; rejected in production if unset). M-Pesa/MTN/Airtel callbacks must present the `?cb=<secret>` appended to callback URLs at initiation — set `WEBHOOK_CALLBACK_SECRET` (per-boot random fallback outside production).
+- **USSD gateway auth**: `/api/ussd` requires `USSD_GATEWAY_SECRET` (via `?secret=` or `X-USSD-Secret`; fail closed in production). Wrong PINs lock the phone number out after 5 attempts for 15 min. USSD sends now enforce KYC daily limits and run in a row-locked DB transaction.
+- **OTP brute-force cap**: IAPAY key verification allows 5 wrong codes then a 15-min lockout; comparisons are constant-time.
+- **HTTP layer**: helmet (HSTS 1y, nosniff, frameguard; CSP off for HTML receipts), CORS allowlist via `CORS_ORIGINS` (default cob-o.com + localhost dev), `trust proxy = 1` so rate limits key real client IPs behind nginx, JSON/urlencoded body limit 200kb.
+- **Passwords**: min 8 chars + common-password blocklist enforced on register, change, and reset (`lib/security.ts:validatePassword`).
+- **Sessions**: JWT expiry default 24h (override with `JWT_EXPIRES_IN`). `JWT_SECRET` is required at boot (no fallback).
+- **SSRF**: merchant webhook URLs also reject IPv6 loopback/link-local/unique-local, `::ffff:` mapped, and non-dotted numeric IP encodings.
+- Security env vars: `JWT_SECRET` (required), `JWT_EXPIRES_IN`, `CORS_ORIGINS`, `WEBHOOK_CALLBACK_SECRET`, `FLUTTERWAVE_WEBHOOK_HASH`, `USSD_GATEWAY_SECRET`, `WEBHOOK_SIGNING_SECRET` (outgoing merchant webhook HMAC).
+- Known residual (single-instance assumptions): OTP/PIN lockout counters and idempotency cache are in-memory — move to Redis before horizontal scaling.
 
 ## Security Features
 
