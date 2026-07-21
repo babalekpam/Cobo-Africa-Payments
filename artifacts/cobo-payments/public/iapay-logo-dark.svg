@@ -10,7 +10,7 @@
 
   <!-- Africa silhouette: anchor points projected from real coastline coordinates -->
   <g mask="url(#cut)">
-    <path fill="#0F2B4C" stroke="#0F2B4C" stroke-width="14" stroke-linejoin="round" d="
+    <path fill="#FAF7F2" stroke="#FAF7F2" stroke-width="14" stroke-linejoin="round" d="
       M101,23
       L209,16
       L276,49
@@ -47,6 +47,6 @@
   <!-- Madagascar -->
   <ellipse cx="452" cy="380" rx="20" ry="48" fill="#C98A1A" transform="rotate(18 452 380)"/>
 </g>
-  <text x="536" y="286" font-family="'Plus Jakarta Sans','DM Sans',-apple-system,'Segoe UI',Arial,sans-serif" font-size="196" font-weight="800" letter-spacing="4" fill="#0F2B4C">IAPAY</text>
-  <text x="545" y="360" font-family="'Plus Jakarta Sans','DM Sans',-apple-system,'Segoe UI',Arial,sans-serif" font-size="42" font-weight="600" letter-spacing="17" fill="#C98A1A">INTER-AFRICA PAY</text>
+  <text x="536" y="286" font-family="'Plus Jakarta Sans','DM Sans',-apple-system,'Segoe UI',Arial,sans-serif" font-size="196" font-weight="800" letter-spacing="4" fill="#FAF7F2">IAPAY</text>
+  <text x="545" y="360" font-family="'Plus Jakarta Sans','DM Sans',-apple-system,'Segoe UI',Arial,sans-serif" font-size="42" font-weight="600" letter-spacing="17" fill="#E8A940">INTER-AFRICA PAY</text>
 </svg>

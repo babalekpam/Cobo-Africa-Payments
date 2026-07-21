@@ -53,7 +53,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         boxShadow: "2px 0 20px rgba(15,43,76,0.15)",
       }} className="sidebar">
         <div style={{ padding: "20px 16px 12px", borderBottom: "1px solid var(--sidebar-border)" }}>
-          <img src={`${import.meta.env.BASE_URL}iapay-logo.svg`} alt="IAPAY (Inter-Africa Pay)" style={{ width: "100%", maxWidth: 200, borderRadius: 8 }} />
+          <img src={`${import.meta.env.BASE_URL}iapay-logo-dark.svg`} alt="IAPAY (Inter-Africa Pay)" style={{ width: "100%", maxWidth: 200, borderRadius: 8 }} />
         </div>
 
         <div style={{ padding: "16px", borderBottom: "1px solid var(--sidebar-border)" }}>
