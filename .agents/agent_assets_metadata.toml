@@ -1,8 +1,13 @@
 uploads = []
-outputs = []
 
 [[generated]]
 id = "XkQXXFOiNiCKRW_oPhT_-"
 uri = "file://artifacts/mockup-sandbox/public/africa-map.png"
 type = "image"
 title = "Abstract tech map of Africa"
+
+[[outputs]]
+id = "8L_DG4yqlCL583PGu5k-H"
+uri = "file://artifacts/iapay-pitch-video/public/audio/bg_music.mp3"
+type = "audio"
+title = "background music"

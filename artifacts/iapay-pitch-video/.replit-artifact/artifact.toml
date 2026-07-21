@@ -1,0 +1,31 @@
+kind = "video"
+previewPath = "/iapay-pitch-video/"
+title = "IAPAY Investor Pitch Video"
+version = "1.0.0"
+id = "artifacts/iapay-pitch-video"
+router = "path"
+
+[[integratedSkills]]
+name = "video-js"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/iapay-pitch-video/" ]
+localPort = 20606
+
+[services.development]
+run = "pnpm --filter @workspace/iapay-pitch-video run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/iapay-pitch-video", "run", "build" ]
+publicDir = "artifacts/iapay-pitch-video/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20606"
+BASE_PATH = "/iapay-pitch-video/"
