@@ -1,0 +1,31 @@
+kind = "slides"
+previewPath = "/iapay-investor-deck/"
+title = "IAPAY Investor Deck"
+version = "1.0.0"
+id = "artifacts/iapay-investor-deck"
+router = "path"
+
+[[integratedSkills]]
+name = "slides"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/iapay-investor-deck/" ]
+localPort = 25842
+
+[services.development]
+run = "pnpm --filter @workspace/iapay-investor-deck run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/iapay-investor-deck", "run", "build" ]
+publicDir = "artifacts/iapay-investor-deck/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25842"
+BASE_PATH = "/iapay-investor-deck/"

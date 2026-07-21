@@ -1,0 +1,82 @@
+[
+  {
+    "id": "0d1f7c3a-9d2e-4c5b-8a1f-1a2b3c4d5e6f",
+    "position": 1,
+    "filepath": "src/pages/slides/TitleSlide.tsx",
+    "title": "IAPAY",
+    "description": "Title slide: IAPAY — the instant payment scheme for Africa",
+    "speakerNotes": ""
+  },
+  {
+    "id": "1e2f8d4b-0e3f-4d6c-9b2a-2b3c4d5e6f70",
+    "position": 2,
+    "filepath": "src/pages/slides/TheProblem.tsx",
+    "title": "The Problem",
+    "description": "High remittance fees, FX losses, and slow correspondent banking",
+    "speakerNotes": ""
+  },
+  {
+    "id": "2f3a9e5c-1f4a-4e7d-ac3b-3c4d5e6f7081",
+    "position": 3,
+    "filepath": "src/pages/slides/TheMarket.tsx",
+    "title": "The Market",
+    "description": "African digital payments growing toward $1T+ by 2035",
+    "speakerNotes": ""
+  },
+  {
+    "id": "3a4b0f6d-2a5b-4f8e-bd4c-4d5e6f708192",
+    "position": 4,
+    "filepath": "src/pages/slides/TheSolution.tsx",
+    "title": "The Solution",
+    "description": "IAPAY keys, instant switch, QR standard, and USSD access",
+    "speakerNotes": ""
+  },
+  {
+    "id": "4b5c1a7e-3b6c-4a9f-ce5d-5e6f70819203",
+    "position": 5,
+    "filepath": "src/pages/slides/ThePlatform.tsx",
+    "title": "The Platform",
+    "description": "Live platform stats, wallet product, checkout API, and settlement",
+    "speakerNotes": ""
+  },
+  {
+    "id": "5c6d2b8f-4c7d-4ba0-df6e-6f7081920314",
+    "position": 6,
+    "filepath": "src/pages/slides/ComplianceBuiltIn.tsx",
+    "title": "Compliance Built In",
+    "description": "OFAC screening, CTR/SAR/EDD, tiered KYC, audit and disputes",
+    "speakerNotes": ""
+  },
+  {
+    "id": "6d7e3c90-5d8e-4cb1-e07f-708192031425",
+    "position": 7,
+    "filepath": "src/pages/slides/NetworkTraction.tsx",
+    "title": "Network and Traction",
+    "description": "15 member institutions across 12 countries with Africa map",
+    "speakerNotes": ""
+  },
+  {
+    "id": "7e8f4da1-6e9f-4dc2-f180-819203142536",
+    "position": 8,
+    "filepath": "src/pages/slides/WhyNow.tsx",
+    "title": "Why Now",
+    "description": "PAPSS momentum, mobile money scale, Pix playbook, AfCFTA",
+    "speakerNotes": ""
+  },
+  {
+    "id": "8f905eb2-7fa0-4ed3-0291-920314253647",
+    "position": 9,
+    "filepath": "src/pages/slides/BusinessModel.tsx",
+    "title": "Business Model",
+    "description": "FX spread, merchant and API fees, scheme membership",
+    "speakerNotes": ""
+  },
+  {
+    "id": "9a016fc3-80b1-4fe4-13a2-031425364758",
+    "position": 10,
+    "filepath": "src/pages/slides/Closing.tsx",
+    "title": "One Network for Africa",
+    "description": "Closing slide with contact information",
+    "speakerNotes": ""
+  }
+]
