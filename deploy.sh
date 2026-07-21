@@ -47,7 +47,7 @@ if [ "$DEPLOY_API" = true ]; then
   pnpm --filter @workspace/api-server run build 2>&1 | tail -5
 
   log "Running database migrations..."
-  ${SSH_CMD} "psql \$DATABASE_URL -c \"
+  ${SSH_CMD} "set -a; source ${API_PATH}.env 2>/dev/null; set +a; psql \$DATABASE_URL -c \"
     CREATE TABLE IF NOT EXISTS payment_intents (
       id SERIAL PRIMARY KEY,
       reference TEXT NOT NULL UNIQUE,
