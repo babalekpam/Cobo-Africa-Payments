@@ -13,3 +13,4 @@ export * from "./compliance";
 export * from "./depositRequests";
 export * from "./ctr";
 export * from "./paymentIntents";
+export * from "./scheme";

@@ -7,6 +7,7 @@ import api from "../lib/api";
 const NAV_KEYS = [
   { path: "/dashboard", key: "dashboard", icon: "📊" },
   { path: "/wallets", key: "wallets", icon: "💰" },
+  { path: "/afripay", key: "afripay", icon: "⚡" },
   { path: "/send", key: "send_money", icon: "💸" },
   { path: "/receive", key: "receive", icon: "📲" },
   { path: "/deposit", key: "deposit", icon: "📥" },
