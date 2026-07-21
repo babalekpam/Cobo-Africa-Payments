@@ -59,6 +59,15 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
+        name="afrix"
+        options={{
+          title: 'Afrix',
+          tabBarIcon: ({ focused, size }) => (
+            <TabIcon name="flash" focused={focused} size={size} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="send"
         options={{
           title: 'Send',

@@ -3,6 +3,7 @@ import app from "./app.js";
 import { logger } from "./lib/logger.js";
 import { initSocketIO } from "./services/socketio.js";
 import { ensureSchemeParticipants } from "./services/scheme/participants.js";
+import { startSettlementScheduler } from "./services/scheme/scheduler.js";
 
 const rawPort = process.env["PORT"];
 
@@ -24,4 +25,5 @@ initSocketIO(httpServer);
 httpServer.listen(port, () => {
   logger.info({ port }, "Server listening with WebSocket support");
   void ensureSchemeParticipants();
+  startSettlementScheduler();
 });

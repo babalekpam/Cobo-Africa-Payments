@@ -15,6 +15,7 @@ import {
   type SettlementPosition,
 } from "@workspace/db";
 import { getRate } from "../fxRates.js";
+import { computeNetPositions } from "./netting.js";
 
 export interface SettlementSummary {
   batch: SettlementBatch;
@@ -26,35 +27,40 @@ export async function closeSettlementCycle(): Promise<SettlementSummary | null> 
   const [batch] = await db.select().from(settlementBatchesTable).where(eq(settlementBatchesTable.status, "open"));
   if (!batch) return null;
 
-  await db.update(settlementBatchesTable).set({ status: "netting", closedAt: new Date() }).where(eq(settlementBatchesTable.id, batch.id));
-
   const transfers = await db
     .select()
     .from(schemeTransfersTable)
     .where(and(eq(schemeTransfersTable.settlementBatchId, batch.id), eq(schemeTransfersTable.status, "cleared")));
 
+  // Nothing cleared since the last cycle — leave the batch open rather than
+  // churning out empty settled batches.
+  if (transfers.length === 0) return null;
+
+  await db.update(settlementBatchesTable).set({ status: "netting", closedAt: new Date() }).where(eq(settlementBatchesTable.id, batch.id));
+
   // Multilateral netting: per participant per currency, debit what they owe the
   // network (their customers sent) and credit what the network owes them (their
-  // customers received).
-  const positions = new Map<string, { participantId: number; currency: string; debit: number; credit: number }>();
-  const bump = (participantId: number, currency: string, field: "debit" | "credit", amount: number) => {
-    const key = `${participantId}:${currency}`;
-    const pos = positions.get(key) || { participantId, currency, debit: 0, credit: 0 };
-    pos[field] += amount;
-    positions.set(key, pos);
-  };
+  // customers received). The math lives in netting.ts (pure, unit-tested).
+  const positions = computeNetPositions(
+    transfers.map((t) => ({
+      senderParticipantId: t.senderParticipantId,
+      recipientParticipantId: t.recipientParticipantId,
+      currency: t.currency,
+      recipientCurrency: t.recipientCurrency,
+      amount: Number(t.amount),
+      recipientAmount: Number(t.recipientAmount),
+    }))
+  );
 
   let totalGrossUsd = 0;
   for (const t of transfers) {
-    bump(t.senderParticipantId, t.currency, "debit", Number(t.amount));
-    bump(t.recipientParticipantId, t.recipientCurrency, "credit", Number(t.recipientAmount));
     const usdRate = t.currency === "USD" ? 1 : await getRate(t.currency, "USD");
     totalGrossUsd += Number(t.amount) * (usdRate || 0);
   }
 
   const saved: SettlementPosition[] = [];
-  for (const pos of positions.values()) {
-    const net = pos.credit - pos.debit;
+  for (const pos of positions) {
+    const net = pos.net;
     const [row] = await db
       .insert(settlementPositionsTable)
       .values({

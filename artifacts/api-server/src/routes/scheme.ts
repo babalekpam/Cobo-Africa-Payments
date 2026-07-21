@@ -11,6 +11,8 @@ import {
   schemeParticipantsTable,
   schemeTransfersTable,
   settlementBatchesTable,
+  schemeDisputesTable,
+  notificationsTable,
 } from "@workspace/db";
 import type { NextFunction, Response } from "express";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth.js";
@@ -28,6 +30,7 @@ import {
 import { sendSms } from "../services/sms.js";
 import { emailService } from "../services/email.js";
 import { processInstantPayment } from "../services/scheme/switchEngine.js";
+import { returnSchemeTransfer } from "../services/scheme/returns.js";
 import { closeSettlementCycle, getBatchPositions } from "../services/scheme/settlement.js";
 import { encodeAfriQr, decodeAfriQr } from "../services/scheme/qrStandard.js";
 
@@ -39,10 +42,14 @@ async function requireAdmin(req: AuthenticatedRequest): Promise<boolean> {
 }
 
 // Scope idempotency keys per authenticated user so one client's key can never
-// replay another user's cached response. Runs after requireAuth.
+// replay another user's cached response. Accepts the key from the Idempotency-Key
+// header or, for clients that can't set headers, an idempotency_key body field.
+// Runs after requireAuth.
 function scopeIdempotencyKey(req: AuthenticatedRequest, _res: Response, next: NextFunction): void {
-  const key = req.headers["idempotency-key"];
-  if (typeof key === "string" && key) {
+  const headerKey = req.headers["idempotency-key"];
+  const bodyKey = (req.body as Record<string, unknown> | undefined)?.idempotency_key;
+  const key = typeof headerKey === "string" && headerKey ? headerKey : typeof bodyKey === "string" ? bodyKey : "";
+  if (key) {
     req.headers["idempotency-key"] = `afrix:${req.user!.id}:${key}`;
   }
   next();
@@ -178,6 +185,114 @@ router.get("/scheme/transfers/:reference", requireAuth, async (req: Authenticate
     return;
   }
   res.json({ success: true, transfer });
+});
+
+// ---------- Returns & disputes (Pix devolução + MED equivalent) ----------
+
+// Voluntary return by the recipient — money flows back along the original path
+router.post("/scheme/transfers/:reference/return", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+  const { reason } = req.body as Record<string, string>;
+  const result = await returnSchemeTransfer(req.params.reference, req.user!.id, reason || "Returned by recipient", "recipient");
+  if (!result.ok) {
+    res.status(result.status).json({ success: false, message: result.message });
+    return;
+  }
+  res.json({ success: true, message: result.message, return_reference: result.returnTransfer!.reference });
+});
+
+// Sender opens a dispute (fraud/error claim) for scheme-operator review
+router.post("/scheme/transfers/:reference/dispute", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+  const { reason, description } = req.body as Record<string, string>;
+  const validReasons = ["fraud", "error", "duplicate", "other"];
+  if (!validReasons.includes(reason)) {
+    res.status(400).json({ success: false, message: `Reason must be one of: ${validReasons.join(", ")}` });
+    return;
+  }
+  const [transfer] = await db.select().from(schemeTransfersTable).where(eq(schemeTransfersTable.reference, req.params.reference));
+  if (!transfer || transfer.senderUserId !== req.user!.id) {
+    res.status(404).json({ success: false, message: "Transfer not found (only the sender can dispute a payment)" });
+    return;
+  }
+  if (transfer.status === "returned") {
+    res.status(409).json({ success: false, message: "This payment was already returned" });
+    return;
+  }
+  const [existing] = await db
+    .select()
+    .from(schemeDisputesTable)
+    .where(and(eq(schemeDisputesTable.transferReference, transfer.reference), eq(schemeDisputesTable.status, "open")));
+  if (existing) {
+    res.status(409).json({ success: false, message: "A dispute is already open for this payment" });
+    return;
+  }
+  const [dispute] = await db
+    .insert(schemeDisputesTable)
+    .values({ transferReference: transfer.reference, openedByUserId: req.user!.id, reason, description: description || null })
+    .returning();
+  res.status(201).json({ success: true, message: "Dispute opened — the scheme operator will review it", dispute });
+});
+
+// Own disputes; admins can pass ?all=1 to see the whole queue
+router.get("/scheme/disputes", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+  if (req.query.all && (await requireAdmin(req))) {
+    const disputes = await db.select().from(schemeDisputesTable).orderBy(desc(schemeDisputesTable.createdAt)).limit(100);
+    res.json({ success: true, disputes });
+    return;
+  }
+  const disputes = await db
+    .select()
+    .from(schemeDisputesTable)
+    .where(eq(schemeDisputesTable.openedByUserId, req.user!.id))
+    .orderBy(desc(schemeDisputesTable.createdAt))
+    .limit(50);
+  res.json({ success: true, disputes });
+});
+
+// Scheme operator resolves: refund forces a return along the original path
+router.post("/scheme/disputes/:id/resolve", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+  if (!(await requireAdmin(req))) { res.status(403).json({ success: false, message: "Admin access required" }); return; }
+  const { action, note } = req.body as Record<string, string>;
+  if (action !== "refund" && action !== "deny") {
+    res.status(400).json({ success: false, message: "action must be 'refund' or 'deny'" });
+    return;
+  }
+  const [dispute] = await db.select().from(schemeDisputesTable).where(eq(schemeDisputesTable.id, Number(req.params.id)));
+  if (!dispute) { res.status(404).json({ success: false, message: "Dispute not found" }); return; }
+  if (dispute.status !== "open" && dispute.status !== "under_review") {
+    res.status(409).json({ success: false, message: "Dispute is already resolved" });
+    return;
+  }
+
+  if (action === "refund") {
+    const result = await returnSchemeTransfer(dispute.transferReference, req.user!.id, `Dispute #${dispute.id}: ${dispute.reason}`, "operator");
+    if (!result.ok) {
+      res.status(result.status).json({ success: false, message: `Refund failed: ${result.message}` });
+      return;
+    }
+  }
+
+  const [resolved] = await db
+    .update(schemeDisputesTable)
+    .set({
+      status: action === "refund" ? "resolved_refund" : "resolved_denied",
+      resolutionNote: note || null,
+      resolvedByUserId: req.user!.id,
+      resolvedAt: new Date(),
+    })
+    .where(eq(schemeDisputesTable.id, dispute.id))
+    .returning();
+
+  await db.insert(notificationsTable).values({
+    userId: dispute.openedByUserId,
+    title: action === "refund" ? "Dispute Resolved — Refunded" : "Dispute Resolved",
+    message:
+      action === "refund"
+        ? `Your dispute on ${dispute.transferReference} was upheld and the payment was returned to you.`
+        : `Your dispute on ${dispute.transferReference} was reviewed and denied.${note ? ` Note: ${note}` : ""}`,
+    type: action === "refund" ? "success" : "info",
+  });
+
+  res.json({ success: true, dispute: resolved });
 });
 
 // ---------- AfrixQR (pan-African QR standard) ----------

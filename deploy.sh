@@ -148,6 +148,19 @@ if [ "$DEPLOY_API" = true ]; then
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS settlement_positions_batch_idx ON settlement_positions(batch_id);
+    CREATE TABLE IF NOT EXISTS scheme_disputes (
+      id SERIAL PRIMARY KEY,
+      transfer_reference TEXT NOT NULL,
+      opened_by_user_id INTEGER NOT NULL,
+      reason TEXT NOT NULL,
+      description TEXT,
+      status TEXT NOT NULL DEFAULT 'open',
+      resolution_note TEXT,
+      resolved_by_user_id INTEGER,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      resolved_at TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS scheme_disputes_reference_idx ON scheme_disputes(transfer_reference);
   \" 2>&1" && log "Database migration completed!" || warn "Migration failed — table may already exist or DATABASE_URL not set"
 
   log "Deploying API to VPS..."

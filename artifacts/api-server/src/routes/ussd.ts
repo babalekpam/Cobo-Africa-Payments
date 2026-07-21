@@ -2,6 +2,8 @@ import { Router } from "express";
 import { db, usersTable, walletsTable, transactionsTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import bcrypt from "bcryptjs";
+import { processInstantPayment } from "../services/scheme/switchEngine.js";
+import { resolveAlias, listUserAliases } from "../services/scheme/directory.js";
 
 const router = Router();
 
@@ -18,6 +20,7 @@ router.post("/ussd", async (req, res): Promise<void> => {
 2. Send Money
 3. Mini Statement
 4. My Account
+5. Afrix Instant Pay
 0. Exit`;
   } else if (inputs[0] === "0") {
     response = "END Thank you for using COBO Africa. Goodbye!";
@@ -120,6 +123,83 @@ router.post("/ussd", async (req, res): Promise<void> => {
       response = "END Account not found.";
     } else {
       response = `END COBO Account\nName: ${user.firstName} ${user.lastName}\nEmail: ${user.email}\nKYC Level: ${user.kycLevel || 0}`;
+    }
+  } else if (inputs[0] === "5") {
+    // Afrix — instant pay by key, on any feature phone. Goes through the same
+    // switch engine as the app, so KYC limits, sanctions screening and atomic
+    // clearing all apply.
+    if (level === 1) {
+      response = `CON Afrix Instant Pay
+1. Pay an Afrix key
+2. My Afrix keys`;
+    } else if (inputs[1] === "2") {
+      const user = await findUserByPhone(phoneNumber || "");
+      if (!user) {
+        response = "END Account not found. Download the COBO app to register.";
+      } else {
+        const keys = await listUserAliases(user.id);
+        if (keys.length === 0) {
+          response = "END No Afrix keys yet. Register one in the COBO app.";
+        } else {
+          const lines = keys
+            .map((k) => `${k.aliasValue}${k.status === "active" ? "" : " (pending)"}`)
+            .join("\n");
+          response = `END Your Afrix keys:\n${lines}`;
+        }
+      }
+    } else if (inputs[1] === "1") {
+      if (level === 2) {
+        response = "CON Enter recipient's Afrix key (phone, email or ID):";
+      } else if (level === 3) {
+        const resolved = await resolveAlias(inputs[2]);
+        if (!resolved) {
+          response = "END Afrix key not found in the network directory.";
+        } else {
+          response = `CON Paying ${resolved.holderName} (${resolved.participant.name})
+Enter amount:`;
+        }
+      } else if (level === 4) {
+        response = "CON Enter your COBO PIN:";
+      } else if (level === 5) {
+        const key = inputs[2];
+        const amount = parseFloat(inputs[3]);
+        const pin = inputs[4];
+        const user = await findUserByPhone(phoneNumber || "");
+        if (!user) {
+          response = "END Account not found.";
+        } else if (isNaN(amount) || amount <= 0) {
+          response = "END Invalid amount.";
+        } else {
+          const validPin = user.passwordHash ? await bcrypt.compare(pin, user.passwordHash) : false;
+          if (!validPin) {
+            response = "END Invalid PIN. Transaction cancelled.";
+          } else {
+            const [defaultWallet] = await db.select().from(walletsTable).where(
+              and(eq(walletsTable.userId, user.id), eq(walletsTable.isDefault, true))
+            );
+            const result = await processInstantPayment({
+              senderUserId: user.id,
+              senderEmail: user.email,
+              alias: key,
+              amount,
+              walletId: defaultWallet?.id,
+              description: "Afrix payment via USSD",
+            });
+            if (!result.ok) {
+              response = `END Payment failed: ${result.message}`;
+            } else {
+              response = `END Afrix payment sent!
+${result.recipientCurrency} ${result.recipientAmount!.toLocaleString(undefined, { maximumFractionDigits: 2 })} to ${result.recipientName}
+Ref: ${result.transfer!.reference}
+Free - Instant - 24/7`;
+            }
+          }
+        }
+      } else {
+        response = "END Session expired. Please try again.";
+      }
+    } else {
+      response = "END Invalid option. Please try again.";
     }
   } else {
     response = "END Invalid option. Please try again.";

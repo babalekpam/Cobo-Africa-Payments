@@ -83,6 +83,22 @@ export const settlementPositionsTable = pgTable("settlement_positions", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Disputes over scheme payments (equivalent of Pix's MED special return mechanism):
+// a sender claims fraud or error; the scheme operator reviews and either forces a
+// refund back along the original path or denies the claim.
+export const schemeDisputesTable = pgTable("scheme_disputes", {
+  id: serial("id").primaryKey(),
+  transferReference: text("transfer_reference").notNull(),
+  openedByUserId: integer("opened_by_user_id").notNull(),
+  reason: text("reason").notNull(), // fraud | error | duplicate | other
+  description: text("description"),
+  status: text("status").notNull().default("open"), // open | under_review | resolved_refund | resolved_denied
+  resolutionNote: text("resolution_note"),
+  resolvedByUserId: integer("resolved_by_user_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+});
+
 export const insertSchemeParticipantSchema = createInsertSchema(schemeParticipantsTable).omit({ id: true, joinedAt: true });
 export type InsertSchemeParticipant = z.infer<typeof insertSchemeParticipantSchema>;
 export type SchemeParticipant = typeof schemeParticipantsTable.$inferSelect;
@@ -92,5 +108,6 @@ export type InsertPaymentAlias = z.infer<typeof insertPaymentAliasSchema>;
 export type PaymentAlias = typeof paymentAliasesTable.$inferSelect;
 
 export type SchemeTransfer = typeof schemeTransfersTable.$inferSelect;
+export type SchemeDispute = typeof schemeDisputesTable.$inferSelect;
 export type SettlementBatch = typeof settlementBatchesTable.$inferSelect;
 export type SettlementPosition = typeof settlementPositionsTable.$inferSelect;
