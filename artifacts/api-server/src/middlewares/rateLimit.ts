@@ -25,7 +25,7 @@ export const transferRateLimit = rateLimit({
   message: { success: false, message: "Transfer limit reached. Please try again in an hour." },
 });
 
-// Afrix directory lookups return account-holder names — throttle hard so the
+// IAPAY directory lookups return account-holder names — throttle hard so the
 // alias directory can't be scraped by enumerating phone numbers/emails.
 export const directoryLookupRateLimit = rateLimit({
   windowMs: 60 * 1000,

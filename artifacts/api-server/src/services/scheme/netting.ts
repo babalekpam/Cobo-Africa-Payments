@@ -1,4 +1,4 @@
-// Pure multilateral netting math for Afrix settlement — kept free of database
+// Pure multilateral netting math for IAPAY settlement — kept free of database
 // imports so it can be unit-tested and reasoned about in isolation.
 
 export interface NettableTransfer {

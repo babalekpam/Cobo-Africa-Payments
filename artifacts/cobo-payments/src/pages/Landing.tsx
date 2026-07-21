@@ -29,7 +29,7 @@ const STATS = [
 
 const API_CODE = `const cobo = require('@cobo/checkout');
 
-const session = await cobo.sessions.create({
+const session = await iapay.sessions.create({
   currency: 'NGN',
   amount: 25000,
   description: 'Premium Plan',
@@ -63,7 +63,7 @@ export default function Landing() {
       }}>
         <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", height: 72 }}>
           <div style={{ display: "flex", alignItems: "center" }}>
-            <img src={`${import.meta.env.BASE_URL}cobo-brand-logo.png`} alt="COBO Africa Payments" style={{ height: 52, borderRadius: 8 }} />
+            <img src={`${import.meta.env.BASE_URL}iapay-logo.svg`} alt="IAPAY (Inter-Africa Pay)" style={{ height: 52, borderRadius: 8 }} />
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <button onClick={() => setLocation("/login")} className="btn btn-ghost" style={{ fontSize: 14, fontWeight: 500 }}>Sign In</button>
@@ -174,10 +174,10 @@ export default function Landing() {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 20, marginBottom: 40 }}>
             {[
-              { label: "COBO Transfers", value: "0.5%", sub: "min $0.25", highlight: true },
+              { label: "IAPAY Transfers", value: "0.5%", sub: "min $0.25", highlight: true },
               { label: "International Fee", value: "$0.99", sub: "flat per transfer", highlight: true },
               { label: "FX Spread", value: "0.35%", sub: "transparent rate", highlight: true },
-              { label: "COBO-to-COBO", value: "FREE", sub: "always", highlight: true },
+              { label: "IAPAY-to-IAPAY", value: "FREE", sub: "always", highlight: true },
             ].map(p => (
               <div key={p.label} style={{
                 background: "#FFFFFF", borderRadius: 20, padding: "32px 24px", textAlign: "center",
@@ -201,7 +201,7 @@ export default function Landing() {
               </thead>
               <tbody>
                 {[
-                  { name: "COBO Africa", fee: "0.5% (min $0.25)", fx: "0.35%", internal: "Free", best: true },
+                  { name: "IAPAY", fee: "0.5% (min $0.25)", fx: "0.35%", internal: "Free", best: true },
                   { name: "Wise", fee: "0.4–1.5%", fx: "0.3–0.6%", internal: "N/A", best: false },
                   { name: "WorldRemit", fee: "$1.99–$4.99", fx: "1–3%", internal: "N/A", best: false },
                   { name: "Remitly", fee: "$0–$4.99", fx: "1–2%", internal: "N/A", best: false },
@@ -300,7 +300,7 @@ export default function Landing() {
             Ready to move money across Africa?
           </h2>
           <p style={{ fontSize: 18, color: "rgba(255,255,255,0.6)", marginBottom: 40, lineHeight: 1.6 }}>
-            Join thousands of businesses and diaspora communities using COBO for fast, secure payments from the US, Europe, and across Africa.
+            Join thousands of businesses and diaspora communities using IAPAY for fast, secure payments from the US, Europe, and across Africa.
           </p>
           <div style={{ display: "flex", justifyContent: "center", gap: 16 }}>
             <button onClick={() => setLocation("/register")} style={{
@@ -336,7 +336,7 @@ export default function Landing() {
           <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 40, marginBottom: 48 }}>
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-                <img src={`${import.meta.env.BASE_URL}cobo-brand-logo.png`} alt="COBO Africa Payments" style={{ height: 40, borderRadius: 8 }} />
+                <img src={`${import.meta.env.BASE_URL}iapay-logo.svg`} alt="IAPAY (Inter-Africa Pay)" style={{ height: 40, borderRadius: 8 }} />
               </div>
               <p style={{ fontSize: 14, lineHeight: 1.7, maxWidth: 280 }}>
                 Pan-African payments infrastructure connecting businesses and people across the continent.
@@ -375,7 +375,7 @@ export default function Landing() {
             </div>
           </div>
           <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: 13 }}>© 2024 COBO Africa. All rights reserved.</span>
+            <span style={{ fontSize: 13 }}>© 2024 IAPAY. All rights reserved.</span>
             <div style={{ display: "flex", gap: 20, fontSize: 13 }}>
               <span style={{ cursor: "pointer" }}>Twitter</span>
               <span style={{ cursor: "pointer" }}>LinkedIn</span>

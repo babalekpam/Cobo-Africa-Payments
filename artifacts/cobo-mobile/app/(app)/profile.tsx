@@ -173,10 +173,10 @@ export default function ProfileScreen() {
         },
         {
           id: 'about',
-          label: 'About COBO Africa',
+          label: 'About IAPAY',
           subtitle: 'Version 1.0.0',
           icon: 'information-circle-outline',
-          onPress: () => Alert.alert('About', 'COBO Africa v1.0.0\nAfrica\'s Payment Platform'),
+          onPress: () => Alert.alert('About', 'IAPAY v1.0.0\nAfrica\'s Payment Platform'),
           chevron: true,
         },
       ],
@@ -318,7 +318,7 @@ export default function ProfileScreen() {
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
 
-        <Text style={styles.versionText}>COBO Africa v1.0.0</Text>
+        <Text style={styles.versionText}>IAPAY v1.0.0</Text>
       </ScrollView>
 
       {/* Logout Confirmation */}
@@ -330,7 +330,7 @@ export default function ProfileScreen() {
             </View>
             <Text style={styles.confirmTitle}>Log Out?</Text>
             <Text style={styles.confirmMessage}>
-              Are you sure you want to log out of your COBO Africa account?
+              Are you sure you want to log out of your IAPAY account?
             </Text>
             <View style={styles.confirmActions}>
               <TouchableOpacity

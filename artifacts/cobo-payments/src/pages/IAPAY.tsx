@@ -62,7 +62,7 @@ function PastePayload({ onSubmit }: { onSubmit: (payload: string) => void }) {
   );
 }
 
-export default function Afrix() {
+export default function IAPAY() {
   const { user, wallets, refreshWallets } = useAuth();
   const [tab, setTab] = useState<"pay" | "scan" | "keys" | "receive" | "network">("pay");
 
@@ -259,7 +259,7 @@ export default function Afrix() {
       setResolved(resolvedData as ResolvedKey);
       idemKeyRef.current = crypto.randomUUID();
     } catch (e: any) {
-      setScanError(e.response?.data?.message || "Not a valid AfrixQR code");
+      setScanError(e.response?.data?.message || "Not a valid IAPAY QR code");
     }
   }
 
@@ -313,11 +313,11 @@ export default function Afrix() {
     <Layout>
       <div className="page fade-in">
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
-          <h1 className="page-title" style={{ marginBottom: 0 }}>⚡ Afrix</h1>
+          <h1 className="page-title" style={{ marginBottom: 0 }}>⚡ IAPAY</h1>
           <span className="badge" style={{ background: "#1B9E5A", color: "#fff" }}>Instant · 24/7 · Free</span>
         </div>
         <p style={{ color: "var(--text-dim)", marginBottom: "1.5rem" }}>
-          The pan-African instant payment network. Send to any Afrix key — phone, email, ID or merchant code —
+          The pan-African instant payment network. Send to any IAPAY key — phone, email, ID or merchant code —
           across {stats ? stats.countries : "many"} countries, settled between {stats ? stats.participants : ""} member institutions.
         </p>
 
@@ -327,7 +327,7 @@ export default function Afrix() {
             ["pay", "💸 Pay a key"],
             ["scan", "📷 Scan QR"],
             ["keys", "🔑 My keys"],
-            ["receive", "📲 Receive (AfrixQR)"],
+            ["receive", "📲 Receive (IAPAY QR)"],
             ["network", "🌍 Network"],
           ] as const).map(([id, label]) => (
             <button
@@ -344,7 +344,7 @@ export default function Afrix() {
           <div className="grid-2" style={{ alignItems: "start" }}>
             <div className="card" style={{ padding: "1.5rem" }}>
               <h3 style={{ fontWeight: 700, marginBottom: "1rem" }}>Send an instant payment</h3>
-              <label style={{ display: "block", fontWeight: 600, marginBottom: 6, fontSize: "0.875rem" }}>Afrix key</label>
+              <label style={{ display: "block", fontWeight: 600, marginBottom: 6, fontSize: "0.875rem" }}>IAPAY key</label>
               <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
                 <input
                   className="input"
@@ -428,7 +428,7 @@ export default function Afrix() {
             </div>
 
             <div className="card" style={{ padding: "1.5rem" }}>
-              <h3 style={{ fontWeight: 700, marginBottom: "1rem" }}>Recent Afrix activity</h3>
+              <h3 style={{ fontWeight: 700, marginBottom: "1rem" }}>Recent IAPAY activity</h3>
               {transfers.length === 0 ? (
                 <div className="empty" style={{ padding: "2rem" }}>No instant payments yet</div>
               ) : (
@@ -488,9 +488,9 @@ export default function Afrix() {
 
         {tab === "scan" && (
           <div className="card" style={{ padding: "1.5rem", maxWidth: 520 }}>
-            <h3 style={{ fontWeight: 700, marginBottom: "0.5rem" }}>Scan an AfrixQR code</h3>
+            <h3 style={{ fontWeight: 700, marginBottom: "0.5rem" }}>Scan an IAPAY QR code</h3>
             <p style={{ color: "var(--text-dim)", fontSize: "0.875rem", marginBottom: "1rem" }}>
-              Point your camera at any Afrix merchant or personal QR — the payment form fills itself.
+              Point your camera at any IAPAY merchant or personal QR — the payment form fills itself.
             </p>
             <div style={{ position: "relative", background: "#000", borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
               <video ref={videoRef} playsInline muted style={{ width: "100%", display: "block", maxHeight: 360, objectFit: "cover" }} />
@@ -507,7 +507,7 @@ export default function Afrix() {
         {tab === "keys" && (
           <div className="grid-2" style={{ alignItems: "start" }}>
             <div className="card" style={{ padding: "1.5rem" }}>
-              <h3 style={{ fontWeight: 700, marginBottom: "0.5rem" }}>Register an Afrix key</h3>
+              <h3 style={{ fontWeight: 700, marginBottom: "0.5rem" }}>Register an IAPAY key</h3>
               <p style={{ color: "var(--text-dim)", fontSize: "0.875rem", marginBottom: "1rem" }}>
                 Anyone on the network can pay you with just this key — no account numbers. Up to 5 keys.
               </p>
@@ -589,12 +589,12 @@ export default function Afrix() {
 
         {tab === "receive" && (
           <div className="card" style={{ padding: "2rem", maxWidth: 520 }}>
-            <h3 style={{ fontWeight: 700, marginBottom: "0.5rem" }}>Receive with AfrixQR</h3>
+            <h3 style={{ fontWeight: 700, marginBottom: "0.5rem" }}>Receive with IAPAY QR</h3>
             <p style={{ color: "var(--text-dim)", fontSize: "0.875rem", marginBottom: "1rem" }}>
-              An EMV-standard QR any Afrix member app can scan — like Pix's BR Code, for Africa.
+              An EMV-standard QR any IAPAY member app can scan — like Pix's BR Code, for Africa.
             </p>
             {aliases.filter((a) => a.status === "active").length === 0 ? (
-              <div className="empty" style={{ padding: "2rem" }}>Register and verify an Afrix key first (My keys tab)</div>
+              <div className="empty" style={{ padding: "2rem" }}>Register and verify an IAPAY key first (My keys tab)</div>
             ) : (
               <>
                 <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
@@ -611,7 +611,7 @@ export default function Afrix() {
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "1.5rem", background: "var(--surface2)", borderRadius: 16 }}>
                   {qrDataUrl ? (
-                    <img src={qrDataUrl} alt="AfrixQR code" style={{ width: 220, height: 220, borderRadius: 12 }} />
+                    <img src={qrDataUrl} alt="IAPAY QR code" style={{ width: 220, height: 220, borderRadius: 12 }} />
                   ) : (
                     <div className="spinner" style={{ width: 48, height: 48 }} />
                   )}
@@ -625,7 +625,7 @@ export default function Afrix() {
                     style={{ width: "100%", marginTop: 12 }}
                     onClick={() => { navigator.clipboard.writeText(qrPayload); setQrCopied(true); setTimeout(() => setQrCopied(false), 2000); }}
                   >
-                    {qrCopied ? "Copied!" : "Copy AfrixQR payload (EMV TLV)"}
+                    {qrCopied ? "Copied!" : "Copy IAPAY QR payload (EMV TLV)"}
                   </button>
                 )}
               </>

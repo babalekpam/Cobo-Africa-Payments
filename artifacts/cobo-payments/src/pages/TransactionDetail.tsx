@@ -25,7 +25,7 @@ export default function TransactionDetail({ params }: { params: { id: string } }
   };
 
   const viewReceipt = () => {
-    const token = localStorage.getItem("cobo_token");
+    const token = localStorage.getItem("iapay_token");
     window.open(`/api/exports/receipt/${id}?token=${token}`, "_blank");
   };
 

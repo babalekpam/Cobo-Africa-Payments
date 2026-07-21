@@ -252,7 +252,7 @@ router.post("/transfers/internal", requireAuth, async (req: AuthenticatedRequest
   const recipientEmail = recipient_email || email;
   if (!recipientEmail || !amount || Number(amount) <= 0) { res.status(400).json({ success: false, message: "Invalid data" }); return; }
   const [recipient] = await db.select().from(usersTable).where(eq(usersTable.email, recipientEmail));
-  if (!recipient) { res.status(404).json({ success: false, message: "Recipient not found on COBO" }); return; }
+  if (!recipient) { res.status(404).json({ success: false, message: "Recipient not found on IAPAY" }); return; }
   if (recipient.id === req.user!.id) { res.status(400).json({ success: false, message: "Cannot send to yourself" }); return; }
   const senderWallet = await getWallet(req.user!.id, wallet_id ? Number(wallet_id) : undefined, currency ?? undefined);
   if (!senderWallet || Number(senderWallet.balance) < Number(amount)) { res.status(400).json({ success: false, message: "Insufficient funds" }); return; }

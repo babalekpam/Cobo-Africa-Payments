@@ -2,11 +2,11 @@ import { pgTable, text, serial, timestamp, numeric, integer, jsonb } from "drizz
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-// Afrix — Pan-African Instant Payment Scheme
+// IAPAY — Pan-African Instant Payment Scheme
 // Participant institutions: banks, mobile money operators, fintechs that are members of the scheme
 export const schemeParticipantsTable = pgTable("scheme_participants", {
   id: serial("id").primaryKey(),
-  code: text("code").notNull().unique(), // BIC-like scheme code, e.g. COBOPANA, EQTYKENA
+  code: text("code").notNull().unique(), // BIC-like scheme code, e.g. IAPAYPAN, EQTYKENA
   name: text("name").notNull(),
   type: text("type").notNull().default("fintech"), // bank | mobile_money | fintech | central_bank
   country: text("country").notNull(), // ISO 3166-1 alpha-2
@@ -17,7 +17,7 @@ export const schemeParticipantsTable = pgTable("scheme_participants", {
   joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// Afrix Keys — alias directory (like Pix keys / DICT)
+// IAPAY Keys — alias directory (like Pix keys / DICT)
 export const paymentAliasesTable = pgTable("payment_aliases", {
   id: serial("id").primaryKey(),
   aliasType: text("alias_type").notNull(), // phone | email | national_id | merchant_id | random

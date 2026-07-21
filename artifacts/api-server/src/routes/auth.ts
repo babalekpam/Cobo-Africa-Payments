@@ -63,9 +63,9 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   if (id_type && id_number) {
     await db.insert(kycDocumentsTable).values({ userId: user.id, docType: id_type, docUrl: id_number });
     await db.update(usersTable).set({ kycStatus: "submitted" }).where(eq(usersTable.id, user.id));
-    await db.insert(notificationsTable).values({ userId: user.id, title: "Welcome to COBO!", message: "Your account is ready. Your ID verification is being reviewed by our compliance team.", type: "success" });
+    await db.insert(notificationsTable).values({ userId: user.id, title: "Welcome to IAPAY!", message: "Your account is ready. Your ID verification is being reviewed by our compliance team.", type: "success" });
   } else {
-    await db.insert(notificationsTable).values({ userId: user.id, title: "Welcome to COBO!", message: "Your account is ready. Please verify your identity to unlock full features.", type: "success" });
+    await db.insert(notificationsTable).values({ userId: user.id, title: "Welcome to IAPAY!", message: "Your account is ready. Please verify your identity to unlock full features.", type: "success" });
   }
   const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, user.id));
   const token = signToken({ id: user.id, email: user.email, role: user.role });
@@ -181,7 +181,7 @@ router.post("/auth/reset-password", async (req, res): Promise<void> => {
 router.post("/auth/2fa/setup", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id));
   if (user.twoFaEnabled === "true") { res.status(400).json({ success: false, message: "2FA already enabled" }); return; }
-  const secret = speakeasy.generateSecret({ name: `COBO (${user.email})`, length: 20 });
+  const secret = speakeasy.generateSecret({ name: `IAPAY (${user.email})`, length: 20 });
   await db.update(usersTable).set({ twoFaSecret: secret.base32 }).where(eq(usersTable.id, req.user!.id));
   const qr_code = await QRCode.toDataURL(secret.otpauth_url!);
   res.json({ success: true, secret: secret.base32, qr_code });

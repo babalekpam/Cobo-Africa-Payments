@@ -129,7 +129,7 @@ export default function SendScreen() {
   const [accountName, setAccountName] = useState('');
   const [bankCountry, setBankCountry] = useState('');
 
-  // COBO
+  // IAPAY
   const [recipientEmail, setRecipientEmail] = useState('');
   const [note, setNote] = useState('');
 
@@ -290,7 +290,7 @@ export default function SendScreen() {
               onPress={() => { setActiveTab(tab); setError(''); setSuccess(''); }}
             >
               <Text style={[styles.tabLabel, activeTab === tab && styles.tabLabelActive]}>
-                {tab === 'mobile' ? 'Mobile' : tab === 'bank' ? 'Bank' : 'COBO'}
+                {tab === 'mobile' ? 'Mobile' : tab === 'bank' ? 'Bank' : 'IAPAY'}
               </Text>
             </TouchableOpacity>
           ))}
@@ -442,7 +442,7 @@ export default function SendScreen() {
             </>
           )}
 
-          {/* COBO-to-COBO Form */}
+          {/* IAPAY-to-IAPAY Form */}
           {activeTab === 'cobo' && (
             <>
               <Field label="Recipient Email">
@@ -498,7 +498,7 @@ export default function SendScreen() {
               >
                 <Ionicons name="paper-plane" size={18} color={Colors.white} />
                 <Text style={styles.sendBtnText}>
-                  {activeTab === 'cobo' ? 'Send to COBO User' : activeTab === 'bank' ? 'Send to Bank' : 'Send via Mobile Money'}
+                  {activeTab === 'cobo' ? 'Send to IAPAY User' : activeTab === 'bank' ? 'Send to Bank' : 'Send via Mobile Money'}
                 </Text>
               </LinearGradient>
             )}

@@ -1,4 +1,4 @@
-// Afrix Returns — payment returns and the dispute path (equivalent of Pix's
+// IAPAY Returns — payment returns and the dispute path (equivalent of Pix's
 // devolução + MED). A return is a new scheme transfer travelling the original
 // path in reverse: the recipient gives back what they received, in the currency
 // they received it, and the original transfer is marked "returned". Returns are
@@ -62,7 +62,7 @@ export async function returnSchemeTransfer(
   const returnCurrency = original.recipientCurrency;
   const ref = generateRef("RTN");
   const home = await getHomeParticipant();
-  const endToEndId = generateEndToEndId(home?.code || "COBOPANA");
+  const endToEndId = generateEndToEndId(home?.code || "IAPAYPAN");
 
   // Find the open batch for the return leg's settlement
   let [openBatch] = await db.select().from(settlementBatchesTable).where(eq(settlementBatchesTable.status, "open"));
@@ -137,8 +137,8 @@ export async function returnSchemeTransfer(
         status: "completed",
         type: "send",
         customerId: original.recipientUserId!,
-        description: `Afrix return of ${original.reference}`,
-        paymentMethod: "afrix",
+        description: `IAPAY return of ${original.reference}`,
+        paymentMethod: "iapay",
       });
       await tx.insert(transactionsTable).values({
         reference: `${ref}-R`,
@@ -147,8 +147,8 @@ export async function returnSchemeTransfer(
         status: "completed",
         type: "deposit",
         customerId: original.senderUserId!,
-        description: `Afrix payment ${original.reference} returned to you`,
-        paymentMethod: "afrix",
+        description: `IAPAY payment ${original.reference} returned to you`,
+        paymentMethod: "iapay",
       });
 
       return row;
@@ -162,13 +162,13 @@ export async function returnSchemeTransfer(
 
   await db.insert(notificationsTable).values({
     userId: original.senderUserId,
-    title: "Afrix Payment Returned",
+    title: "IAPAY Payment Returned",
     message: `${returnCurrency} ${returnAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })} from payment ${original.reference} was returned to you`,
     type: "info",
   });
   await db.insert(auditLogsTable).values({
     userId: actorUserId,
-    action: "afrix_return",
+    action: "iapay_return",
     ip: "scheme-switch",
     meta: { originalReference: original.reference, returnReference: ref, amount: returnAmount, currency: returnCurrency, reason, initiatedBy },
   });
@@ -177,7 +177,7 @@ export async function returnSchemeTransfer(
     status: "completed",
     amount: returnAmount,
     currency: returnCurrency,
-    provider: "afrix",
+    provider: "iapay",
     message: `Payment ${original.reference} was returned to you`,
   });
 

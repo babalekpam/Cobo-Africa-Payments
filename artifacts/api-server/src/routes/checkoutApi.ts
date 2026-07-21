@@ -7,7 +7,7 @@ import crypto from "crypto";
 const router: IRouter = Router();
 
 function generateApiKey(mode: string): string {
-  const prefix = mode === "live" ? "cobo_live_" : "cobo_test_";
+  const prefix = mode === "live" ? "iapay_live_" : "iapay_test_";
   return prefix + crypto.randomBytes(24).toString("hex");
 }
 
@@ -72,11 +72,11 @@ async function attemptWebhookDelivery(webhookUrl: string, eventType: string, pay
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-COBO-Event": eventType,
-      "X-COBO-Signature": signature,
-      "X-COBO-Timestamp": timestamp,
-      "X-COBO-Delivery": crypto.randomUUID(),
-      "User-Agent": "COBO-Webhooks/1.0",
+      "X-IAPAY-Event": eventType,
+      "X-IAPAY-Signature": signature,
+      "X-IAPAY-Timestamp": timestamp,
+      "X-IAPAY-Delivery": crypto.randomUUID(),
+      "User-Agent": "IAPAY-Webhooks/1.0",
     },
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(15000),
@@ -309,7 +309,7 @@ router.get("/pay/:sessionId/info", async (req, res): Promise<void> => {
     description: session.description,
     reference: session.reference,
     status: expired ? "expired" : session.status,
-    merchant_name: merchant?.businessName || merchant?.name || "COBO Merchant",
+    merchant_name: merchant?.businessName || merchant?.name || "IAPAY Merchant",
     customer_email: session.customerEmail,
     expires_at: session.expiresAt.toISOString(),
   });

@@ -1,4 +1,4 @@
-// Afrix participant onboarding — seeds the scheme's founding member institutions.
+// IAPAY participant onboarding — seeds the scheme's founding member institutions.
 // In production each of these would be a licensed bank, mobile money operator or
 // fintech connected to the switch through its own API endpoint; here they give the
 // network realistic multi-country coverage out of the box.
@@ -9,7 +9,7 @@ import { logger } from "../../lib/logger.js";
 import { HOME_PARTICIPANT_CODE } from "./directory.js";
 
 const FOUNDING_PARTICIPANTS = [
-  { code: HOME_PARTICIPANT_CODE, name: "COBO Africa Payments", type: "fintech", country: "KE", currency: "USD" },
+  { code: HOME_PARTICIPANT_CODE, name: "IAPAY (Inter-Africa Pay)", type: "fintech", country: "KE", currency: "USD" },
   { code: "MPESAKEN", name: "M-Pesa (Safaricom)", type: "mobile_money", country: "KE", currency: "KES" },
   { code: "MTNMOGHA", name: "MTN Mobile Money Ghana", type: "mobile_money", country: "GH", currency: "GHS" },
   { code: "MTNMOUGA", name: "MTN Mobile Money Uganda", type: "mobile_money", country: "UG", currency: "UGX" },
@@ -34,8 +34,8 @@ export async function ensureSchemeParticipants(): Promise<void> {
         await db.insert(schemeParticipantsTable).values({ ...p });
       }
     }
-    logger.info("Afrix scheme participants ensured");
+    logger.info("IAPAY scheme participants ensured");
   } catch (err) {
-    logger.warn({ err }, "Could not seed Afrix participants (table may not exist yet — run db push)");
+    logger.warn({ err }, "Could not seed IAPAY participants (table may not exist yet — run db push)");
   }
 }

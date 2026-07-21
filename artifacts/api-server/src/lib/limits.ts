@@ -1,5 +1,5 @@
 // KYC-tiered daily sending limits, enforced across every rail (bank, mobile
-// money, internal, Afrix scheme payments) so no channel can bypass compliance.
+// money, internal, IAPAY scheme payments) so no channel can bypass compliance.
 
 import { eq, and, gte } from "drizzle-orm";
 import { db, transactionsTable, usersTable } from "@workspace/db";

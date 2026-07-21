@@ -28,7 +28,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-log "Starting COBO Africa deployment to ${VPS_HOST}..."
+log "Starting IAPAY Africa deployment to ${VPS_HOST}..."
 log "Frontend: ${DEPLOY_FRONTEND} | API: ${DEPLOY_API}"
 
 if [ "$DEPLOY_FRONTEND" = true ]; then

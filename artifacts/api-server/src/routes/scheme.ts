@@ -1,6 +1,6 @@
-// Afrix — Pan-African Instant Payment Scheme API.
-// Alias directory (Afrix Keys), instant payments through the switch,
-// AfrixQR generation/decoding, participant registry, and settlement operations.
+// IAPAY — Pan-African Instant Payment Scheme API.
+// Alias directory (IAPAY Keys), instant payments through the switch,
+// IAPAY QR generation/decoding, participant registry, and settlement operations.
 
 import { Router, type IRouter } from "express";
 import QRCode from "qrcode";
@@ -32,7 +32,7 @@ import { emailService } from "../services/email.js";
 import { processInstantPayment } from "../services/scheme/switchEngine.js";
 import { returnSchemeTransfer } from "../services/scheme/returns.js";
 import { closeSettlementCycle, getBatchPositions } from "../services/scheme/settlement.js";
-import { encodeAfriQr, decodeAfriQr } from "../services/scheme/qrStandard.js";
+import { encodeIapayQr, decodeIapayQr } from "../services/scheme/qrStandard.js";
 
 const router: IRouter = Router();
 
@@ -50,12 +50,12 @@ function scopeIdempotencyKey(req: AuthenticatedRequest, _res: Response, next: Ne
   const bodyKey = (req.body as Record<string, unknown> | undefined)?.idempotency_key;
   const key = typeof headerKey === "string" && headerKey ? headerKey : typeof bodyKey === "string" ? bodyKey : "";
   if (key) {
-    req.headers["idempotency-key"] = `afrix:${req.user!.id}:${key}`;
+    req.headers["idempotency-key"] = `iapay:${req.user!.id}:${key}`;
   }
   next();
 }
 
-// ---------- Afrix Keys (alias directory) ----------
+// ---------- IAPAY Keys (alias directory) ----------
 
 router.get("/scheme/aliases", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
   const aliases = await listUserAliases(req.user!.id);
@@ -75,7 +75,7 @@ router.post("/scheme/aliases", requireAuth, async (req: AuthenticatedRequest, re
     // Prove ownership: the code goes to the claimed phone/email itself,
     // never to the registrant's session.
     if (alias.aliasType === "phone") {
-      sendSms(alias.aliasValue, `${result.otp} is your Afrix key verification code. Expires in 15 minutes.`).catch(() => {});
+      sendSms(alias.aliasValue, `${result.otp} is your IAPAY key verification code. Expires in 15 minutes.`).catch(() => {});
     } else if (alias.aliasType === "email") {
       emailService.sendKeyVerificationEmail(alias.aliasValue, result.otp).catch(() => {});
     }
@@ -90,7 +90,7 @@ router.post("/scheme/aliases", requireAuth, async (req: AuthenticatedRequest, re
     return;
   }
 
-  res.status(201).json({ success: true, message: "Afrix key registered and live", alias, requires_verification: false });
+  res.status(201).json({ success: true, message: "IAPAY key registered and live", alias, requires_verification: false });
 });
 
 router.post("/scheme/aliases/:id/verify", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
@@ -105,7 +105,7 @@ router.delete("/scheme/aliases/:id", requireAuth, async (req: AuthenticatedReque
     res.status(404).json({ success: false, message: "Key not found" });
     return;
   }
-  res.json({ success: true, message: "Afrix key removed" });
+  res.json({ success: true, message: "IAPAY key removed" });
 });
 
 // Directory lookup — returns masked holder info, like Pix's pre-payment confirmation
@@ -114,7 +114,7 @@ router.get("/scheme/resolve", directoryLookupRateLimit, requireAuth, async (req:
   const key = String(req.query.key || "");
   const resolved = await resolveAlias(key);
   if (!resolved) {
-    res.status(404).json({ success: false, message: "Afrix key not found in the network directory" });
+    res.status(404).json({ success: false, message: "IAPAY key not found in the network directory" });
     return;
   }
   res.json({
@@ -295,22 +295,22 @@ router.post("/scheme/disputes/:id/resolve", requireAuth, async (req: Authenticat
   res.json({ success: true, dispute: resolved });
 });
 
-// ---------- AfrixQR (pan-African QR standard) ----------
+// ---------- IAPAY QR (pan-African QR standard) ----------
 
 router.post("/scheme/qr/generate", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
   const { key, amount, currency, reference, format } = req.body as Record<string, string>;
   const aliases = (await listUserAliases(req.user!.id)).filter((a) => a.status === "active");
   const alias = key ? aliases.find((a) => a.aliasValue === key) : aliases[0];
   if (!alias) {
-    res.status(400).json({ success: false, message: "Register and verify an Afrix key first" });
+    res.status(400).json({ success: false, message: "Register and verify an IAPAY key first" });
     return;
   }
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id));
   const home = await getHomeParticipant();
-  const payload = encodeAfriQr({
+  const payload = encodeIapayQr({
     alias: alias.aliasValue,
-    participantCode: home?.code || "COBOPANA",
+    participantCode: home?.code || "IAPAYPAN",
     merchantName: `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.name,
     country: user.country || "KE",
     currency: currency || alias.currency,
@@ -331,9 +331,9 @@ router.post("/scheme/qr/generate", requireAuth, async (req: AuthenticatedRequest
 
 router.post("/scheme/qr/decode", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
   const { payload } = req.body as Record<string, string>;
-  const decoded = decodeAfriQr(String(payload || ""));
+  const decoded = decodeIapayQr(String(payload || ""));
   if (!decoded.valid) {
-    res.status(400).json({ success: false, message: decoded.error || "Invalid AfrixQR payload" });
+    res.status(400).json({ success: false, message: decoded.error || "Invalid IAPAY QR payload" });
     return;
   }
   res.json({ success: true, qr: decoded });

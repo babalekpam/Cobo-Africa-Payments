@@ -1,4 +1,4 @@
-// Afrix Switch — the scheme's instant payment engine (equivalent of Pix's SPI or
+// IAPAY Switch — the scheme's instant payment engine (equivalent of Pix's SPI or
 // a card network's authorization switch). Resolves the recipient key through the
 // directory, screens for sanctions, converts currency at scheme FX rates, clears the
 // payment instantly (24/7), and queues it for deferred net settlement between the
@@ -30,7 +30,7 @@ import { resolveAlias, getHomeParticipant, type ResolvedAlias } from "./director
 const SCHEME_FEE = 0;
 
 export function generateSchemeRef(): string {
-  return generateRef("AFX");
+  return generateRef("IAP");
 }
 
 // ISO 20022-flavoured end-to-end id, unique across the whole network
@@ -78,9 +78,9 @@ export async function processInstantPayment(input: InstantPaymentInput): Promise
 
   // 1. Directory lookup
   const resolved: ResolvedAlias | null = await resolveAlias(input.alias);
-  if (!resolved) return { ok: false, status: 404, message: "Afrix key not found in the network directory", code: "KEY_NOT_FOUND" };
+  if (!resolved) return { ok: false, status: 404, message: "IAPAY key not found in the network directory", code: "KEY_NOT_FOUND" };
   if (resolved.holderUserId === input.senderUserId) {
-    return { ok: false, status: 400, message: "Cannot send to your own Afrix key" };
+    return { ok: false, status: 400, message: "Cannot send to your own IAPAY key" };
   }
 
   // 2. Sender wallet
@@ -132,7 +132,7 @@ export async function processInstantPayment(input: InstantPaymentInput): Promise
   const home = await getHomeParticipant();
   const senderParticipantId = home?.id ?? resolved.participant.id;
   const ref = generateSchemeRef();
-  const endToEndId = generateEndToEndId(home?.code || "COBOPANA");
+  const endToEndId = generateEndToEndId(home?.code || "IAPAYPAN");
   const batchId = await currentOpenBatch();
 
   // 5. Clearing — instant debit/credit, 24/7 (settlement between institutions is
@@ -197,7 +197,7 @@ export async function processInstantPayment(input: InstantPaymentInput): Promise
         })
         .returning();
 
-      const desc = input.description || `Afrix instant payment to ${resolved.holderName}`;
+      const desc = input.description || `IAPAY instant payment to ${resolved.holderName}`;
       await tx.insert(transactionsTable).values({
         reference: ref,
         amount: String(amount),
@@ -206,7 +206,7 @@ export async function processInstantPayment(input: InstantPaymentInput): Promise
         type: "send",
         customerId: input.senderUserId,
         description: desc,
-        paymentMethod: "afrix",
+        paymentMethod: "iapay",
       });
       await tx.insert(transactionsTable).values({
         reference: `${ref}-R`,
@@ -215,8 +215,8 @@ export async function processInstantPayment(input: InstantPaymentInput): Promise
         status: "completed",
         type: "deposit",
         customerId: resolved.holderUserId,
-        description: `Afrix instant payment received (key: ${resolved.alias.aliasType})`,
-        paymentMethod: "afrix",
+        description: `IAPAY instant payment received (key: ${resolved.alias.aliasType})`,
+        paymentMethod: "iapay",
       });
 
       return row;
@@ -228,17 +228,17 @@ export async function processInstantPayment(input: InstantPaymentInput): Promise
     throw err;
   }
 
-  await checkAndCreateCTR(input.senderUserId, ref, amount, senderWallet.currency, "afrix");
+  await checkAndCreateCTR(input.senderUserId, ref, amount, senderWallet.currency, "iapay");
 
   await db.insert(notificationsTable).values({
     userId: resolved.holderUserId,
-    title: "Afrix Payment Received!",
-    message: `${recipientCurrency} ${recipientAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })} received instantly via Afrix`,
+    title: "IAPAY Payment Received!",
+    message: `${recipientCurrency} ${recipientAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })} received instantly via IAPAY`,
     type: "success",
   });
   await db.insert(auditLogsTable).values({
     userId: input.senderUserId,
-    action: "afrix_instant_payment",
+    action: "iapay_instant_payment",
     ip: "scheme-switch",
     meta: { ref, endToEndId, amount, currency: senderWallet.currency, recipientCurrency, fxRate, recipientAmount, alias: resolved.alias.aliasValue },
   });
@@ -248,8 +248,8 @@ export async function processInstantPayment(input: InstantPaymentInput): Promise
     status: "completed",
     amount: recipientAmount,
     currency: recipientCurrency,
-    provider: "afrix",
-    message: `Afrix payment received from ${input.senderEmail}`,
+    provider: "iapay",
+    message: `IAPAY payment received from ${input.senderEmail}`,
   });
 
   const [senderUser] = await db.select().from(usersTable).where(eq(usersTable.id, input.senderUserId));
@@ -258,7 +258,7 @@ export async function processInstantPayment(input: InstantPaymentInput): Promise
     emailService.sendTransferSentEmail(senderUser, { amount, currency: senderWallet.currency, recipient: resolved.holderName, reference: ref, fee: SCHEME_FEE }).catch(() => {});
   }
   if (recipientUser) {
-    emailService.sendTransferReceivedEmail(recipientUser, { amount: recipientAmount, currency: recipientCurrency, sender: senderUser ? `${senderUser.firstName} ${senderUser.lastName}` : "Afrix user", reference: ref }).catch(() => {});
+    emailService.sendTransferReceivedEmail(recipientUser, { amount: recipientAmount, currency: recipientCurrency, sender: senderUser ? `${senderUser.firstName} ${senderUser.lastName}` : "IAPAY user", reference: ref }).catch(() => {});
   }
 
   return {

@@ -1,8 +1,8 @@
-// AfrixQR — pan-African QR standard for the Afrix scheme.
+// IAPAY QR — pan-African QR standard for the IAPAY scheme.
 // EMVCo merchant-presented-mode compatible TLV payload (same family as Brazil's Pix "BR Code"),
 // terminated with a CRC-16/CCITT-FALSE checksum so any participant app can validate a scanned code.
 
-const AFRIX_GUI = "africa.afrix"; // globally unique identifier inside the merchant account info template
+const IAPAY_GUI = "africa.iapay"; // globally unique identifier inside the merchant account info template
 
 // EMV tag ids
 const TAG_PAYLOAD_FORMAT = "00";
@@ -46,7 +46,7 @@ export function crc16(payload: string): string {
   return crc.toString(16).toUpperCase().padStart(4, "0");
 }
 
-export interface AfriQrPayload {
+export interface IapayQrPayload {
   alias: string;
   participantCode: string;
   merchantName: string;
@@ -58,8 +58,8 @@ export interface AfriQrPayload {
   dynamic?: boolean;
 }
 
-export function encodeAfriQr(p: AfriQrPayload): string {
-  const account = tlv("00", AFRIX_GUI) + tlv("01", p.alias) + tlv("02", p.participantCode);
+export function encodeIapayQr(p: IapayQrPayload): string {
+  const account = tlv("00", IAPAY_GUI) + tlv("01", p.alias) + tlv("02", p.participantCode);
   let payload =
     tlv(TAG_PAYLOAD_FORMAT, "01") +
     tlv(TAG_INITIATION_METHOD, p.dynamic ? "12" : "11") +
@@ -75,7 +75,7 @@ export function encodeAfriQr(p: AfriQrPayload): string {
   return payload + crc16(payload);
 }
 
-export interface DecodedAfriQr {
+export interface DecodedIapayQr {
   valid: boolean;
   error?: string;
   alias?: string;
@@ -103,7 +103,7 @@ function parseTlv(data: string): Record<string, string> | null {
   return fields;
 }
 
-export function decodeAfriQr(payload: string): DecodedAfriQr {
+export function decodeIapayQr(payload: string): DecodedIapayQr {
   if (!payload || payload.length < 20) return { valid: false, error: "Payload too short" };
 
   const crcIndex = payload.lastIndexOf(TAG_CRC + "04");
@@ -116,7 +116,7 @@ export function decodeAfriQr(payload: string): DecodedAfriQr {
   if (!fields) return { valid: false, error: "Malformed TLV structure" };
 
   const account = fields[TAG_MERCHANT_ACCOUNT] ? parseTlv(fields[TAG_MERCHANT_ACCOUNT]) : null;
-  if (!account || account["00"] !== AFRIX_GUI) return { valid: false, error: "Not an Afrix QR code" };
+  if (!account || account["00"] !== IAPAY_GUI) return { valid: false, error: "Not an IAPAY QR code" };
 
   const additional = fields[TAG_ADDITIONAL] ? parseTlv(fields[TAG_ADDITIONAL]) : null;
 

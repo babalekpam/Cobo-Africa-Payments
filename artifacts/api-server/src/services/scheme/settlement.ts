@@ -1,4 +1,4 @@
-// Afrix Settlement — deferred multilateral net settlement between scheme participants.
+// IAPAY Settlement — deferred multilateral net settlement between scheme participants.
 // Cleared transfers accumulate in an open batch; closing the cycle nets every
 // participant's payables against receivables per currency (the model used by
 // card schemes like UnionPay and by PAPSS for cross-border netting), then marks

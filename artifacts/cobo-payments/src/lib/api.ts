@@ -1,7 +1,7 @@
 const API_BASE = "/api";
 
 async function request(method: string, path: string, body?: any, extraHeaders?: Record<string, string>) {
-  const token = localStorage.getItem("cobo_token");
+  const token = localStorage.getItem("iapay_token");
   const headers: Record<string, string> = { "Content-Type": "application/json", ...(extraHeaders || {}) };
   if (token) headers["Authorization"] = `Bearer ${token}`;
 

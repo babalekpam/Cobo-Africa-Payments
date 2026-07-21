@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="120" viewBox="0 0 420 120" role="img" aria-label="IAPAY — Inter-Africa Pay">
+  <rect width="420" height="120" rx="14" fill="#0F2B4C"/>
+  <circle cx="66" cy="60" r="30" fill="none" stroke="#E8A940" stroke-width="5"/>
+  <path d="M66 30 a30 30 0 0 1 0 60 M48 42 h36 M44 60 h44 M48 78 h36" fill="none" stroke="#E8A940" stroke-width="3" stroke-linecap="round"/>
+  <text x="116" y="68" font-family="Georgia, 'Times New Roman', serif" font-size="46" font-weight="700" fill="#E8A940" letter-spacing="2">IAPAY</text>
+  <text x="118" y="92" font-family="'DM Sans', -apple-system, sans-serif" font-size="14" fill="#8BADC4" letter-spacing="5">INTER-AFRICA PAY</text>
+</svg>

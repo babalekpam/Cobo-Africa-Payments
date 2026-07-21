@@ -44,7 +44,7 @@ const KEY_TYPES = [
   { value: 'random', label: 'Random' },
 ];
 
-export default function AfrixScreen() {
+export default function IAPAYScreen() {
   const [tab, setTab] = useState<Tab>('pay');
 
   // Pay
@@ -83,7 +83,7 @@ export default function AfrixScreen() {
       setResolved(data);
       setIdemKey(newIdemKey());
     } catch (e: any) {
-      Alert.alert('Not found', e.message || 'Afrix key not found in the network directory');
+      Alert.alert('Not found', e.message || 'IAPAY key not found in the network directory');
     } finally {
       setLoading(false);
     }
@@ -140,7 +140,7 @@ export default function AfrixScreen() {
       const data = await api.post<{ message: string }>(`/api/scheme/aliases/${id}/verify`, {
         code: verifyCodes[id] || '',
       });
-      Alert.alert('Afrix', data.message);
+      Alert.alert('IAPAY', data.message);
       loadAliases();
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Verification failed');
@@ -164,13 +164,13 @@ export default function AfrixScreen() {
       >
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
-            <Text style={styles.title}>⚡ Afrix</Text>
+            <Text style={styles.title}>⚡ IAPAY</Text>
             <View style={styles.badge}>
               <Text style={styles.badgeText}>Instant · 24/7 · Free</Text>
             </View>
           </View>
           <Text style={styles.subtitle}>
-            Pay any Afrix key across the pan-African network — phone, email or ID.
+            Pay any IAPAY key across the pan-African network — phone, email or ID.
           </Text>
 
           <View style={styles.tabRow}>
@@ -192,7 +192,7 @@ export default function AfrixScreen() {
 
           {tab === 'pay' && (
             <View style={styles.card}>
-              <Text style={styles.fieldLabel}>Afrix key</Text>
+              <Text style={styles.fieldLabel}>IAPAY key</Text>
               <View style={styles.lookupRow}>
                 <TextInput
                   style={[styles.input, { flex: 1 }]}

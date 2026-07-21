@@ -99,9 +99,9 @@ export default function Register() {
     <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div className="fade-in" style={{ width: "100%", maxWidth: 520 }}>
         <div style={{ textAlign: "center", marginBottom: 28 }}>
-          <img src={`${import.meta.env.BASE_URL}cobo-brand-logo.png`} alt="COBO Africa Payments" style={{ height: 48, borderRadius: 8, margin: "0 auto 16px" }} />
+          <img src={`${import.meta.env.BASE_URL}iapay-logo.svg`} alt="IAPAY (Inter-Africa Pay)" style={{ height: 48, borderRadius: 8, margin: "0 auto 16px" }} />
           <h1 style={{ fontFamily: "var(--font-heading)", fontSize: 28, fontWeight: 700, color: "var(--text)" }}>Create Account</h1>
-          <p style={{ color: "var(--text-dim)", fontSize: 14, marginTop: 4 }}>Join COBO Africa Payments Platform</p>
+          <p style={{ color: "var(--text-dim)", fontSize: 14, marginTop: 4 }}>Join IAPAY (Inter-Africa Pay) Platform</p>
         </div>
 
         <div style={{ display: "flex", gap: 8, marginBottom: 24, padding: "0 4px" }}>

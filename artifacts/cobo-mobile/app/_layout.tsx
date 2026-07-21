@@ -27,7 +27,7 @@ function RootLayoutNav() {
   }, [isAuthenticated, isLoading, segments, router]);
 
   if (isLoading) {
-    return <LoadingSpinner fullScreen message="Loading COBO Africa..." />;
+    return <LoadingSpinner fullScreen message="Loading IAPAY..." />;
   }
 
   return (

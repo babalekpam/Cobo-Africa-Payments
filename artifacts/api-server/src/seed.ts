@@ -6,7 +6,7 @@ import { logger } from "./lib/logger";
 function generateRef(): string {
   const ts = Date.now().toString(36).toUpperCase();
   const rand = Math.random().toString(36).substring(2, 7).toUpperCase();
-  return `COBO-${ts}-${rand}`;
+  return `IAPAY-${ts}-${rand}`;
 }
 
 async function seed() {
@@ -65,7 +65,7 @@ async function seed() {
     const existingNotif = await db.select().from(notificationsTable).where(eq(notificationsTable.userId, admin.id));
     if (existingNotif.length === 0) {
       await db.insert(notificationsTable).values([
-        { userId: admin.id, title: "Welcome to COBO! 🌍", message: "Your account is ready. Complete KYC to unlock full limits.", type: "success" },
+        { userId: admin.id, title: "Welcome to IAPAY! 🌍", message: "Your account is ready. Complete KYC to unlock full limits.", type: "success" },
         { userId: admin.id, title: "⚙ Admin access granted", message: "You are the admin — full access to all features.", type: "info" },
       ]);
     }
@@ -110,7 +110,7 @@ async function seed() {
         customerId: admin?.id,
         country: countries[Math.floor(Math.random() * countries.length)],
         paymentMethod: methods[Math.floor(Math.random() * methods.length)],
-        description: `Payment from COBO platform - transaction ${i + 1}`,
+        description: `Payment from IAPAY platform - transaction ${i + 1}`,
         createdAt,
       });
     }

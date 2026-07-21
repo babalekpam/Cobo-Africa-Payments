@@ -30,7 +30,7 @@ import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 import Checkout from "./pages/Checkout";
 import Receive from "./pages/Receive";
-import Afrix from "./pages/Afrix";
+import IAPAY from "./pages/IAPAY";
 import Landing from "./pages/Landing";
 import Compliance from "./pages/Compliance";
 import AmlPolicy from "./pages/AmlPolicy";
@@ -56,7 +56,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
       <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ textAlign: "center" }}>
           <div className="spinner" style={{ width: 32, height: 32, marginBottom: 12 }} />
-          <div style={{ color: "var(--text-dim)", fontSize: 14 }}>Loading COBO...</div>
+          <div style={{ color: "var(--text-dim)", fontSize: 14 }}>Loading IAPAY...</div>
         </div>
       </div>
     );
@@ -90,7 +90,7 @@ function AppRouter() {
             <Route path="/pay/:sessionId" component={Checkout} />
             <Route path="/dashboard" component={Dashboard} />
             <Route path="/wallets" component={Wallets} />
-            <Route path="/afrix" component={Afrix} />
+            <Route path="/iapay" component={IAPAY} />
             <Route path="/send" component={SendMoney} />
             <Route path="/receive" component={Receive} />
             <Route path="/deposit" component={Deposit} />

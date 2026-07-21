@@ -15,26 +15,26 @@ router.post("/ussd", async (req, res): Promise<void> => {
   let response = "";
 
   if (level === 0) {
-    response = `CON Welcome to COBO Africa
+    response = `CON Welcome to IAPAY
 1. Check Balance
 2. Send Money
 3. Mini Statement
 4. My Account
-5. Afrix Instant Pay
+5. IAPAY Instant Pay
 0. Exit`;
   } else if (inputs[0] === "0") {
-    response = "END Thank you for using COBO Africa. Goodbye!";
+    response = "END Thank you for using IAPAY. Goodbye!";
   } else if (inputs[0] === "1") {
     const user = await findUserByPhone(phoneNumber || "");
     if (!user) {
-      response = "END Account not found. Download the COBO app to register.";
+      response = "END Account not found. Download the IAPAY app to register.";
     } else {
       const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, user.id));
       if (wallets.length === 0) {
         response = "END No wallets found.";
       } else {
         const balanceLines = wallets.map((w: { currency: string; balance: string | number | null }) => `${w.currency}: ${Number(w.balance).toLocaleString()}`).join("\n");
-        response = `END Your COBO Balances:\n${balanceLines}`;
+        response = `END Your IAPAY Balances:\n${balanceLines}`;
       }
     }
   } else if (inputs[0] === "2") {
@@ -43,7 +43,7 @@ router.post("/ussd", async (req, res): Promise<void> => {
     } else if (level === 2) {
       response = "CON Enter amount:";
     } else if (level === 3) {
-      response = "CON Enter your COBO PIN:";
+      response = "CON Enter your IAPAY PIN:";
     } else if (level === 4) {
       const recipientPhone = inputs[1];
       const amount = parseFloat(inputs[2]);
@@ -69,7 +69,7 @@ router.post("/ussd", async (req, res): Promise<void> => {
           } else {
             const recipient = await findUserByPhone(recipientPhone);
             if (!recipient) {
-              response = `END Recipient not found on COBO. They must register first.`;
+              response = `END Recipient not found on IAPAY. They must register first.`;
             } else {
               const ref = `USSD${Date.now()}`;
               await db.update(walletsTable).set({ balance: String(Number(wallet.balance) - amount) }).where(eq(walletsTable.id, wallet.id));
@@ -122,44 +122,44 @@ router.post("/ussd", async (req, res): Promise<void> => {
     if (!user) {
       response = "END Account not found.";
     } else {
-      response = `END COBO Account\nName: ${user.firstName} ${user.lastName}\nEmail: ${user.email}\nKYC Level: ${user.kycLevel || 0}`;
+      response = `END IAPAY Account\nName: ${user.firstName} ${user.lastName}\nEmail: ${user.email}\nKYC Level: ${user.kycLevel || 0}`;
     }
   } else if (inputs[0] === "5") {
-    // Afrix — instant pay by key, on any feature phone. Goes through the same
+    // IAPAY — instant pay by key, on any feature phone. Goes through the same
     // switch engine as the app, so KYC limits, sanctions screening and atomic
     // clearing all apply.
     if (level === 1) {
-      response = `CON Afrix Instant Pay
-1. Pay an Afrix key
-2. My Afrix keys`;
+      response = `CON IAPAY Instant Pay
+1. Pay an IAPAY key
+2. My IAPAY keys`;
     } else if (inputs[1] === "2") {
       const user = await findUserByPhone(phoneNumber || "");
       if (!user) {
-        response = "END Account not found. Download the COBO app to register.";
+        response = "END Account not found. Download the IAPAY app to register.";
       } else {
         const keys = await listUserAliases(user.id);
         if (keys.length === 0) {
-          response = "END No Afrix keys yet. Register one in the COBO app.";
+          response = "END No IAPAY keys yet. Register one in the IAPAY app.";
         } else {
           const lines = keys
             .map((k) => `${k.aliasValue}${k.status === "active" ? "" : " (pending)"}`)
             .join("\n");
-          response = `END Your Afrix keys:\n${lines}`;
+          response = `END Your IAPAY keys:\n${lines}`;
         }
       }
     } else if (inputs[1] === "1") {
       if (level === 2) {
-        response = "CON Enter recipient's Afrix key (phone, email or ID):";
+        response = "CON Enter recipient's IAPAY key (phone, email or ID):";
       } else if (level === 3) {
         const resolved = await resolveAlias(inputs[2]);
         if (!resolved) {
-          response = "END Afrix key not found in the network directory.";
+          response = "END IAPAY key not found in the network directory.";
         } else {
           response = `CON Paying ${resolved.holderName} (${resolved.participant.name})
 Enter amount:`;
         }
       } else if (level === 4) {
-        response = "CON Enter your COBO PIN:";
+        response = "CON Enter your IAPAY PIN:";
       } else if (level === 5) {
         const key = inputs[2];
         const amount = parseFloat(inputs[3]);
@@ -183,12 +183,12 @@ Enter amount:`;
               alias: key,
               amount,
               walletId: defaultWallet?.id,
-              description: "Afrix payment via USSD",
+              description: "IAPAY payment via USSD",
             });
             if (!result.ok) {
               response = `END Payment failed: ${result.message}`;
             } else {
-              response = `END Afrix payment sent!
+              response = `END IAPAY payment sent!
 ${result.recipientCurrency} ${result.recipientAmount!.toLocaleString(undefined, { maximumFractionDigits: 2 })} to ${result.recipientName}
 Ref: ${result.transfer!.reference}
 Free - Instant - 24/7`;

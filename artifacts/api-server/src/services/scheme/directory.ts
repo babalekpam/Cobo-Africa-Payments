@@ -1,5 +1,5 @@
-// Afrix Directory — central alias registry for the scheme (equivalent of Pix's DICT).
-// Maps an Afrix Key (phone / email / national id / merchant id / random key) to the
+// IAPAY Directory — central alias registry for the scheme (equivalent of Pix's DICT).
+// Maps an IAPAY Key (phone / email / national id / merchant id / random key) to the
 // participant institution and account that should receive funds, network-wide.
 
 import { randomUUID, randomInt, createHash } from "crypto";
@@ -18,8 +18,8 @@ export type AliasType = (typeof ALIAS_TYPES)[number];
 
 export const MAX_ALIASES_PER_USER = 5; // Pix allows 5 keys per personal account
 
-// COBO itself is a scheme participant — the default institution for aliases registered on this platform
-export const HOME_PARTICIPANT_CODE = "COBOPANA";
+// IAPAY itself is a scheme participant — the default institution for aliases registered on this platform
+export const HOME_PARTICIPANT_CODE = "IAPAYPAN";
 
 export function normalizeAlias(type: string, value: string): string | null {
   const v = String(value || "").trim();
@@ -57,7 +57,7 @@ export function normalizeAlias(type: string, value: string): string | null {
 export function maskName(firstName?: string | null, lastName?: string | null): string {
   const mask = (s?: string | null) =>
     s && s.length > 1 ? `${s[0]}${"*".repeat(Math.min(s.length - 1, 6))}` : s || "";
-  return [mask(firstName), mask(lastName)].filter(Boolean).join(" ") || "Afrix user";
+  return [mask(firstName), mask(lastName)].filter(Boolean).join(" ") || "IAPAY user";
 }
 
 export async function getHomeParticipant(): Promise<SchemeParticipant | undefined> {
@@ -107,7 +107,7 @@ export async function registerAlias(
 
   const existing = await listUserAliases(userId);
   if (existing.length >= MAX_ALIASES_PER_USER) {
-    return { ok: false, status: 400, message: `Maximum ${MAX_ALIASES_PER_USER} Afrix keys per account` };
+    return { ok: false, status: 400, message: `Maximum ${MAX_ALIASES_PER_USER} IAPAY keys per account` };
   }
 
   const [taken] = await db.select().from(paymentAliasesTable).where(eq(paymentAliasesTable.aliasValue, value));
