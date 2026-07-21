@@ -92,6 +92,31 @@ router.post("/webhooks/flutterwave", async (req, res): Promise<void> => {
   res.json({ status: "ok" });
 });
 
+// Shared wallet reconciliation for pending mobile-money intents. transfers/mobile
+// moves amount+fee from balance into lockedBalance at initiation; on provider
+// finalization we either release the lock (success) or refund it (failure).
+async function settleIntentWallet(
+  intent: { walletId: number | null; amount: string | number; fee: string | number | null },
+  isSuccess: boolean,
+): Promise<void> {
+  if (!intent.walletId) return;
+  const [wallet] = await db.select().from(walletsTable).where(eq(walletsTable.id, intent.walletId));
+  if (!wallet) return;
+  const locked = Number(wallet.lockedBalance || 0);
+  const total = Number(intent.amount) + Number(intent.fee || 0);
+  if (isSuccess) {
+    await db.update(walletsTable).set({
+      lockedBalance: String(Math.max(0, locked - total)),
+    }).where(eq(walletsTable.id, intent.walletId));
+  } else {
+    // Refund locked funds back to available balance
+    await db.update(walletsTable).set({
+      balance: String(Number(wallet.balance) + total),
+      lockedBalance: String(Math.max(0, locked - total)),
+    }).where(eq(walletsTable.id, intent.walletId));
+  }
+}
+
 router.post("/webhooks/mpesa", requireCallbackSecret, async (req, res): Promise<void> => {
   const callback = (req.body as { Body?: { stkCallback?: { MerchantRequestID?: string; CheckoutRequestID?: string; ResultCode?: number; ResultDesc?: string; CallbackMetadata?: { Item?: Array<{ Name: string; Value?: unknown }> } } } })?.Body?.stkCallback;
   if (!callback) { res.json({ ResultCode: 0, ResultDesc: "Accepted" }); return; }
@@ -118,24 +143,7 @@ router.post("/webhooks/mpesa", requireCallbackSecret, async (req, res): Promise<
       await db.update(transactionsTable).set({ status: isSuccess ? "completed" : "failed" }).where(eq(transactionsTable.reference, intent.transactionReference));
     }
 
-    if (intent.walletId) {
-      const [wallet] = await db.select().from(walletsTable).where(eq(walletsTable.id, intent.walletId));
-      if (wallet) {
-        const locked = Number(wallet.lockedBalance || 0);
-        const total = Number(intent.amount) + Number(intent.fee || 0);
-        if (isSuccess) {
-          await db.update(walletsTable).set({
-            lockedBalance: String(Math.max(0, locked - total)),
-          }).where(eq(walletsTable.id, intent.walletId));
-        } else {
-          // Refund locked funds back to available balance
-          await db.update(walletsTable).set({
-            balance: String(Number(wallet.balance) + total),
-            lockedBalance: String(Math.max(0, locked - total)),
-          }).where(eq(walletsTable.id, intent.walletId));
-        }
-      }
-    }
+    await settleIntentWallet(intent, isSuccess);
 
     await db.insert(notificationsTable).values({
       userId: intent.userId,
@@ -178,6 +186,8 @@ router.post("/webhooks/mtn", requireCallbackSecret, async (req, res): Promise<vo
     if (intent.transactionReference) {
       await db.update(transactionsTable).set({ status: isSuccess ? "completed" : "failed" }).where(eq(transactionsTable.reference, intent.transactionReference));
     }
+
+    await settleIntentWallet(intent, isSuccess);
 
     await db.insert(notificationsTable).values({
       userId: intent.userId,
@@ -224,6 +234,8 @@ router.post("/webhooks/airtel", requireCallbackSecret, async (req, res): Promise
     if (intent.transactionReference) {
       await db.update(transactionsTable).set({ status: isSuccess ? "completed" : "failed" }).where(eq(transactionsTable.reference, intent.transactionReference));
     }
+
+    await settleIntentWallet(intent, isSuccess);
 
     await db.insert(notificationsTable).values({
       userId: intent.userId,
