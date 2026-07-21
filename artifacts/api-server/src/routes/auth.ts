@@ -3,6 +3,7 @@ import { eq, and, count, sum, sql, desc, gt } from "drizzle-orm";
 import { db, usersTable, walletsTable, transactionsTable, notificationsTable, kycDocumentsTable, auditLogsTable } from "@workspace/db";
 import { LoginBody } from "@workspace/api-zod";
 import { hashPassword, comparePassword, signToken } from "../lib/auth";
+import { validatePassword } from "../lib/security.js";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
 import { emailService } from "../services/email";
 import crypto from "crypto";
@@ -36,6 +37,11 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   const { email, password, first_name, last_name, country, business_name, phone, id_type, id_number, date_of_birth } = req.body;
   if (!email || !password || !first_name || !last_name) {
     res.status(400).json({ success: false, message: "Missing required fields" });
+    return;
+  }
+  const passwordError = validatePassword(password);
+  if (passwordError) {
+    res.status(400).json({ success: false, message: passwordError });
     return;
   }
   const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, email));
@@ -130,7 +136,8 @@ router.put("/auth/profile", requireAuth, async (req: AuthenticatedRequest, res):
 
 router.post("/auth/change-password", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
   const { current_password, new_password } = req.body;
-  if (!current_password || !new_password || new_password.length < 8) { res.status(400).json({ success: false, message: "Invalid password data" }); return; }
+  const pwErr = !current_password ? "Current password required" : validatePassword(new_password);
+  if (pwErr) { res.status(400).json({ success: false, message: pwErr }); return; }
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id));
   if (!comparePassword(current_password, user.passwordHash)) { res.status(400).json({ success: false, message: "Current password incorrect" }); return; }
   await db.update(usersTable).set({ passwordHash: hashPassword(new_password) }).where(eq(usersTable.id, req.user!.id));
@@ -158,8 +165,9 @@ router.post("/auth/forgot-password", async (req, res): Promise<void> => {
 
 router.post("/auth/reset-password", async (req, res): Promise<void> => {
   const { token, new_password } = req.body;
-  if (!token || !new_password || new_password.length < 8) {
-    res.status(400).json({ success: false, message: "Token and new password (min 8 chars) required" });
+  const resetPwErr = !token ? "Reset token required" : validatePassword(new_password);
+  if (resetPwErr) {
+    res.status(400).json({ success: false, message: resetPwErr });
     return;
   }
   const hashedToken = crypto.createHash("sha256").update(token).digest("hex");

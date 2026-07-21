@@ -186,6 +186,19 @@ DB tables: `api_keys` (hashed key storage), `checkout_sessions`, `webhook_events
 - **Compliance libs**: `lib/ctr.ts` (CTR generation), `lib/ofac.ts` (SDN screening + country risk), `lib/refgen.ts` (UUID-based refs)
 - **DB tables**: `ctr_reports`, `edd_reviews`, `sanctions_screening`, `suspicious_activity`
 
+## Security Hardening (2026-07 audit)
+
+- **WebSockets authenticated**: socket.io handshake requires the JWT (`auth: { token }`); clients are joined only to their own `user:<id>` room derived from the verified token — subscribe payloads are ignored. Web client sends the token from `iapay_token`.
+- **Webhooks fail closed**: Flutterwave requires `FLUTTERWAVE_WEBHOOK_HASH` (timing-safe compare; rejected in production if unset). M-Pesa/MTN/Airtel callbacks must present the `?cb=<secret>` appended to callback URLs at initiation — set `WEBHOOK_CALLBACK_SECRET` (per-boot random fallback outside production).
+- **USSD gateway auth**: `/api/ussd` requires `USSD_GATEWAY_SECRET` (via `?secret=` or `X-USSD-Secret`; fail closed in production). Wrong PINs lock the phone number out after 5 attempts for 15 min. USSD sends now enforce KYC daily limits and run in a row-locked DB transaction.
+- **OTP brute-force cap**: IAPAY key verification allows 5 wrong codes then a 15-min lockout; comparisons are constant-time.
+- **HTTP layer**: helmet (HSTS 1y, nosniff, frameguard; CSP off for HTML receipts), CORS allowlist via `CORS_ORIGINS` (default cob-o.com + localhost dev), `trust proxy = 1` so rate limits key real client IPs behind nginx, JSON/urlencoded body limit 200kb.
+- **Passwords**: min 8 chars + common-password blocklist enforced on register, change, and reset (`lib/security.ts:validatePassword`).
+- **Sessions**: JWT expiry default 24h (override with `JWT_EXPIRES_IN`). `JWT_SECRET` is required at boot (no fallback).
+- **SSRF**: merchant webhook URLs also reject IPv6 loopback/link-local/unique-local, `::ffff:` mapped, and non-dotted numeric IP encodings.
+- Security env vars: `JWT_SECRET` (required), `JWT_EXPIRES_IN`, `CORS_ORIGINS`, `WEBHOOK_CALLBACK_SECRET`, `FLUTTERWAVE_WEBHOOK_HASH`, `USSD_GATEWAY_SECRET`, `WEBHOOK_SIGNING_SECRET` (outgoing merchant webhook HMAC).
+- Known residual (single-instance assumptions): OTP/PIN lockout counters and idempotency cache are in-memory — move to Redis before horizontal scaling.
+
 ## Security Features
 
 - **2FA (TOTP)**: Setup via QR code, verify with authenticator app, disable with password

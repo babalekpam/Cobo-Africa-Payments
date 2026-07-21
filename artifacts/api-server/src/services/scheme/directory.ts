@@ -4,6 +4,7 @@
 
 import { randomUUID, randomInt, createHash } from "crypto";
 import { eq, and } from "drizzle-orm";
+import { safeEqual, isLockedOut, recordFailedAttempt, clearAttempts } from "../../lib/security.js";
 import {
   db,
   paymentAliasesTable,
@@ -170,9 +171,22 @@ export async function verifyAlias(userId: number, aliasId: number, code: string)
   if (!alias.verificationExpires || alias.verificationExpires.getTime() < Date.now()) {
     return { ok: false, status: 410, message: "Verification code expired. Remove the key and register it again." };
   }
-  if (hashOtp(String(code || "").trim()) !== alias.verificationCode) {
-    return { ok: false, status: 400, message: "Incorrect verification code" };
+
+  // A 6-digit OTP is only safe with an attempt cap: 5 wrong guesses locks the
+  // key for 15 minutes (and comparison is constant-time).
+  const attemptKey = `otp:${alias.id}`;
+  if (isLockedOut(attemptKey)) {
+    return { ok: false, status: 429, message: "Too many wrong codes. Try again in 15 minutes." };
   }
+  if (!safeEqual(hashOtp(String(code || "").trim()), alias.verificationCode)) {
+    const { locked, remaining } = recordFailedAttempt(attemptKey);
+    return {
+      ok: false,
+      status: locked ? 429 : 400,
+      message: locked ? "Too many wrong codes. Try again in 15 minutes." : `Incorrect verification code (${remaining} attempts left)`,
+    };
+  }
+  clearAttempts(attemptKey);
 
   const [updated] = await db
     .update(paymentAliasesTable)

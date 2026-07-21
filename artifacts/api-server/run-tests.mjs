@@ -25,6 +25,8 @@ await build({
   platform: "node",
   outExtension: { ".js": ".mjs" },
   logLevel: "silent",
+  // CJS deps (pino) use dynamic require; provide it in the ESM bundle
+  banner: { js: "import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);" },
 });
 
 const bundled = readdirSync(outDir)

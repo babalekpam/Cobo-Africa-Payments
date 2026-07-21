@@ -9,6 +9,7 @@ import { screenAgainstOFAC, assessCountryRisk as checkCountry } from "../lib/ofa
 import { getRate } from "../services/fxRates.js";
 import { initiateTransfer } from "../services/paymentGateway.js";
 import { checkDailyLimit, sentTodayUSD, KYC_LIMITS } from "../lib/limits.js";
+import { getCallbackSecret } from "../lib/security.js";
 
 const router: IRouter = Router();
 const FEE_RATE = 0.005;
@@ -162,12 +163,13 @@ router.post("/transfers/mobile", requireAuth, async (req: AuthenticatedRequest, 
   });
 
   const webhookBase = process.env.WEBHOOK_BASE_URL || "https://api.cob-o.com";
+  // ?cb= proves the callback came through a URL only we and the provider know
   const callbackUrl = `${webhookBase}/api/webhooks/${
     (provider || "").toLowerCase().includes("pesa") || wallet.currency === "KES" ? "mpesa" :
     (provider || "").toLowerCase().includes("mtn") ? "mtn" :
     (provider || "").toLowerCase().includes("airtel") ? "airtel" :
     "flutterwave"
-  }`;
+  }?cb=${getCallbackSecret()}`;
 
   const gatewayResult = await initiateTransfer({
     amount: Number(amount),

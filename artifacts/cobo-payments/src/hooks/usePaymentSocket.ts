@@ -26,13 +26,12 @@ export function usePaymentSocket(
     const socket = io(SOCKET_URL, {
       path: "/socket.io",
       transports: ["websocket", "polling"],
+      // The server authenticates the handshake and joins us to our own room —
+      // the room comes from the verified token, not from anything we send.
+      auth: { token: localStorage.getItem("iapay_token") || "" },
     });
 
     socketRef.current = socket;
-
-    socket.on("connect", () => {
-      socket.emit("subscribe", userId);
-    });
 
     socket.on("payment:update", (data: PaymentUpdate) => {
       callbackRef.current(data);
