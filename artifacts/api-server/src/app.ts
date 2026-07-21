@@ -6,7 +6,6 @@ import router from "./routes/index.js";
 import { logger } from "./lib/logger.js";
 import { allowedOrigins } from "./lib/security.js";
 import { generalRateLimit, authRateLimit } from "./middlewares/rateLimit.js";
-import { idempotencyMiddleware } from "./middlewares/idempotency.js";
 import { initFxRates } from "./services/fxRates.js";
 
 const app: Express = express();
@@ -53,7 +52,6 @@ app.use(express.urlencoded({ extended: true, limit: "200kb" }));
 
 app.use(generalRateLimit);
 app.use("/api/auth", authRateLimit);
-app.use(idempotencyMiddleware);
 
 app.use("/api", router);
 
