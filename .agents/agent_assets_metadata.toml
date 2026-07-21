@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "XkQXXFOiNiCKRW_oPhT_-"
+uri = "file://artifacts/mockup-sandbox/public/africa-map.png"
+type = "image"
+title = "Abstract tech map of Africa"
