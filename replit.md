@@ -135,28 +135,28 @@ All prefixed with `/api`:
 - `GET /api/pay/:sessionId/info` — Get checkout info (public)
 - `POST /api/pay/:sessionId/complete` — Complete payment (public)
 
-## AfriPay — Pan-African Instant Payment Scheme
+## Afrix — Pan-African Instant Payment Scheme
 
-COBO operates **AfriPay**, a Pix/UnionPay-style payment scheme layer for Africa:
+COBO operates **Afrix**, a Pix/UnionPay-style payment scheme layer for Africa:
 
-- **AfriPay Keys** (like Pix keys): users register up to 5 aliases — phone, email, national ID, merchant ID, or random UUID — in a network-wide directory. A key resolves to the holder's institution + account; lookups return masked holder names for privacy.
-- **Instant switch**: `POST /api/scheme/pay` clears payments 24/7 with zero fees, cross-currency FX at scheme rates, OFAC screening at the switch, ISO 20022-style end-to-end IDs (`E<participant><date><uuid>`), WebSocket + email notifications.
-- **AfriQR**: EMVCo merchant-presented-mode compatible TLV QR standard (GUI `africa.afripay`) with CRC-16/CCITT-FALSE — like Brazil's BR Code. Static (any amount) and dynamic (fixed amount) codes.
+- **Afrix Keys** (like Pix keys): users register up to 5 aliases — phone, email, national ID, merchant ID, or random UUID — in a network-wide directory. A key resolves to the holder's institution + account; lookups return masked holder names for privacy. **Ownership is verified**: phone/email keys require a 6-digit OTP delivered to the claimed phone/email (SHA-256-hashed, 15-min expiry; `POST /api/scheme/aliases/:id/verify`; sandbox returns `dev_code` outside production); national ID keys require verified KYC; only `active` keys resolve or generate QRs. SMS goes via `services/sms.ts` (Africa's Talking `AT_API_KEY`/`AT_USERNAME` or Twilio `TWILIO_*` env vars; console no-op otherwise).
+- **Instant switch**: `POST /api/scheme/pay` clears payments 24/7 with zero fees, cross-currency FX at scheme rates, OFAC screening at the switch, ISO 20022-style end-to-end IDs (`E<participant><date><uuid>`), WebSocket + email notifications. **Hardened**: KYC daily limits enforced in USD terms (shared `lib/limits.ts`, same tiers as all other rails); clearing runs in a single DB transaction with `SELECT ... FOR UPDATE` on the sender wallet + set-based balance increments (no double-spend, no half-cleared payments); `Idempotency-Key` header support (scoped per user) so client retries never clear twice; `transferRateLimit` on pay and `directoryLookupRateLimit` (15/min) on `/api/scheme/resolve` to prevent directory scraping.
+- **AfrixQR**: EMVCo merchant-presented-mode compatible TLV QR standard (GUI `africa.afrix`) with CRC-16/CCITT-FALSE — like Brazil's BR Code. Static (any amount) and dynamic (fixed amount) codes.
 - **Participants**: 15 seeded member institutions (banks, mobile money operators, fintechs) across KE, NG, GH, UG, CI, ZA, ET, SN, TZ, RW, MA, EG. Seeded idempotently at server boot (`ensureSchemeParticipants`). Admins can add more.
 - **Clearing & settlement**: cleared transfers accumulate in an open settlement batch; `POST /api/scheme/settlement/close` (admin) runs multilateral netting per participant per currency (deferred net settlement, like card schemes/PAPSS) and updates participants' USD settlement balances.
 
 Scheme routes (all under `/api`):
-- `GET/POST /api/scheme/aliases`, `DELETE /api/scheme/aliases/:id` — manage AfriPay keys
+- `GET/POST /api/scheme/aliases`, `DELETE /api/scheme/aliases/:id` — manage Afrix keys
 - `GET /api/scheme/resolve?key=` — directory lookup (masked)
 - `POST /api/scheme/pay` — instant payment by key
 - `GET /api/scheme/transfers`, `GET /api/scheme/transfers/:reference` — scheme transfer history/status
-- `POST /api/scheme/qr/generate`, `POST /api/scheme/qr/decode` — AfriQR
+- `POST /api/scheme/qr/generate`, `POST /api/scheme/qr/decode` — AfrixQR
 - `GET /api/scheme/participants`, `GET /api/scheme/stats` — network registry & stats
 - Admin: `POST /api/scheme/participants`, `POST /api/scheme/settlement/close`, `GET /api/scheme/settlement/batches[/:id]`
 
 DB tables: `scheme_participants`, `payment_aliases`, `scheme_transfers`, `settlement_batches`, `settlement_positions` (schema in `lib/db/src/schema/scheme.ts`; DDL also in deploy.sh migration block).
 Backend code: `api-server/src/services/scheme/` (directory.ts, switchEngine.ts, settlement.ts, qrStandard.ts, participants.ts) + `routes/scheme.ts`.
-Frontend: `/afripay` page (⚡ nav item) with tabs: Pay a key, My keys, Receive (AfriQR), Network.
+Frontend: `/afrix` page (⚡ nav item) with tabs: Pay a key, My keys, Receive (AfrixQR), Network.
 
 ## Checkout API (Stripe-like)
 

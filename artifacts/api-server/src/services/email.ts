@@ -90,6 +90,9 @@ export const emailService = {
   sendKycRejectedEmail: (u: any, reason: string) =>
     send(u.email, "KYC Verification Update", `<h2 style="color:#D93636">Verification Needs Attention</h2><p style="color:#2C2416;margin-bottom:16px">We reviewed your submitted documents and need additional information.</p><div class="row" style="border:none"><span>Reason</span><span style="color:#D93636">${reason}</span></div><a href="${BASE}/verification" class="btn">Resubmit Documents</a>`),
 
+  sendKeyVerificationEmail: (to: string, code: string) =>
+    send(to, `${code} is your Afrix key verification code`, `<h2 style="color:${G}">Verify your Afrix key</h2><p style="color:#2C2416;margin-bottom:16px">Someone (hopefully you) is registering this email address as an Afrix payment key. Enter this code to confirm you own it. <strong>Expires in 15 minutes.</strong></p><div style="background:#FAF7F2;border-radius:8px;padding:20px;text-align:center;font-size:32px;font-weight:700;letter-spacing:8px;color:${G}">${code}</div><p style="color:#9A8F75;font-size:12px;margin-top:16px">If you didn't request this, ignore this email — the key will expire unverified.</p>`),
+
   sendSarAlertEmail: (to: string, d: { userId: number; reason: string; amount: number; currency: string }) =>
     send(to, "[COMPLIANCE] Suspicious Activity Report Filed", `<h2 style="color:#D93636">SAR Alert</h2><p style="color:#2C2416;margin-bottom:16px">A Suspicious Activity Report has been generated.</p><div class="row"><span>User ID</span><span>#${d.userId}</span></div><div class="row"><span>Amount</span><span style="font-weight:700">${d.currency} ${d.amount.toLocaleString()}</span></div><div class="row" style="border:none"><span>Reason</span><span style="color:#D93636">${d.reason}</span></div><p style="color:#9A8F75;font-size:12px;margin-top:16px">This is an automated compliance notification.</p>`),
 

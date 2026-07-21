@@ -92,8 +92,12 @@ if [ "$DEPLOY_API" = true ]; then
       account_ref TEXT NOT NULL,
       currency TEXT NOT NULL DEFAULT 'USD',
       status TEXT NOT NULL DEFAULT 'active',
+      verification_code TEXT,
+      verification_expires TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    ALTER TABLE payment_aliases ADD COLUMN IF NOT EXISTS verification_code TEXT;
+    ALTER TABLE payment_aliases ADD COLUMN IF NOT EXISTS verification_expires TIMESTAMPTZ;
     CREATE INDEX IF NOT EXISTS payment_aliases_user_id_idx ON payment_aliases(user_id);
     CREATE TABLE IF NOT EXISTS scheme_transfers (
       id SERIAL PRIMARY KEY,

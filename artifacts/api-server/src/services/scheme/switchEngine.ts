@@ -1,11 +1,11 @@
-// AfriPay Switch — the scheme's instant payment engine (equivalent of Pix's SPI or
+// Afrix Switch — the scheme's instant payment engine (equivalent of Pix's SPI or
 // a card network's authorization switch). Resolves the recipient key through the
 // directory, screens for sanctions, converts currency at scheme FX rates, clears the
 // payment instantly (24/7), and queues it for deferred net settlement between the
 // sender's and recipient's institutions.
 
 import { randomUUID } from "crypto";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import {
   db,
   walletsTable,
@@ -21,6 +21,7 @@ import { getRate } from "../fxRates.js";
 import { screenAgainstOFAC } from "../../lib/ofac.js";
 import { checkAndCreateCTR } from "../../lib/ctr.js";
 import { generateRef } from "../../lib/refgen.js";
+import { checkDailyLimit, getKycLevel } from "../../lib/limits.js";
 import { emitPaymentUpdate } from "../socketio.js";
 import { emailService } from "../email.js";
 import { resolveAlias, getHomeParticipant, type ResolvedAlias } from "./directory.js";
@@ -29,7 +30,7 @@ import { resolveAlias, getHomeParticipant, type ResolvedAlias } from "./director
 const SCHEME_FEE = 0;
 
 export function generateSchemeRef(): string {
-  return generateRef("AFP");
+  return generateRef("AFX");
 }
 
 // ISO 20022-flavoured end-to-end id, unique across the whole network
@@ -77,9 +78,9 @@ export async function processInstantPayment(input: InstantPaymentInput): Promise
 
   // 1. Directory lookup
   const resolved: ResolvedAlias | null = await resolveAlias(input.alias);
-  if (!resolved) return { ok: false, status: 404, message: "AfriPay key not found in the network directory", code: "KEY_NOT_FOUND" };
+  if (!resolved) return { ok: false, status: 404, message: "Afrix key not found in the network directory", code: "KEY_NOT_FOUND" };
   if (resolved.holderUserId === input.senderUserId) {
-    return { ok: false, status: 400, message: "Cannot send to your own AfriPay key" };
+    return { ok: false, status: 400, message: "Cannot send to your own Afrix key" };
   }
 
   // 2. Sender wallet
@@ -101,7 +102,16 @@ export async function processInstantPayment(input: InstantPaymentInput): Promise
     return { ok: false, status: 400, message: "Insufficient funds" };
   }
 
-  // 3. Sanctions screening at the switch — every payment, every time
+  // 3a. KYC daily limits — same tiers as every other rail, in USD terms
+  const usdRate = senderWallet.currency === "USD" ? 1 : await getRate(senderWallet.currency, "USD");
+  const amountUSD = amount * (usdRate || 1);
+  const kycLevel = await getKycLevel(input.senderUserId);
+  const limitCheck = await checkDailyLimit(input.senderUserId, kycLevel, amountUSD);
+  if (!limitCheck.allowed) {
+    return { ok: false, status: 403, message: limitCheck.message || "Daily limit exceeded", code: limitCheck.code };
+  }
+
+  // 3b. Sanctions screening at the switch — every payment, every time
   const ofac = screenAgainstOFAC(resolved.holderName);
   if (!ofac.clear && ofac.riskScore >= 80) {
     return { ok: false, status: 403, message: "Payment flagged for compliance review. Contact support.", code: "SANCTIONS_FLAG" };
@@ -125,84 +135,110 @@ export async function processInstantPayment(input: InstantPaymentInput): Promise
   const endToEndId = generateEndToEndId(home?.code || "COBOPANA");
   const batchId = await currentOpenBatch();
 
-  // 5. Clearing — instant debit/credit, 24/7 (settlement between institutions is deferred)
-  await db
-    .update(walletsTable)
-    .set({ balance: String(Number(senderWallet.balance) - amount - SCHEME_FEE) })
-    .where(eq(walletsTable.id, senderWallet.id));
+  // 5. Clearing — instant debit/credit, 24/7 (settlement between institutions is
+  // deferred). Runs as one database transaction: the sender wallet row is locked
+  // (SELECT ... FOR UPDATE) so concurrent payments can't double-spend, and either
+  // every leg commits (debit, credit, transfer + ledger rows) or none do.
+  const total = amount + SCHEME_FEE;
+  let transfer: SchemeTransfer;
+  try {
+    transfer = await db.transaction(async (tx) => {
+      const [lockedSender] = await tx
+        .select()
+        .from(walletsTable)
+        .where(eq(walletsTable.id, senderWallet.id))
+        .for("update");
+      if (!lockedSender || Number(lockedSender.balance) < total) {
+        throw new Error("INSUFFICIENT_FUNDS");
+      }
 
-  let [recipientWallet] = await db
-    .select()
-    .from(walletsTable)
-    .where(and(eq(walletsTable.userId, resolved.holderUserId), eq(walletsTable.currency, recipientCurrency)));
-  if (!recipientWallet) {
-    [recipientWallet] = await db
-      .insert(walletsTable)
-      .values({ userId: resolved.holderUserId, currency: recipientCurrency })
-      .returning();
+      await tx
+        .update(walletsTable)
+        .set({ balance: sql`${walletsTable.balance} - ${String(total)}` })
+        .where(eq(walletsTable.id, lockedSender.id));
+
+      let [recipientWallet] = await tx
+        .select()
+        .from(walletsTable)
+        .where(and(eq(walletsTable.userId, resolved.holderUserId), eq(walletsTable.currency, recipientCurrency)))
+        .for("update");
+      if (!recipientWallet) {
+        [recipientWallet] = await tx
+          .insert(walletsTable)
+          .values({ userId: resolved.holderUserId, currency: recipientCurrency })
+          .returning();
+      }
+      await tx
+        .update(walletsTable)
+        .set({ balance: sql`${walletsTable.balance} + ${String(recipientAmount)}` })
+        .where(eq(walletsTable.id, recipientWallet.id));
+
+      const [row] = await tx
+        .insert(schemeTransfersTable)
+        .values({
+          reference: ref,
+          endToEndId,
+          senderUserId: input.senderUserId,
+          senderParticipantId,
+          recipientAlias: resolved.alias.aliasValue,
+          recipientUserId: resolved.holderUserId,
+          recipientParticipantId: resolved.participant.id,
+          amount: String(amount),
+          currency: senderWallet.currency,
+          recipientAmount: String(recipientAmount),
+          recipientCurrency,
+          fxRate: fxRate ? String(fxRate) : null,
+          fee: String(SCHEME_FEE),
+          status: "cleared",
+          clearedAt: new Date(),
+          qrRef: input.qrRef || null,
+          settlementBatchId: batchId,
+          metadata: { description: input.description || null, aliasType: resolved.alias.aliasType },
+        })
+        .returning();
+
+      const desc = input.description || `Afrix instant payment to ${resolved.holderName}`;
+      await tx.insert(transactionsTable).values({
+        reference: ref,
+        amount: String(amount),
+        currency: senderWallet.currency,
+        status: "completed",
+        type: "send",
+        customerId: input.senderUserId,
+        description: desc,
+        paymentMethod: "afrix",
+      });
+      await tx.insert(transactionsTable).values({
+        reference: `${ref}-R`,
+        amount: String(recipientAmount),
+        currency: recipientCurrency,
+        status: "completed",
+        type: "deposit",
+        customerId: resolved.holderUserId,
+        description: `Afrix instant payment received (key: ${resolved.alias.aliasType})`,
+        paymentMethod: "afrix",
+      });
+
+      return row;
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === "INSUFFICIENT_FUNDS") {
+      return { ok: false, status: 400, message: "Insufficient funds" };
+    }
+    throw err;
   }
-  await db
-    .update(walletsTable)
-    .set({ balance: String(Number(recipientWallet.balance) + recipientAmount) })
-    .where(eq(walletsTable.id, recipientWallet.id));
 
-  const [transfer] = await db
-    .insert(schemeTransfersTable)
-    .values({
-      reference: ref,
-      endToEndId,
-      senderUserId: input.senderUserId,
-      senderParticipantId,
-      recipientAlias: resolved.alias.aliasValue,
-      recipientUserId: resolved.holderUserId,
-      recipientParticipantId: resolved.participant.id,
-      amount: String(amount),
-      currency: senderWallet.currency,
-      recipientAmount: String(recipientAmount),
-      recipientCurrency,
-      fxRate: fxRate ? String(fxRate) : null,
-      fee: String(SCHEME_FEE),
-      status: "cleared",
-      clearedAt: new Date(),
-      qrRef: input.qrRef || null,
-      settlementBatchId: batchId,
-      metadata: { description: input.description || null, aliasType: resolved.alias.aliasType },
-    })
-    .returning();
-
-  const desc = input.description || `AfriPay instant payment to ${resolved.holderName}`;
-  await db.insert(transactionsTable).values({
-    reference: ref,
-    amount: String(amount),
-    currency: senderWallet.currency,
-    status: "completed",
-    type: "send",
-    customerId: input.senderUserId,
-    description: desc,
-    paymentMethod: "afripay",
-  });
-  await db.insert(transactionsTable).values({
-    reference: `${ref}-R`,
-    amount: String(recipientAmount),
-    currency: recipientCurrency,
-    status: "completed",
-    type: "deposit",
-    customerId: resolved.holderUserId,
-    description: `AfriPay instant payment received (key: ${resolved.alias.aliasType})`,
-    paymentMethod: "afripay",
-  });
-
-  await checkAndCreateCTR(input.senderUserId, ref, amount, senderWallet.currency, "afripay");
+  await checkAndCreateCTR(input.senderUserId, ref, amount, senderWallet.currency, "afrix");
 
   await db.insert(notificationsTable).values({
     userId: resolved.holderUserId,
-    title: "AfriPay Payment Received!",
-    message: `${recipientCurrency} ${recipientAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })} received instantly via AfriPay`,
+    title: "Afrix Payment Received!",
+    message: `${recipientCurrency} ${recipientAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })} received instantly via Afrix`,
     type: "success",
   });
   await db.insert(auditLogsTable).values({
     userId: input.senderUserId,
-    action: "afripay_instant_payment",
+    action: "afrix_instant_payment",
     ip: "scheme-switch",
     meta: { ref, endToEndId, amount, currency: senderWallet.currency, recipientCurrency, fxRate, recipientAmount, alias: resolved.alias.aliasValue },
   });
@@ -212,8 +248,8 @@ export async function processInstantPayment(input: InstantPaymentInput): Promise
     status: "completed",
     amount: recipientAmount,
     currency: recipientCurrency,
-    provider: "afripay",
-    message: `AfriPay payment received from ${input.senderEmail}`,
+    provider: "afrix",
+    message: `Afrix payment received from ${input.senderEmail}`,
   });
 
   const [senderUser] = await db.select().from(usersTable).where(eq(usersTable.id, input.senderUserId));
@@ -222,7 +258,7 @@ export async function processInstantPayment(input: InstantPaymentInput): Promise
     emailService.sendTransferSentEmail(senderUser, { amount, currency: senderWallet.currency, recipient: resolved.holderName, reference: ref, fee: SCHEME_FEE }).catch(() => {});
   }
   if (recipientUser) {
-    emailService.sendTransferReceivedEmail(recipientUser, { amount: recipientAmount, currency: recipientCurrency, sender: senderUser ? `${senderUser.firstName} ${senderUser.lastName}` : "AfriPay user", reference: ref }).catch(() => {});
+    emailService.sendTransferReceivedEmail(recipientUser, { amount: recipientAmount, currency: recipientCurrency, sender: senderUser ? `${senderUser.firstName} ${senderUser.lastName}` : "Afrix user", reference: ref }).catch(() => {});
   }
 
   return {

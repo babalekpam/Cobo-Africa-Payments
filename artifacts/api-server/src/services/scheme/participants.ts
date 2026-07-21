@@ -1,4 +1,4 @@
-// AfriPay participant onboarding — seeds the scheme's founding member institutions.
+// Afrix participant onboarding — seeds the scheme's founding member institutions.
 // In production each of these would be a licensed bank, mobile money operator or
 // fintech connected to the switch through its own API endpoint; here they give the
 // network realistic multi-country coverage out of the box.
@@ -34,8 +34,8 @@ export async function ensureSchemeParticipants(): Promise<void> {
         await db.insert(schemeParticipantsTable).values({ ...p });
       }
     }
-    logger.info("AfriPay scheme participants ensured");
+    logger.info("Afrix scheme participants ensured");
   } catch (err) {
-    logger.warn({ err }, "Could not seed AfriPay participants (table may not exist yet — run db push)");
+    logger.warn({ err }, "Could not seed Afrix participants (table may not exist yet — run db push)");
   }
 }

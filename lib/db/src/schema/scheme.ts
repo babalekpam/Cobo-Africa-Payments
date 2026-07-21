@@ -2,7 +2,7 @@ import { pgTable, text, serial, timestamp, numeric, integer, jsonb } from "drizz
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-// AfriPay — Pan-African Instant Payment Scheme
+// Afrix — Pan-African Instant Payment Scheme
 // Participant institutions: banks, mobile money operators, fintechs that are members of the scheme
 export const schemeParticipantsTable = pgTable("scheme_participants", {
   id: serial("id").primaryKey(),
@@ -17,7 +17,7 @@ export const schemeParticipantsTable = pgTable("scheme_participants", {
   joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// AfriPay Keys — alias directory (like Pix keys / DICT)
+// Afrix Keys — alias directory (like Pix keys / DICT)
 export const paymentAliasesTable = pgTable("payment_aliases", {
   id: serial("id").primaryKey(),
   aliasType: text("alias_type").notNull(), // phone | email | national_id | merchant_id | random
@@ -26,7 +26,9 @@ export const paymentAliasesTable = pgTable("payment_aliases", {
   participantId: integer("participant_id").notNull(),
   accountRef: text("account_ref").notNull(), // wallet/account identifier at the participant
   currency: text("currency").notNull().default("USD"), // preferred receive currency
-  status: text("status").notNull().default("active"), // active | inactive | portability_pending
+  status: text("status").notNull().default("active"), // active | pending_verification | inactive | portability_pending
+  verificationCode: text("verification_code"), // sha256 of the OTP while pending
+  verificationExpires: timestamp("verification_expires", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

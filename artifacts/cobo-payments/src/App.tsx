@@ -30,7 +30,7 @@ import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 import Checkout from "./pages/Checkout";
 import Receive from "./pages/Receive";
-import AfriPay from "./pages/AfriPay";
+import Afrix from "./pages/Afrix";
 import Landing from "./pages/Landing";
 import Compliance from "./pages/Compliance";
 import AmlPolicy from "./pages/AmlPolicy";
@@ -90,7 +90,7 @@ function AppRouter() {
             <Route path="/pay/:sessionId" component={Checkout} />
             <Route path="/dashboard" component={Dashboard} />
             <Route path="/wallets" component={Wallets} />
-            <Route path="/afripay" component={AfriPay} />
+            <Route path="/afrix" component={Afrix} />
             <Route path="/send" component={SendMoney} />
             <Route path="/receive" component={Receive} />
             <Route path="/deposit" component={Deposit} />

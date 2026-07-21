@@ -1,8 +1,8 @@
-// AfriPay Directory — central alias registry for the scheme (equivalent of Pix's DICT).
-// Maps an AfriPay Key (phone / email / national id / merchant id / random key) to the
+// Afrix Directory — central alias registry for the scheme (equivalent of Pix's DICT).
+// Maps an Afrix Key (phone / email / national id / merchant id / random key) to the
 // participant institution and account that should receive funds, network-wide.
 
-import { randomUUID } from "crypto";
+import { randomUUID, randomInt, createHash } from "crypto";
 import { eq, and } from "drizzle-orm";
 import {
   db,
@@ -57,7 +57,7 @@ export function normalizeAlias(type: string, value: string): string | null {
 export function maskName(firstName?: string | null, lastName?: string | null): string {
   const mask = (s?: string | null) =>
     s && s.length > 1 ? `${s[0]}${"*".repeat(Math.min(s.length - 1, 6))}` : s || "";
-  return [mask(firstName), mask(lastName)].filter(Boolean).join(" ") || "AfriPay user";
+  return [mask(firstName), mask(lastName)].filter(Boolean).join(" ") || "Afrix user";
 }
 
 export async function getHomeParticipant(): Promise<SchemeParticipant | undefined> {
@@ -77,8 +77,21 @@ export interface RegisterAliasResult {
   status: number;
   message?: string;
   alias?: PaymentAlias;
+  // Present only when the key needs OTP confirmation: the plaintext code to
+  // deliver to the claimed phone/email (never returned to the registrant's API
+  // response in production).
+  otp?: string;
 }
 
+const OTP_TTL_MS = 15 * 60 * 1000;
+
+function hashOtp(code: string): string {
+  return createHash("sha256").update(code).digest("hex");
+}
+
+// Ownership rules, mirroring Pix: phone/email keys must be proven with an OTP
+// sent to that phone/email; a national ID key requires verified KYC (identity
+// already proven by documents); merchant/random keys carry no claim to prove.
 export async function registerAlias(
   userId: number,
   aliasType: string,
@@ -94,7 +107,7 @@ export async function registerAlias(
 
   const existing = await listUserAliases(userId);
   if (existing.length >= MAX_ALIASES_PER_USER) {
-    return { ok: false, status: 400, message: `Maximum ${MAX_ALIASES_PER_USER} AfriPay keys per account` };
+    return { ok: false, status: 400, message: `Maximum ${MAX_ALIASES_PER_USER} Afrix keys per account` };
   }
 
   const [taken] = await db.select().from(paymentAliasesTable).where(eq(paymentAliasesTable.aliasValue, value));
@@ -106,8 +119,18 @@ export async function registerAlias(
     };
   }
 
+  if (aliasType === "national_id") {
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+    if (user?.kycStatus !== "verified") {
+      return { ok: false, status: 403, message: "National ID keys require verified KYC. Complete identity verification first." };
+    }
+  }
+
   const home = await getHomeParticipant();
   if (!home) return { ok: false, status: 500, message: "Scheme home participant not configured" };
+
+  const needsOtp = aliasType === "phone" || aliasType === "email";
+  const otp = needsOtp ? String(randomInt(100000, 1000000)) : undefined;
 
   const [alias] = await db
     .insert(paymentAliasesTable)
@@ -118,10 +141,45 @@ export async function registerAlias(
       participantId: home.id,
       accountRef: `user:${userId}`,
       currency: currency || "USD",
+      status: needsOtp ? "pending_verification" : "active",
+      verificationCode: otp ? hashOtp(otp) : null,
+      verificationExpires: otp ? new Date(Date.now() + OTP_TTL_MS) : null,
     })
     .returning();
 
-  return { ok: true, status: 201, alias };
+  return { ok: true, status: 201, alias, otp };
+}
+
+export interface VerifyAliasResult {
+  ok: boolean;
+  status: number;
+  message: string;
+  alias?: PaymentAlias;
+}
+
+export async function verifyAlias(userId: number, aliasId: number, code: string): Promise<VerifyAliasResult> {
+  const [alias] = await db
+    .select()
+    .from(paymentAliasesTable)
+    .where(and(eq(paymentAliasesTable.id, aliasId), eq(paymentAliasesTable.userId, userId)));
+  if (!alias) return { ok: false, status: 404, message: "Key not found" };
+  if (alias.status === "active") return { ok: true, status: 200, message: "Key is already verified", alias };
+  if (alias.status !== "pending_verification" || !alias.verificationCode) {
+    return { ok: false, status: 400, message: "This key is not awaiting verification" };
+  }
+  if (!alias.verificationExpires || alias.verificationExpires.getTime() < Date.now()) {
+    return { ok: false, status: 410, message: "Verification code expired. Remove the key and register it again." };
+  }
+  if (hashOtp(String(code || "").trim()) !== alias.verificationCode) {
+    return { ok: false, status: 400, message: "Incorrect verification code" };
+  }
+
+  const [updated] = await db
+    .update(paymentAliasesTable)
+    .set({ status: "active", verificationCode: null, verificationExpires: null })
+    .where(eq(paymentAliasesTable.id, alias.id))
+    .returning();
+  return { ok: true, status: 200, message: "Key verified — it is now live in the network directory", alias: updated };
 }
 
 export interface ResolvedAlias {

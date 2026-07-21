@@ -1,6 +1,6 @@
-// AfriPay — Pan-African Instant Payment Scheme API.
-// Alias directory (AfriPay Keys), instant payments through the switch,
-// AfriQR generation/decoding, participant registry, and settlement operations.
+// Afrix — Pan-African Instant Payment Scheme API.
+// Alias directory (Afrix Keys), instant payments through the switch,
+// AfrixQR generation/decoding, participant registry, and settlement operations.
 
 import { Router, type IRouter } from "express";
 import QRCode from "qrcode";
@@ -12,15 +12,21 @@ import {
   schemeTransfersTable,
   settlementBatchesTable,
 } from "@workspace/db";
+import type { NextFunction, Response } from "express";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth.js";
+import { idempotencyMiddleware } from "../middlewares/idempotency.js";
+import { directoryLookupRateLimit, transferRateLimit } from "../middlewares/rateLimit.js";
 import {
   registerAlias,
+  verifyAlias,
   listUserAliases,
   deleteAlias,
   resolveAlias,
   getHomeParticipant,
   ALIAS_TYPES,
 } from "../services/scheme/directory.js";
+import { sendSms } from "../services/sms.js";
+import { emailService } from "../services/email.js";
 import { processInstantPayment } from "../services/scheme/switchEngine.js";
 import { closeSettlementCycle, getBatchPositions } from "../services/scheme/settlement.js";
 import { encodeAfriQr, decodeAfriQr } from "../services/scheme/qrStandard.js";
@@ -32,7 +38,17 @@ async function requireAdmin(req: AuthenticatedRequest): Promise<boolean> {
   return user?.role === "admin";
 }
 
-// ---------- AfriPay Keys (alias directory) ----------
+// Scope idempotency keys per authenticated user so one client's key can never
+// replay another user's cached response. Runs after requireAuth.
+function scopeIdempotencyKey(req: AuthenticatedRequest, _res: Response, next: NextFunction): void {
+  const key = req.headers["idempotency-key"];
+  if (typeof key === "string" && key) {
+    req.headers["idempotency-key"] = `afrix:${req.user!.id}:${key}`;
+  }
+  next();
+}
+
+// ---------- Afrix Keys (alias directory) ----------
 
 router.get("/scheme/aliases", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
   const aliases = await listUserAliases(req.user!.id);
@@ -46,7 +62,34 @@ router.post("/scheme/aliases", requireAuth, async (req: AuthenticatedRequest, re
     res.status(result.status).json({ success: false, message: result.message });
     return;
   }
-  res.status(201).json({ success: true, message: "AfriPay key registered", alias: result.alias });
+
+  const alias = result.alias!;
+  if (result.otp) {
+    // Prove ownership: the code goes to the claimed phone/email itself,
+    // never to the registrant's session.
+    if (alias.aliasType === "phone") {
+      sendSms(alias.aliasValue, `${result.otp} is your Afrix key verification code. Expires in 15 minutes.`).catch(() => {});
+    } else if (alias.aliasType === "email") {
+      emailService.sendKeyVerificationEmail(alias.aliasValue, result.otp).catch(() => {});
+    }
+    res.status(201).json({
+      success: true,
+      message: `Verification code sent to ${alias.aliasValue}. Enter it to activate the key.`,
+      alias,
+      requires_verification: true,
+      // Sandbox convenience only — never exposed in production
+      ...(process.env.NODE_ENV !== "production" ? { dev_code: result.otp } : {}),
+    });
+    return;
+  }
+
+  res.status(201).json({ success: true, message: "Afrix key registered and live", alias, requires_verification: false });
+});
+
+router.post("/scheme/aliases/:id/verify", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+  const { code } = req.body as Record<string, string>;
+  const result = await verifyAlias(req.user!.id, Number(req.params.id), code || "");
+  res.status(result.status).json({ success: result.ok, message: result.message, alias: result.alias });
 });
 
 router.delete("/scheme/aliases/:id", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
@@ -55,15 +98,16 @@ router.delete("/scheme/aliases/:id", requireAuth, async (req: AuthenticatedReque
     res.status(404).json({ success: false, message: "Key not found" });
     return;
   }
-  res.json({ success: true, message: "AfriPay key removed" });
+  res.json({ success: true, message: "Afrix key removed" });
 });
 
-// Directory lookup — returns masked holder info, like Pix's pre-payment confirmation screen
-router.get("/scheme/resolve", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+// Directory lookup — returns masked holder info, like Pix's pre-payment confirmation
+// screen. Rate-limited so the directory can't be scraped by key enumeration.
+router.get("/scheme/resolve", directoryLookupRateLimit, requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
   const key = String(req.query.key || "");
   const resolved = await resolveAlias(key);
   if (!resolved) {
-    res.status(404).json({ success: false, message: "AfriPay key not found in the network directory" });
+    res.status(404).json({ success: false, message: "Afrix key not found in the network directory" });
     return;
   }
   res.json({
@@ -77,7 +121,7 @@ router.get("/scheme/resolve", requireAuth, async (req: AuthenticatedRequest, res
 
 // ---------- Instant payments (the switch) ----------
 
-router.post("/scheme/pay", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+router.post("/scheme/pay", transferRateLimit, requireAuth, scopeIdempotencyKey, idempotencyMiddleware, async (req: AuthenticatedRequest, res): Promise<void> => {
   const { key, alias, amount, currency, wallet_id, description, qr_ref } = req.body as Record<string, string>;
   const result = await processInstantPayment({
     senderUserId: req.user!.id,
@@ -136,14 +180,14 @@ router.get("/scheme/transfers/:reference", requireAuth, async (req: Authenticate
   res.json({ success: true, transfer });
 });
 
-// ---------- AfriQR (pan-African QR standard) ----------
+// ---------- AfrixQR (pan-African QR standard) ----------
 
 router.post("/scheme/qr/generate", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
   const { key, amount, currency, reference, format } = req.body as Record<string, string>;
-  const aliases = await listUserAliases(req.user!.id);
+  const aliases = (await listUserAliases(req.user!.id)).filter((a) => a.status === "active");
   const alias = key ? aliases.find((a) => a.aliasValue === key) : aliases[0];
   if (!alias) {
-    res.status(400).json({ success: false, message: "Register an AfriPay key first" });
+    res.status(400).json({ success: false, message: "Register and verify an Afrix key first" });
     return;
   }
 
@@ -174,7 +218,7 @@ router.post("/scheme/qr/decode", requireAuth, async (req: AuthenticatedRequest, 
   const { payload } = req.body as Record<string, string>;
   const decoded = decodeAfriQr(String(payload || ""));
   if (!decoded.valid) {
-    res.status(400).json({ success: false, message: decoded.error || "Invalid AfriQR payload" });
+    res.status(400).json({ success: false, message: decoded.error || "Invalid AfrixQR payload" });
     return;
   }
   res.json({ success: true, qr: decoded });

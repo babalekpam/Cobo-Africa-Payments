@@ -1,8 +1,8 @@
-// AfriQR — pan-African QR standard for the AfriPay scheme.
+// AfrixQR — pan-African QR standard for the Afrix scheme.
 // EMVCo merchant-presented-mode compatible TLV payload (same family as Brazil's Pix "BR Code"),
 // terminated with a CRC-16/CCITT-FALSE checksum so any participant app can validate a scanned code.
 
-const AFRIQR_GUI = "africa.afripay"; // globally unique identifier inside the merchant account info template
+const AFRIX_GUI = "africa.afrix"; // globally unique identifier inside the merchant account info template
 
 // EMV tag ids
 const TAG_PAYLOAD_FORMAT = "00";
@@ -59,7 +59,7 @@ export interface AfriQrPayload {
 }
 
 export function encodeAfriQr(p: AfriQrPayload): string {
-  const account = tlv("00", AFRIQR_GUI) + tlv("01", p.alias) + tlv("02", p.participantCode);
+  const account = tlv("00", AFRIX_GUI) + tlv("01", p.alias) + tlv("02", p.participantCode);
   let payload =
     tlv(TAG_PAYLOAD_FORMAT, "01") +
     tlv(TAG_INITIATION_METHOD, p.dynamic ? "12" : "11") +
@@ -116,7 +116,7 @@ export function decodeAfriQr(payload: string): DecodedAfriQr {
   if (!fields) return { valid: false, error: "Malformed TLV structure" };
 
   const account = fields[TAG_MERCHANT_ACCOUNT] ? parseTlv(fields[TAG_MERCHANT_ACCOUNT]) : null;
-  if (!account || account["00"] !== AFRIQR_GUI) return { valid: false, error: "Not an AfriPay QR code" };
+  if (!account || account["00"] !== AFRIX_GUI) return { valid: false, error: "Not an Afrix QR code" };
 
   const additional = fields[TAG_ADDITIONAL] ? parseTlv(fields[TAG_ADDITIONAL]) : null;
 

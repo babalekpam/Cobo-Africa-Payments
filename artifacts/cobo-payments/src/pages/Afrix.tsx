@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Layout } from "../components/Layout";
 import { useAuth } from "../context/AuthContext";
 import api from "../lib/api";
@@ -45,7 +45,7 @@ interface SchemeTransfer {
   senderUserId: number | null;
 }
 
-export default function AfriPay() {
+export default function Afrix() {
   const { user, wallets, refreshWallets } = useAuth();
   const [tab, setTab] = useState<"pay" | "keys" | "receive" | "network">("pay");
 
@@ -55,6 +55,8 @@ export default function AfriPay() {
   const [newKeyValue, setNewKeyValue] = useState("");
   const [newKeyCurrency, setNewKeyCurrency] = useState("USD");
   const [keyMsg, setKeyMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [verifyCodes, setVerifyCodes] = useState<Record<number, string>>({});
+  const [verifyMsg, setVerifyMsg] = useState<Record<number, string>>({});
 
   // Pay
   const [payKey, setPayKey] = useState("");
@@ -65,6 +67,9 @@ export default function AfriPay() {
   const [payNote, setPayNote] = useState("");
   const [paying, setPaying] = useState(false);
   const [payResult, setPayResult] = useState<{ ok: boolean; text: string; ref?: string } | null>(null);
+  // One idempotency key per confirmed payment attempt: a retry after a network
+  // error re-sends the same key, so the switch will never clear it twice.
+  const idemKeyRef = useRef<string>("");
 
   // Receive
   const [qrKey, setQrKey] = useState("");
@@ -89,7 +94,8 @@ export default function AfriPay() {
     try {
       const { data } = await api.get("/scheme/aliases");
       setAliases(data.aliases || []);
-      if (data.aliases?.length && !qrKey) setQrKey(data.aliases[0].aliasValue);
+      const firstActive = (data.aliases || []).find((a: AliasRow) => a.status === "active");
+      if (firstActive && !qrKey) setQrKey(firstActive.aliasValue);
     } catch { /* not fatal */ }
   }
 
@@ -101,7 +107,9 @@ export default function AfriPay() {
         alias_value: newKeyValue,
         currency: newKeyCurrency,
       });
-      setKeyMsg({ ok: true, text: data.message || "Key registered" });
+      let text = data.message || "Key registered";
+      if (data.dev_code) text += ` (sandbox code: ${data.dev_code})`;
+      setKeyMsg({ ok: true, text });
       setNewKeyValue("");
       loadAliases();
     } catch (e: any) {
@@ -116,6 +124,16 @@ export default function AfriPay() {
     } catch { /* ignore */ }
   }
 
+  async function verifyKey(id: number) {
+    try {
+      const { data } = await api.post(`/scheme/aliases/${id}/verify`, { code: verifyCodes[id] || "" });
+      setVerifyMsg((m) => ({ ...m, [id]: data.message }));
+      loadAliases();
+    } catch (e: any) {
+      setVerifyMsg((m) => ({ ...m, [id]: e.response?.data?.message || "Verification failed" }));
+    }
+  }
+
   async function lookupKey() {
     setResolved(null);
     setResolveErr(null);
@@ -124,6 +142,7 @@ export default function AfriPay() {
     try {
       const { data } = await api.get(`/scheme/resolve?key=${encodeURIComponent(payKey.trim())}`);
       setResolved(data as ResolvedKey);
+      idemKeyRef.current = crypto.randomUUID();
     } catch (e: any) {
       setResolveErr(e.response?.data?.message || "Key not found");
     }
@@ -139,7 +158,7 @@ export default function AfriPay() {
         amount: payAmount,
         wallet_id: payWalletId || undefined,
         description: payNote || undefined,
-      });
+      }, { "Idempotency-Key": idemKeyRef.current || crypto.randomUUID() });
       setPayResult({
         ok: true,
         text: `Sent instantly! ${data.recipient_currency} ${Number(data.recipient_amount).toLocaleString(undefined, { maximumFractionDigits: 2 })} delivered to ${data.recipient_name}.`,
@@ -154,6 +173,9 @@ export default function AfriPay() {
     } catch (e: any) {
       setPayResult({ ok: false, text: e.response?.data?.message || "Payment failed" });
     } finally {
+      // The server also caches error responses under the key, so every completed
+      // attempt (success or failure) gets a fresh key for the next one.
+      idemKeyRef.current = crypto.randomUUID();
       setPaying(false);
     }
   }
@@ -182,11 +204,11 @@ export default function AfriPay() {
     <Layout>
       <div className="page fade-in">
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
-          <h1 className="page-title" style={{ marginBottom: 0 }}>⚡ AfriPay</h1>
+          <h1 className="page-title" style={{ marginBottom: 0 }}>⚡ Afrix</h1>
           <span className="badge" style={{ background: "#1B9E5A", color: "#fff" }}>Instant · 24/7 · Free</span>
         </div>
         <p style={{ color: "var(--text-dim)", marginBottom: "1.5rem" }}>
-          The pan-African instant payment network. Send to any AfriPay key — phone, email, ID or merchant code —
+          The pan-African instant payment network. Send to any Afrix key — phone, email, ID or merchant code —
           across {stats ? stats.countries : "many"} countries, settled between {stats ? stats.participants : ""} member institutions.
         </p>
 
@@ -195,7 +217,7 @@ export default function AfriPay() {
           {([
             ["pay", "💸 Pay a key"],
             ["keys", "🔑 My keys"],
-            ["receive", "📲 Receive (AfriQR)"],
+            ["receive", "📲 Receive (AfrixQR)"],
             ["network", "🌍 Network"],
           ] as const).map(([id, label]) => (
             <button
@@ -212,7 +234,7 @@ export default function AfriPay() {
           <div className="grid-2" style={{ alignItems: "start" }}>
             <div className="card" style={{ padding: "1.5rem" }}>
               <h3 style={{ fontWeight: 700, marginBottom: "1rem" }}>Send an instant payment</h3>
-              <label style={{ display: "block", fontWeight: 600, marginBottom: 6, fontSize: "0.875rem" }}>AfriPay key</label>
+              <label style={{ display: "block", fontWeight: 600, marginBottom: 6, fontSize: "0.875rem" }}>Afrix key</label>
               <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
                 <input
                   className="input"
@@ -296,7 +318,7 @@ export default function AfriPay() {
             </div>
 
             <div className="card" style={{ padding: "1.5rem" }}>
-              <h3 style={{ fontWeight: 700, marginBottom: "1rem" }}>Recent AfriPay activity</h3>
+              <h3 style={{ fontWeight: 700, marginBottom: "1rem" }}>Recent Afrix activity</h3>
               {transfers.length === 0 ? (
                 <div className="empty" style={{ padding: "2rem" }}>No instant payments yet</div>
               ) : (
@@ -331,7 +353,7 @@ export default function AfriPay() {
         {tab === "keys" && (
           <div className="grid-2" style={{ alignItems: "start" }}>
             <div className="card" style={{ padding: "1.5rem" }}>
-              <h3 style={{ fontWeight: 700, marginBottom: "0.5rem" }}>Register an AfriPay key</h3>
+              <h3 style={{ fontWeight: 700, marginBottom: "0.5rem" }}>Register an Afrix key</h3>
               <p style={{ color: "var(--text-dim)", fontSize: "0.875rem", marginBottom: "1rem" }}>
                 Anyone on the network can pay you with just this key — no account numbers. Up to 5 keys.
               </p>
@@ -370,14 +392,39 @@ export default function AfriPay() {
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {aliases.map((a) => (
-                    <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.75rem", background: "var(--surface2)", borderRadius: 8 }}>
-                      <div style={{ overflow: "hidden" }}>
-                        <div style={{ fontWeight: 600, fontSize: "0.9rem", wordBreak: "break-all" }}>{a.aliasValue}</div>
-                        <div style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>
-                          {KEY_TYPES.find((k) => k.value === a.aliasType)?.label || a.aliasType} · receives {a.currency}
+                    <div key={a.id} style={{ padding: "0.75rem", background: "var(--surface2)", borderRadius: 8 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ overflow: "hidden" }}>
+                          <div style={{ fontWeight: 600, fontSize: "0.9rem", wordBreak: "break-all" }}>
+                            {a.aliasValue}{" "}
+                            {a.status === "pending_verification" && (
+                              <span className="badge" style={{ background: "#E8A940", color: "#fff", fontSize: 10 }}>pending verification</span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>
+                            {KEY_TYPES.find((k) => k.value === a.aliasType)?.label || a.aliasType} · receives {a.currency}
+                          </div>
                         </div>
+                        <button className="btn" style={{ color: "var(--red)" }} onClick={() => removeKey(a.id)}>Remove</button>
                       </div>
-                      <button className="btn" style={{ color: "var(--red)" }} onClick={() => removeKey(a.id)}>Remove</button>
+                      {a.status === "pending_verification" && (
+                        <div style={{ marginTop: 8 }}>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <input
+                              className="input"
+                              style={{ flex: 1 }}
+                              placeholder="6-digit code"
+                              maxLength={6}
+                              value={verifyCodes[a.id] || ""}
+                              onChange={(e) => setVerifyCodes((m) => ({ ...m, [a.id]: e.target.value }))}
+                            />
+                            <button className="btn btn-primary" onClick={() => verifyKey(a.id)}>Verify</button>
+                          </div>
+                          {verifyMsg[a.id] && (
+                            <div style={{ fontSize: "0.75rem", marginTop: 4, color: "var(--text-dim)" }}>{verifyMsg[a.id]}</div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -388,19 +435,19 @@ export default function AfriPay() {
 
         {tab === "receive" && (
           <div className="card" style={{ padding: "2rem", maxWidth: 520 }}>
-            <h3 style={{ fontWeight: 700, marginBottom: "0.5rem" }}>Receive with AfriQR</h3>
+            <h3 style={{ fontWeight: 700, marginBottom: "0.5rem" }}>Receive with AfrixQR</h3>
             <p style={{ color: "var(--text-dim)", fontSize: "0.875rem", marginBottom: "1rem" }}>
-              An EMV-standard QR any AfriPay member app can scan — like Pix's BR Code, for Africa.
+              An EMV-standard QR any Afrix member app can scan — like Pix's BR Code, for Africa.
             </p>
-            {aliases.length === 0 ? (
-              <div className="empty" style={{ padding: "2rem" }}>Register an AfriPay key first (My keys tab)</div>
+            {aliases.filter((a) => a.status === "active").length === 0 ? (
+              <div className="empty" style={{ padding: "2rem" }}>Register and verify an Afrix key first (My keys tab)</div>
             ) : (
               <>
                 <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
                   <div style={{ flex: 1, minWidth: 160 }}>
                     <label style={{ display: "block", fontWeight: 600, marginBottom: 6, fontSize: "0.875rem" }}>Key</label>
                     <select className="input" style={{ width: "100%" }} value={qrKey} onChange={(e) => setQrKey(e.target.value)}>
-                      {aliases.map((a) => <option key={a.id} value={a.aliasValue}>{a.aliasValue}</option>)}
+                      {aliases.filter((a) => a.status === "active").map((a) => <option key={a.id} value={a.aliasValue}>{a.aliasValue}</option>)}
                     </select>
                   </div>
                   <div style={{ flex: 1, minWidth: 140 }}>
@@ -410,7 +457,7 @@ export default function AfriPay() {
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "1.5rem", background: "var(--surface2)", borderRadius: 16 }}>
                   {qrDataUrl ? (
-                    <img src={qrDataUrl} alt="AfriQR code" style={{ width: 220, height: 220, borderRadius: 12 }} />
+                    <img src={qrDataUrl} alt="AfrixQR code" style={{ width: 220, height: 220, borderRadius: 12 }} />
                   ) : (
                     <div className="spinner" style={{ width: 48, height: 48 }} />
                   )}
@@ -424,7 +471,7 @@ export default function AfriPay() {
                     style={{ width: "100%", marginTop: 12 }}
                     onClick={() => { navigator.clipboard.writeText(qrPayload); setQrCopied(true); setTimeout(() => setQrCopied(false), 2000); }}
                   >
-                    {qrCopied ? "Copied!" : "Copy AfriQR payload (EMV TLV)"}
+                    {qrCopied ? "Copied!" : "Copy AfrixQR payload (EMV TLV)"}
                   </button>
                 )}
               </>
