@@ -554,3 +554,120 @@ test("settlement nets only cleared transfers; pending and unresolved are untouch
   assert.equal(net(w.bankA.id), -300);
   assert.equal(net(w.home.id), 300);
 });
+
+// ---------- regressions for the independent security review ----------
+test("review #1: sub-cent / fractional-cent / non-positive amounts are refused — no money from nothing", { skip }, async () => {
+  for (const amount of [0.004, 0.001, 10.005, 0, -5, Number.NaN, Number.POSITIVE_INFINITY]) {
+    const r = await pay({ alias: "bob@example.com", amount });
+    assert.equal(r.ok, false, `amount ${amount}`);
+    assert.equal(r.status, 400, `amount ${amount}`);
+  }
+  assert.equal(await balance(w.alice.walletId), 1000);
+  assert.equal(await balance(w.bob.walletId), 500);
+  assert.equal((await transfers()).length, 0);
+});
+
+test("review #1: a conversion that rounds to zero is refused (nothing debited, nothing credited)", { skip }, async () => {
+  const [ngn] = await m.db.db.insert(m.db.walletsTable).values({ userId: w.alice.id, currency: "NGN", balance: "5000.00" }).returning();
+  const r = await pay({ alias: "bob@example.com", amount: 1, walletId: ngn.id }); // 1 NGN ≈ 0.0006 USD
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 400);
+  assert.equal(await balance(ngn.id), 5000);
+  assert.equal(await balance(w.bob.walletId), 500);
+});
+
+test("review #2: concurrent returns of one payment refund exactly once", { skip }, async () => {
+  const sent = await pay({ alias: "bob@example.com", amount: 50 });
+  assert.equal(sent.ok, true);
+  const ref = sent.transfer!.reference;
+  const { returnSchemeTransfer } = await import("../services/scheme/returns.js");
+  const results = await Promise.all(Array.from({ length: 4 }, () => returnSchemeTransfer(ref, w.bob.id, "sent by mistake", "recipient")));
+  assert.equal(results.filter((r) => r.ok).length, 1, "exactly one return succeeds");
+  for (const r of results.filter((x) => !x.ok)) assert.equal(r.status, 409);
+  assert.equal(await balance(w.alice.walletId), 1000, "sender refunded once");
+  assert.equal(await balance(w.bob.walletId), 500, "recipient debited once");
+});
+
+test("review #3: a numeric national-id key cannot shadow a phone number typed without '+'", { skip }, async () => {
+  const [carol] = await m.db.db.insert(m.db.usersTable).values({ email: "carol@example.com", name: "Carol Njeri", firstName: "Carol", lastName: "Njeri", passwordHash: "x", kycLevel: "2", kycStatus: "verified" }).returning();
+  const [carolWallet] = await m.db.db.insert(m.db.walletsTable).values({ userId: carol.id, currency: "USD", balance: "100.00" }).returning();
+  // attacker (bob) registers a national-id key FIRST; victim (alice) later owns the real phone key
+  await m.db.db.insert(m.db.paymentAliasesTable).values({ aliasType: "national_id", aliasValue: "254712345678", userId: w.bob.id, participantId: w.home.id, accountRef: "w-bob", currency: "USD", status: "active" });
+  await m.db.db.insert(m.db.paymentAliasesTable).values({ aliasType: "phone", aliasValue: "+254712345678", userId: w.alice.id, participantId: w.home.id, accountRef: "w-alice", currency: "USD", status: "active" });
+  const r = await pay({ senderUserId: carol.id, senderEmail: "carol@example.com", alias: "254712345678", amount: 10, walletId: carolWallet.id });
+  assert.equal(r.ok, true);
+  assert.equal(await balance(w.alice.walletId), 1010, "the phone owner is paid");
+  assert.equal(await balance(w.bob.walletId), 500, "the squatter is not");
+});
+
+test("review #3: bank messages resolve keys by exact stored value only", { skip }, async () => {
+  const r = await credit(pacs008({ e2e: "EEXA00000000000000001", alias: "254700000001" })); // registered as +254700000001
+  assert.equal(r.status, 422);
+  assert.equal(reason(r.text), "AC03");
+  assert.equal(await balance(w.alice.walletId), 1000);
+});
+
+test("review #4: concurrent first-time credits create exactly one wallet", { skip }, async () => {
+  const [dana] = await m.db.db.insert(m.db.usersTable).values({ email: "dana@example.com", name: "Dana K", firstName: "Dana", lastName: "K", passwordHash: "x" }).returning();
+  await m.db.db.insert(m.db.paymentAliasesTable).values({ aliasType: "phone", aliasValue: "+254700000009", userId: dana.id, participantId: w.home.id, accountRef: "w-dana", currency: "EUR", status: "active" });
+  const results = await Promise.all(
+    Array.from({ length: 6 }, (_, i) => credit(pacs008({ e2e: `EWAL${String(i).padStart(17, "0")}`, alias: "+254700000009", amount: 10, currency: "EUR" })))
+  );
+  assert.equal(results.filter((r) => r.status === 200).length, 6);
+  const wallets = await m.db.db.select().from(m.db.walletsTable).where(m.drizzle.and(m.drizzle.eq(m.db.walletsTable.userId, dana.id), m.drizzle.eq(m.db.walletsTable.currency, "EUR")));
+  assert.equal(wallets.length, 1, "one EUR wallet, not one per racing request");
+  assert.equal(Number(wallets[0].balance), 60);
+});
+
+test("review #7: concurrent settlement runs net each batch exactly once", { skip }, async () => {
+  await credit(pacs008({ e2e: "ESTL00000000000000001", alias: "+254700000001", amount: 300 }));
+  const runs = await Promise.all([m.settlement.closeSettlementCycle(), m.settlement.closeSettlementCycle(), m.settlement.closeSettlementCycle()]);
+  assert.equal(runs.filter((r) => r !== null).length, 1, "only one run claims the batch");
+  const positions = await m.db.db.select().from(m.db.settlementPositionsTable);
+  assert.equal(positions.length, 2, "no duplicate positions");
+  const [a] = await m.db.db.select().from(m.db.schemeParticipantsTable).where(m.drizzle.eq(m.db.schemeParticipantsTable.id, w.bankA.id));
+  assert.equal(Number(a.settlementBalance), -300, "settlement balance applied once");
+});
+
+test("review #10: alias message ids are bound to their request body", { skip }, async () => {
+  const first = await aliasCall(aliasBody({ message_id: "BIND-1" }), { code: "BANKBGHA", secret: SECRET_B });
+  assert.equal(first.status, 201);
+  const swapped = await aliasCall(aliasBody({ message_id: "BIND-1", key_value: "+233200000777" }), { code: "BANKBGHA", secret: SECRET_B });
+  assert.equal(swapped.status, 422, "same message_id with a different body is refused, not replayed as success");
+  const rows = await m.db.db.select().from(m.db.paymentAliasesTable).where(m.drizzle.eq(m.db.paymentAliasesTable.aliasValue, "+233200000777"));
+  assert.equal(rows.length, 0);
+});
+
+test("review #10: the operator's own code can never act as an external sender", { skip }, async () => {
+  const prior = process.env.GATEWAY_PARTICIPANT_SECRETS;
+  process.env.GATEWAY_PARTICIPANT_SECRETS = JSON.stringify({ ...JSON.parse(prior!), IAPAYPAN: "operator-secret-0123456789abcdef" });
+  try {
+    const r = await credit(pacs008({ e2e: "EHOM00000000000000001", alias: "+254700000001", debtorCode: "IAPAYPAN" }), { code: "IAPAYPAN", secret: "operator-secret-0123456789abcdef" });
+    assert.equal(r.status, 422);
+    assert.equal(reason(r.text), "RC01");
+    assert.equal(await balance(w.alice.walletId), 1000);
+  } finally {
+    process.env.GATEWAY_PARTICIPANT_SECRETS = prior;
+  }
+});
+
+test("review #6: a late bank ACSC after an operator refund is flagged for reconciliation, not silently dropped", { skip }, async () => {
+  await registerBankBKey();
+  bankBOverride({ unknownAliasPrefix: "+2332" });
+  await pay();
+  const [t] = await transfers();
+  const adminId = await makeAdmin();
+  await m.ext.resolveUnresolvedTransfer(t.reference, "not_credited", adminId, "bank said not credited");
+  assert.equal(await balance(w.alice.walletId), 1000);
+
+  const [refreshed] = await transfers();
+  const [homeP] = await m.db.db.select().from(m.db.schemeParticipantsTable).where(m.drizzle.eq(m.db.schemeParticipantsTable.id, w.home.id));
+  const [bankBP] = await m.db.db.select().from(m.db.schemeParticipantsTable).where(m.drizzle.eq(m.db.schemeParticipantsTable.id, w.bankB.id));
+  const lateAcsc = new m.adapters.MockBankAdapter("BANKBGHA", {});
+  const iso = m.ext.toIso(refreshed, { name: "Alice", participant: homeP }, { name: "Kofi", participant: bankBP });
+  const outcome = await m.ext.dispatchAndFinalize(refreshed, iso, lateAcsc);
+  assert.equal(outcome.transfer.status, "rejected", "final state is not overwritten");
+  assert.equal(await balance(w.alice.walletId), 1000, "no second movement of money");
+  const flagged = await m.db.db.select().from(m.db.auditLogsTable).where(m.drizzle.eq(m.db.auditLogsTable.action, "iapay_reconciliation_contradiction"));
+  assert.equal(flagged.length, 1, "the contradiction is recorded for manual reconciliation");
+});

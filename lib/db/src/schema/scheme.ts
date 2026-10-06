@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, numeric, integer, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, numeric, integer, jsonb, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -64,7 +64,11 @@ export const schemeTransfersTable = pgTable("scheme_transfers", {
   initiatedAt: timestamp("initiated_at", { withTimezone: true }).notNull().defaultNow(),
   clearedAt: timestamp("cleared_at", { withTimezone: true }),
   settledAt: timestamp("settled_at", { withTimezone: true }),
-});
+}, (t) => [
+  // Net-debit exposure is computed per participant over unsettled rows, under a lock.
+  index("scheme_transfers_sender_participant_status_idx").on(t.senderParticipantId, t.status),
+  index("scheme_transfers_recipient_participant_status_idx").on(t.recipientParticipantId, t.status),
+]);
 
 // Deferred net settlement cycles between participants
 export const settlementBatchesTable = pgTable("settlement_batches", {

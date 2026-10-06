@@ -64,6 +64,10 @@ test("outbound URL policy blocks internal, private, credentialed and obfuscated 
     "http://db.internal/x", "http://printer.local/x", "ftp://example.com/x", "https://user:pw@example.com/x", "not a url",
   ];
   for (const u of bad) assert.equal(isSafeOutboundUrl(u), false, u);
+  assert.equal(isSafeOutboundUrl("https://fcmb.com/iapay"), true, "a hostname that merely starts with fc/fd is not an IPv6 address");
+  assert.equal(isSafeOutboundUrl("https://fdh.example.com/iapay"), true);
+  assert.equal(isSafeOutboundUrl("http://[fc00::1]/x"), false, "IPv6 unique-local literals stay blocked");
+  assert.equal(isSafeOutboundUrl("http://[fd12:3456::1]/x"), false);
   assert.equal(isSafeOutboundUrl("https://bank.example.com/iapay"), true);
   assert.equal(isSafeOutboundUrl("http://bank.example.com/iapay"), true, "http allowed when https is not required");
   assert.equal(isSafeOutboundUrl("http://bank.example.com/iapay", { requireHttps: true }), false);

@@ -13,6 +13,27 @@ import { buildPacs008, type Iso20022Transfer } from "./iso20022.js";
 import { parsePacs002, Iso20022ParseError } from "./iso20022Parse.js";
 import { SIGNATURE_HEADERS, signMessage } from "./gateway/signing.js";
 
+const MAX_REPLY_BYTES = 64 * 1024;
+
+/** Read a response body but stop (returning null) once it exceeds `max` bytes. */
+async function readCapped(res: Response, max: number): Promise<string | null> {
+  if (!res.body) return "";
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.length;
+    if (total > max) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
 export type CreditStatus = "ACSC" | "RJCT" | "UNKNOWN";
 
 export interface CreditResult {
@@ -65,7 +86,8 @@ export class HttpBankAdapter implements ParticipantAdapter {
       return { status: "UNKNOWN", reason: err instanceof Error ? err.name : "transport_error" };
     }
 
-    const text = await res.text().catch(() => "");
+    const text = await readCapped(res, MAX_REPLY_BYTES).catch(() => "");
+    if (text === null) return { status: "UNKNOWN", reason: "reply_too_large" };
     if (!res.ok) {
       // 4xx with a pacs.002 body is a definite business rejection; anything else is unknown.
       if (res.status >= 400 && res.status < 500) {

@@ -206,15 +206,27 @@ export interface ResolvedAlias {
   holderUserId: number | null;
 }
 
-export async function resolveAlias(rawValue: string): Promise<ResolvedAlias | null> {
+export async function resolveAlias(rawValue: string, opts: { exact?: boolean } = {}): Promise<ResolvedAlias | null> {
   const value = String(rawValue || "").trim();
   if (!value) return null;
 
-  // Try each normalization so lookups work however the sender typed the key
-  const candidates = new Set<string>([value]);
-  for (const t of ["phone", "email", "national_id", "merchant_id"]) {
-    const n = normalizeAlias(t, value);
-    if (n) candidates.add(n);
+  // `exact` (bank messages): the key must match a stored value character for character.
+  // Otherwise (human-typed input) try interpretations in a fixed, safe order: phone and email
+  // BEFORE the raw string, so a registered numeric "national id" can never shadow the phone
+  // number a sender typed without its "+". Set preserves this insertion order.
+  const candidates = new Set<string>();
+  if (opts.exact) {
+    candidates.add(value);
+  } else {
+    for (const t of ["phone", "email"]) {
+      const n = normalizeAlias(t, value);
+      if (n) candidates.add(n);
+    }
+    candidates.add(value);
+    for (const t of ["merchant_id", "national_id"]) {
+      const n = normalizeAlias(t, value);
+      if (n) candidates.add(n);
+    }
   }
 
   let alias: PaymentAlias | undefined;

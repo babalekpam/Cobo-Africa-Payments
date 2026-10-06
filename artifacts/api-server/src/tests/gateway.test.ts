@@ -84,6 +84,23 @@ test("pacs.008 parser rejects hostile or malformed input", () => {
   assert.throws(() => parsePacs008(good.replace(/<CdtrAcct>.*<\/CdtrAcct>/, "")), /creditor key/);
 });
 
+test("pacs.008 parser caps participant free text at 140 characters", () => {
+  const long = "x".repeat(600);
+  const xml = buildPacs008({ ...transfer, description: long, debtor: { ...transfer.debtor, name: long } });
+  const p = parsePacs008(xml);
+  assert.ok(p.debtorName.length <= 140);
+  assert.ok((p.remittance ?? "").length <= 140);
+});
+
+test("HttpBankAdapter treats an oversized reply as UNKNOWN (bounded memory)", async () => {
+  const huge = "<!--" + "a".repeat(200 * 1024) + "-->";
+  const r = await withBank(
+    (_q, _b, res) => void res.writeHead(200, { "content-type": "application/xml" }).end(buildPacs002(transfer, "ACSC") + huge),
+    (url) => adapterFor(url).sendCreditTransfer(transfer)
+  );
+  assert.deepEqual(r, { status: "UNKNOWN", reason: "reply_too_large" });
+});
+
 test("pacs.002 parser reads status, reason and original e2e id", () => {
   assert.deepEqual(parsePacs002(buildPacs002(transfer, "ACSC")), { status: "ACSC", reason: null, originalEndToEndId: transfer.endToEndId });
   assert.equal(parsePacs002(buildPacs002(transfer, "RJCT", "AC03")).reason, "AC03");

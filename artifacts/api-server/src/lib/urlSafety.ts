@@ -20,7 +20,8 @@ export function isSafeOutboundUrl(url: string, opts: OutboundUrlOptions = {}): b
     if (host.startsWith("127.") || host.startsWith("10.") || host.startsWith("192.168.") || host.startsWith("169.254.")) return false;
     if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return false;
     // IPv6 loopback/link-local/unique-local
-    if (host.startsWith("fe80:") || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("::ffff:")) return false;
+    // (only for IPv6 literals — a hostname like fcmb.com or fdh.example is not an address)
+    if (host.includes(":") && (host.startsWith("fe80:") || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("::ffff:"))) return false;
     // Reject non-dotted numeric encodings of IPs (e.g. http://2130706433/, 0x7f000001)
     if (/^\d+$/.test(host) || /^0x[0-9a-f]+$/.test(host) || /^0\d+/.test(host)) return false;
     if (host.endsWith(".internal") || host.endsWith(".local")) return false;

@@ -5,7 +5,7 @@
 // allowed for 90 days, by the recipient voluntarily or forced by the scheme
 // operator when a dispute is resolved in the sender's favour.
 
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import {
   db,
   walletsTable,
@@ -125,10 +125,15 @@ export async function returnSchemeTransfer(
         })
         .returning();
 
-      await tx
+      // Single-winner claim: only a transfer still cleared/settled can be returned. A concurrent
+      // second return finds nothing to claim, throws, and this whole transaction (including the
+      // wallet moves above) rolls back — no double refund.
+      const claimed = await tx
         .update(schemeTransfersTable)
         .set({ status: "returned", statusReason: `${initiatedBy === "operator" ? "Dispute refund" : "Returned by recipient"}: ${reason}` })
-        .where(eq(schemeTransfersTable.id, original.id));
+        .where(and(eq(schemeTransfersTable.id, original.id), inArray(schemeTransfersTable.status, ["cleared", "settled"])))
+        .returning({ id: schemeTransfersTable.id });
+      if (claimed.length === 0) throw new Error("ALREADY_RETURNED");
 
       await tx.insert(transactionsTable).values({
         reference: ref,
@@ -154,6 +159,9 @@ export async function returnSchemeTransfer(
       return row;
     });
   } catch (err) {
+    if (err instanceof Error && err.message === "ALREADY_RETURNED") {
+      return { ok: false, status: 409, message: "This payment was already returned" };
+    }
     if (err instanceof Error && err.message === "INSUFFICIENT_FUNDS") {
       return { ok: false, status: 400, message: "Recipient balance is insufficient to return this payment" };
     }

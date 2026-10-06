@@ -136,6 +136,24 @@ Implemented and tested: HMAC authentication over exact bytes with a replay windo
 
 Known limits to close before production (also section 9): the HMAC window alone does not stop an attacker who can capture a *live* message from re-sending it within 5 minutes — this is safe for payments (the idempotency ledger returns the stored answer) but the switch does not yet record signature nonces; secrets are environment variables (no HSM/KMS, no per-participant rotation schedule); in-memory limiters/lockouts are per-instance; DNS-rebinding is not blocked at the application layer (use egress rules); sanctions matching is a stopgap, not a licensed list provider.
 
+### 8.1 Independent review (adversarial, same branch)
+
+A separate reviewer attacked the money path. **Fixed and regression-tested:** sub-cent amounts that debited nothing but credited converted money (critical — also present in the original home-to-home path); a concurrent double-return that refunded twice; numeric "national-id" keys shadowing phone numbers typed without `+`; duplicate wallets created by concurrent first credits; concurrent settlement runs double-applying balances; a late bank `ACSC` after an operator refund being dropped silently (now an audit-logged reconciliation alert); an SSRF-guard false positive that blocked real bank hostnames such as `fcmb.com`; the operator's own code being usable as an external sender; unbounded bank free text and bank reply size; alias message ids replaying success for a different request body; missing indexes on the exposure scan.
+
+**Open — decide/close before real money:**
+
+* Exposure drops out of the cap when a batch is marked `settled`, even though no money has actually moved between settlement accounts. A bank that never pays its net could originate up to its cap again each cycle. Tie "settled" to confirmed funds (and count an unpaid settlement balance as exposure).
+* Exposure is computed by loading unsettled rows under the participant lock (now indexed). At high volume replace it with a SQL `SUM`.
+* A bank's `pacs.002` reply is trusted on TLS alone (no response signature). The shared secret is symmetric and used in both directions, so a bank could forge switch-signed requests; prefer asymmetric signatures (mTLS client certificates or JWS).
+* A bank can register any phone/email/ID key before its real owner does; only the participation contract (and, later, a verification attestation) stops this. `end_to_end_id` is unique network-wide, so a bank can pre-use ids (the `DUPL` reply is an oracle); consider scoping ids to the sender.
+* Signatures are not bound to method or path (safe today because the ledger is idempotent and the status route is read-only); a missing-secret 401 returns slightly faster than a bad-signature 401.
+* `/api/scheme/pay` idempotency is an in-memory map (lost on restart, not shared across instances, absent without an `Idempotency-Key`), and the daily-limit check is not atomic. Other rails (`/transfers/*`) have the same amount-precision and limit patterns and were **not** audited in this change.
+* A cleared-but-unsettled transfer that is later returned is marked `returned`, so settlement nets the return leg but not the original.
+* Sanctions screening is a stopgap: ≥2-word names, ASCII only, short hardcoded list, no creditor-name screening on bank-supplied names. Use a licensed provider with transliteration and fuzzy/subset matching.
+* DNS rebinding is not blocked in the application; enforce egress rules.
+* Exchange rates fall back to static values if `EXCHANGERATE_API_KEY` is unset; a stale rate misstates exposure and FX. Fail closed on stale rates in production.
+* Operator resolution has no four-eyes approval or evidence attachment, and `unresolved` rows are not auto-polled via `pacs.028`.
+
 ## 9. Required before real money
 
 Independent penetration test and code audit · SOC 2 / ISO 27001 programme · licensed sanctions-screening provider · HSM/KMS-managed keys and mTLS · settlement account/collateral arrangements and legal participation agreement (rulebook, liability, dispute rules) · regulator approval for operating a payment scheme/switch in each country · load and failure testing at target volume · high-availability, backup and disaster-recovery design · a monitored on-call process for `unresolved` payments.

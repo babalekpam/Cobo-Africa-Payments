@@ -71,7 +71,11 @@ export interface InstantPaymentResult {
 
 export async function processInstantPayment(input: InstantPaymentInput): Promise<InstantPaymentResult> {
   const amount = Number(input.amount);
-  if (!amount || amount <= 0) return { ok: false, status: 400, message: "Invalid amount" };
+  // Money amounts are exact cents: wallets are numeric(15,2), so a sub-cent amount would debit
+  // nothing (the database rounds it away) while its converted credit could still be real.
+  if (!Number.isFinite(amount) || amount < 0.01 || Math.round(amount * 100) / 100 !== amount) {
+    return { ok: false, status: 400, message: "Amount must be at least 0.01 with at most 2 decimal places" };
+  }
 
   // 1. Directory lookup
   const resolved: ResolvedAlias | null = await resolveAlias(input.alias);
@@ -129,7 +133,12 @@ export async function processInstantPayment(input: InstantPaymentInput): Promise
     if (!fxRate) {
       return { ok: false, status: 400, message: `Exchange rate unavailable for ${senderWallet.currency} → ${recipientCurrency}` };
     }
-    recipientAmount = amount * fxRate;
+    // Round once, here, so the debit, the credit, the stored row and any bank message all
+    // carry the same cents. A conversion that rounds to nothing is refused outright.
+    recipientAmount = Math.round(amount * fxRate * 100) / 100;
+    if (recipientAmount < 0.01) {
+      return { ok: false, status: 400, message: "Amount is too small to convert into the recipient's currency" };
+    }
   }
 
   const home = await getHomeParticipant();
@@ -249,6 +258,9 @@ export async function processInstantPayment(input: InstantPaymentInput): Promise
         .set({ balance: sql`${walletsTable.balance} - ${String(total)}` })
         .where(eq(walletsTable.id, lockedSender.id));
 
+      // Serialise first-time wallet creation per user: SELECT ... FOR UPDATE locks nothing when
+      // the row does not exist yet, so two concurrent first credits would create two wallets.
+      await tx.execute(sql`select pg_advisory_xact_lock(1002, ${recipientUserId})`);
       let [recipientWallet] = await tx
         .select()
         .from(walletsTable)

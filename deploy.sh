@@ -114,6 +114,8 @@ if [ "$DEPLOY_API" = true ]; then
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE UNIQUE INDEX IF NOT EXISTS gateway_messages_participant_msg_uniq ON gateway_messages(participant_code, msg_id);
+    CREATE INDEX IF NOT EXISTS scheme_transfers_sender_participant_status_idx ON scheme_transfers(sender_participant_id, status);
+    CREATE INDEX IF NOT EXISTS scheme_transfers_recipient_participant_status_idx ON scheme_transfers(recipient_participant_id, status);
     CREATE INDEX IF NOT EXISTS payment_aliases_user_id_idx ON payment_aliases(user_id);
     CREATE TABLE IF NOT EXISTS scheme_transfers (
       id SERIAL PRIMARY KEY,

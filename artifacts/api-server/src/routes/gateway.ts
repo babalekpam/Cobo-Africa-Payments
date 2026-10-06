@@ -16,6 +16,7 @@
 //    non-final reply (202/PDNG, timeout, 5xx) as "unknown — poll /status", never as failure;
 //  * every message id is unique per participant; resending the same id is always safe.
 
+import { createHash } from "crypto";
 import express, { Router, type IRouter, type NextFunction, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
 import { and, eq } from "drizzle-orm";
@@ -143,10 +144,13 @@ router.post(
     }
 
     // Idempotency: same message id replays the stored answer.
+    // The request body's hash is stored with the ledger row so a replay must carry the SAME body:
+    // re-using a message_id with different content must never return the earlier success.
     const ledgerId = `alias:${messageId}`;
+    const bodyHash = createHash("sha256").update(bodyBytes(req)).digest("hex");
     const inserted = await db
       .insert(gatewayMessagesTable)
-      .values({ participantCode: participant.code, msgId: ledgerId })
+      .values({ participantCode: participant.code, msgId: ledgerId, endToEndId: bodyHash })
       .onConflictDoNothing()
       .returning();
     if (inserted.length === 0) {
@@ -154,6 +158,10 @@ router.post(
         .select()
         .from(gatewayMessagesTable)
         .where(and(eq(gatewayMessagesTable.participantCode, participant.code), eq(gatewayMessagesTable.msgId, ledgerId)));
+      if (prior && prior.endToEndId !== bodyHash) {
+        res.status(422).json({ success: false, message: "message_id was already used with a different request body" });
+        return;
+      }
       if (prior?.responseXml) {
         res.status(prior.responseStatus ?? 200).type("application/json").send(prior.responseXml);
       } else {

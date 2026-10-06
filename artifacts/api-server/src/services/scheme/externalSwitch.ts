@@ -36,6 +36,7 @@ import {
 import { getAllRates } from "../fxRates.js";
 import { screenAgainstOFAC } from "../../lib/ofac.js";
 import { generateRef } from "../../lib/refgen.js";
+import { checkAndCreateCTR } from "../../lib/ctr.js";
 import { isSafeOutboundUrl } from "../../lib/urlSafety.js";
 import { isProduction } from "../../lib/security.js";
 import { logger } from "../../lib/logger.js";
@@ -95,6 +96,13 @@ export function sanctionsHit(names: string[]): boolean {
 function pgCode(err: unknown): string | undefined {
   const e = err as { code?: string; cause?: { code?: string } };
   return e?.code ?? e?.cause?.code;
+}
+
+/** True only for a unique violation on the end-to-end id — not any other unique constraint. */
+function isDuplicateEndToEnd(err: unknown): boolean {
+  const e = err as { constraint?: string; detail?: string; cause?: { constraint?: string; detail?: string } };
+  const text = `${e?.constraint ?? e?.cause?.constraint ?? ""} ${e?.detail ?? e?.cause?.detail ?? ""}`;
+  return pgCode(err) === "23505" && /end_to_end_id/.test(text);
 }
 
 export function capFor(p: SchemeParticipant, defaultCapUsd = loadSchemeConfig().defaultNetDebitCapUsd): number {
@@ -318,6 +326,32 @@ async function loadTransfer(reference: string): Promise<SchemeTransfer | null> {
   return row ?? null;
 }
 
+/**
+ * The bank's answer arrived after the transfer was already finalized (e.g. an operator refunded
+ * the sender while the original call was still in flight). If the bank's verdict contradicts the
+ * final state, real money is exposed: record it loudly for manual reconciliation.
+ */
+async function flagContradiction(transfer: SchemeTransfer, bankVerdict: "ACSC" | "RJCT"): Promise<void> {
+  const current = await loadTransfer(transfer.reference);
+  if (!current) return;
+  const finalKind = kindOf(current.status);
+  const contradicts = (bankVerdict === "ACSC" && finalKind === "rejected") || (bankVerdict === "RJCT" && finalKind === "cleared");
+  if (!contradicts) return;
+  logger.error(
+    { reference: current.reference, finalStatus: current.status, bankVerdict },
+    "LATE BANK VERDICT CONTRADICTS FINAL STATE — manual reconciliation required"
+  );
+  const userId = current.senderUserId ?? current.recipientUserId;
+  if (userId) {
+    await db.insert(auditLogsTable).values({
+      userId,
+      action: "iapay_reconciliation_contradiction",
+      ip: "switch",
+      meta: { reference: current.reference, finalStatus: current.status, bankVerdict },
+    });
+  }
+}
+
 export type OutcomeKind = "cleared" | "rejected" | "unresolved";
 export interface Outcome {
   kind: OutcomeKind;
@@ -344,10 +378,12 @@ export async function dispatchAndFinalize(transfer: SchemeTransfer, iso: Iso2002
 
   let reason: string | undefined;
   if (result.status === "ACSC") {
-    await markCleared(transfer.reference, ["pending", "unresolved"]);
+    const done = await markCleared(transfer.reference, ["pending", "unresolved"]);
+    if (!done) await flagContradiction(transfer, "ACSC");
   } else if (result.status === "RJCT") {
     reason = safeReason(result.reason, "NARR");
-    await markRejected(transfer.reference, `participant_rejected:${reason}`, ["pending", "unresolved"]);
+    const done = await markRejected(transfer.reference, `participant_rejected:${reason}`, ["pending", "unresolved"]);
+    if (!done) await flagContradiction(transfer, "RJCT");
   } else {
     reason = safeReason(result.reason, "unknown");
     await markUnresolved(transfer.reference, `participant_outcome_unknown:${reason}`);
@@ -370,6 +406,12 @@ export async function resolveUnresolvedTransfer(
       ? await markCleared(reference, ["unresolved"])
       : await markRejected(reference, "operator_resolved_not_credited", ["unresolved"]);
   if (!transfer) return { ok: false, status: 409, message: "Transfer is not in the unresolved state" };
+  if (outcome === "credited" && transfer.senderUserId) {
+    // The compliance steps a prompt clearing would have run (currency-transaction reporting).
+    await checkAndCreateCTR(transfer.senderUserId, transfer.reference, Number(transfer.amount), transfer.currency, "iapay").catch((err) =>
+      logger.error({ err, reference }, "CTR check failed after operator resolution")
+    );
+  }
   await db.insert(auditLogsTable).values({
     userId: adminUserId,
     action: "iapay_resolve_unresolved_transfer",
@@ -485,6 +527,9 @@ export async function handleInboundMessage(sender: SchemeParticipant, parsed: Pa
 
   try {
     // 2. Identity & routing checks
+    // The operator's own institution is never an external sender: it would bypass the cap and
+    // the sender checks. Refuse even if someone configures a gateway secret for its code.
+    if (sender.code === HOME_PARTICIPANT_CODE) return await reject("RC01");
     if (parsed.debtorAgentCode !== sender.code) return await reject("RC01");
     if (sender.status !== "active") return await reject("AG01"); // transaction forbidden
 
@@ -503,7 +548,9 @@ export async function handleInboundMessage(sender: SchemeParticipant, parsed: Pa
     if (sanctionsHit([parsed.debtorName])) return await reject("RR04"); // regulatory reason
 
     // 3. Resolve the key
-    const resolved = await resolveAlias(parsed.creditorAlias);
+    // Exact match only: a bank must send the key exactly as registered. Fuzzy/normalising
+    // lookups are for human-typed input and could resolve to a different holder.
+    const resolved = await resolveAlias(parsed.creditorAlias, { exact: true });
     if (!resolved) return await reject("AC03"); // invalid creditor account
     if (parsed.creditorAgentCode !== resolved.participant.code) return await reject("RC01");
     if (resolved.alias.currency !== parsed.currency) return await reject("AM03"); // sending bank converts; we don't guess FX
@@ -516,7 +563,7 @@ export async function handleInboundMessage(sender: SchemeParticipant, parsed: Pa
       logger.warn({ participant: sender.code, exposure: err.exposureUsd, cap: err.capUsd }, "Net-debit cap exceeded");
       return reject("AM23"); // amount exceeds settlement limit
     }
-    if (pgCode(err) === "23505") return reject("DUPL"); // end-to-end id already used in the network
+    if (isDuplicateEndToEnd(err)) return reject("DUPL"); // end-to-end id already used in the network
     logger.error({ err, participant: sender.code, msgId: parsed.msgId }, "Inbound gateway processing failed");
     // Nothing committed if the ledger row is still `received`: free the message id so the bank can retry.
     // (A row already `pending` keeps its transfer link, so a retry gets the live status instead.)
@@ -535,6 +582,8 @@ async function creditHome(sender: SchemeParticipant, parsed: ParsedPacs008, reso
   const { row, reply } = await db.transaction(async (tx) => {
     await reserveExposure(tx, sender, parsed.amount, parsed.currency, rates);
 
+    // Serialise first-time wallet creation per user (FOR UPDATE locks nothing on a missing row).
+    await tx.execute(sql`select pg_advisory_xact_lock(1002, ${holderId})`);
     let [wallet] = await tx
       .select()
       .from(walletsTable)

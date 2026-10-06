@@ -4,7 +4,7 @@
 // card schemes like UnionPay and by PAPSS for cross-border netting), then marks
 // the batch and its transfers settled.
 
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import { currentOpenBatch } from "./batches.js";
 import {
   db,
@@ -37,7 +37,15 @@ export async function closeSettlementCycle(): Promise<SettlementSummary | null> 
   // churning out empty settled batches.
   if (transfers.length === 0) return null;
 
-  await db.update(settlementBatchesTable).set({ status: "netting", closedAt: new Date() }).where(eq(settlementBatchesTable.id, batch.id));
+  // Claim the batch atomically: of any concurrent callers (every instance's scheduler plus the
+  // admin endpoint) exactly one moves it open -> netting; the rest stop here instead of
+  // double-inserting positions and double-applying settlement balances.
+  const [claimed] = await db
+    .update(settlementBatchesTable)
+    .set({ status: "netting", closedAt: new Date() })
+    .where(and(eq(settlementBatchesTable.id, batch.id), eq(settlementBatchesTable.status, "open")))
+    .returning({ id: settlementBatchesTable.id });
+  if (!claimed) return null;
 
   // Multilateral netting: per participant per currency, debit what they owe the
   // network (their customers sent) and credit what the network owes them (their
@@ -78,13 +86,11 @@ export async function closeSettlementCycle(): Promise<SettlementSummary | null> 
     // Reflect the net movement on each participant's settlement account (in USD terms)
     const usdRate = pos.currency === "USD" ? 1 : await getRate(pos.currency, "USD");
     if (usdRate) {
-      const [participant] = await db.select().from(schemeParticipantsTable).where(eq(schemeParticipantsTable.id, pos.participantId));
-      if (participant) {
-        await db
-          .update(schemeParticipantsTable)
-          .set({ settlementBalance: (Number(participant.settlementBalance) + net * usdRate).toFixed(2) })
-          .where(eq(schemeParticipantsTable.id, pos.participantId));
-      }
+      // Single-statement arithmetic in SQL: no read-modify-write window for a lost update.
+      await db
+        .update(schemeParticipantsTable)
+        .set({ settlementBalance: sql`${schemeParticipantsTable.settlementBalance} + ${(net * usdRate).toFixed(2)}::numeric` })
+        .where(eq(schemeParticipantsTable.id, pos.participantId));
     }
   }
 

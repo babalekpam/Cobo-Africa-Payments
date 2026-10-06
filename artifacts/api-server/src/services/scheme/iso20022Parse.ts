@@ -82,11 +82,12 @@ export function parsePacs008(xml: string): ParsedPacs008 {
     endToEndId: need(str(tx, "PmtId", "EndToEndId"), "EndToEndId"),
     amount,
     currency,
-    debtorName: str(tx, "Dbtr", "Nm") ?? "Unknown",
+    // Free text from a participant is stored and shown downstream: cap its length.
+    debtorName: (str(tx, "Dbtr", "Nm") ?? "Unknown").slice(0, 140),
     debtorAgentCode: need(str(tx, "DbtrAgt", "FinInstnId", "ClrSysMmbId", "MmbId"), "debtor agent"),
     creditorAgentCode: need(str(tx, "CdtrAgt", "FinInstnId", "ClrSysMmbId", "MmbId"), "creditor agent"),
     creditorAlias: need(str(tx, "CdtrAcct", "Id", "Othr", "Id"), "creditor key (CdtrAcct)"),
-    remittance: str(tx, "RmtInf", "Ustrd") ?? null,
+    remittance: str(tx, "RmtInf", "Ustrd")?.slice(0, 140) ?? null,
   };
 }
 
