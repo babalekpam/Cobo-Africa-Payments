@@ -11,3 +11,9 @@ id = "8L_DG4yqlCL583PGu5k-H"
 uri = "file://artifacts/iapay-pitch-video/public/audio/bg_music.mp3"
 type = "audio"
 title = "background music"
+
+[[outputs]]
+id = "nOg2-lFbb1RtxaQWcWMnV"
+uri = "file://.local/outputs/Cobo-Africa-Payments.pptx"
+type = "slides"
+title = "Cobo Africa Payments.pptx"
