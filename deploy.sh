@@ -102,6 +102,15 @@ if [ "$DEPLOY_API" = true ]; then
     ALTER TABLE payment_aliases ALTER COLUMN user_id DROP NOT NULL;
     ALTER TABLE payment_aliases ADD COLUMN IF NOT EXISTS holder_name TEXT;
     ALTER TABLE scheme_participants ADD COLUMN IF NOT EXISTS net_debit_cap_usd NUMERIC(18, 2);
+    -- Access control: merchant ownership and private-file ownership
+    ALTER TABLE merchants ADD COLUMN IF NOT EXISTS owner_user_id INTEGER;
+    CREATE INDEX IF NOT EXISTS merchants_owner_idx ON merchants(owner_user_id);
+    CREATE TABLE IF NOT EXISTS stored_objects (
+      id SERIAL PRIMARY KEY,
+      object_path TEXT NOT NULL UNIQUE,
+      owner_user_id INTEGER NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
     ALTER TABLE scheme_participants ADD COLUMN IF NOT EXISTS gateway_secret_enc TEXT;
     ALTER TABLE scheme_participants ADD COLUMN IF NOT EXISTS secret_rotated_at TIMESTAMPTZ;
     CREATE TABLE IF NOT EXISTS gateway_messages (

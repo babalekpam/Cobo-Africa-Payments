@@ -14,3 +14,4 @@ export * from "./depositRequests";
 export * from "./ctr";
 export * from "./paymentIntents";
 export * from "./scheme";
+export * from "./storedObjects";

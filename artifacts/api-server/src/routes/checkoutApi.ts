@@ -4,6 +4,7 @@ import { db, apiKeysTable, checkoutSessionsTable, webhookEventsTable, usersTable
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
 import crypto from "crypto";
 import { isSafeOutboundUrl } from "../lib/urlSafety";
+import { accountIsActive } from "../lib/accounts";
 
 const router: IRouter = Router();
 
@@ -38,8 +39,8 @@ async function requireApiKey(req: ApiKeyAuthRequest, res: Response, next: NextFu
     return;
   }
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, parseInt(apiKey.userId)));
-  if (!user) {
-    res.status(401).json({ error: { type: "authentication_error", message: "Account not found" } });
+  if (!user || !accountIsActive(user)) {
+    res.status(401).json({ error: { type: "authentication_error", message: "Account not found or not active" } });
     return;
   }
   await db.update(apiKeysTable).set({ lastUsedAt: new Date() }).where(eq(apiKeysTable.id, apiKey.id));

@@ -4,6 +4,7 @@ import { db, kycDocumentsTable, usersTable, notificationsTable } from "@workspac
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
 import { ObjectStorageService } from "../lib/objectStorage";
 import { createLocalUploadURL, localStorageEnabled } from "../lib/localObjectStore";
+import { registerObject, userOwnsObject } from "../lib/storedObjects";
 
 const router: IRouter = Router();
 
@@ -24,7 +25,9 @@ router.get("/kyc/documents", requireAuth, async (req: AuthenticatedRequest, res)
 router.post("/kyc/upload-url", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
   if (localStorageEnabled()) {
     try {
-      res.json({ success: true, ...createLocalUploadURL(String(req.body?.contentType)) });
+      const ticket = createLocalUploadURL(String(req.body?.contentType));
+      await registerObject(ticket.objectPath, req.user!.id); // the uploader owns the file
+      res.json({ success: true, ...ticket });
     } catch {
       res.status(400).json({ success: false, message: "Unsupported file type. Use JPEG, PNG, WebP or PDF." });
     }
@@ -37,6 +40,7 @@ router.post("/kyc/upload-url", requireAuth, async (req: AuthenticatedRequest, re
   try {
     const uploadURL = await storageService.getObjectEntityUploadURL();
     const objectPath = storageService.normalizeObjectEntityPath(uploadURL);
+    await registerObject(objectPath, req.user!.id); // the uploader owns the file
     res.json({ success: true, uploadURL, objectPath });
   } catch (err: any) {
     console.error("[KYC] Upload URL error:", err.message);
@@ -51,7 +55,8 @@ router.post("/kyc/submit", requireAuth, async (req: AuthenticatedRequest, res): 
   if (!docType) { res.status(400).json({ success: false, message: "Document type required" }); return; }
   if (!docValue && !file_path) { res.status(400).json({ success: false, message: "Document number or file upload required" }); return; }
 
-  if (file_path && (typeof file_path !== "string" || !file_path.startsWith("/objects/"))) {
+  // The attached file must be one THIS user uploaded — never another user's file path.
+  if (file_path && (typeof file_path !== "string" || !file_path.startsWith("/objects/") || !(await userOwnsObject(file_path, req.user!.id)))) {
     res.status(400).json({ success: false, message: "Invalid file path" });
     return;
   }

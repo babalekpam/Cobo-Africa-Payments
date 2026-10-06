@@ -1,5 +1,6 @@
 import express, { Router, type IRouter, type Request, type Response } from "express";
 import { createLocalUploadURL, localStorageEnabled, openLocalObject, saveLocalUpload } from "../lib/localObjectStore";
+import { canReadObject, registerObject } from "../lib/storedObjects";
 import { Readable } from "stream";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
@@ -16,7 +17,9 @@ router.post("/storage/uploads/request-url", requireAuth, async (req: Authenticat
 
   if (localStorageEnabled()) {
     try {
-      res.json(createLocalUploadURL(String(contentType)));
+      const ticket = createLocalUploadURL(String(contentType));
+      await registerObject(ticket.objectPath, req.user!.id); // the uploader owns the file
+      res.json(ticket);
     } catch {
       res.status(400).json({ error: "Unsupported content type. Use JPEG, PNG, WebP or PDF." });
     }
@@ -26,6 +29,7 @@ router.post("/storage/uploads/request-url", requireAuth, async (req: Authenticat
   try {
     const uploadURL = await objectStorageService.getObjectEntityUploadURL();
     const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+    await registerObject(objectPath, req.user!.id); // the uploader owns the file
 
     res.json({ uploadURL, objectPath });
   } catch (err: any) {
@@ -76,6 +80,14 @@ router.put("/storage/local-upload/:token", express.raw({ type: () => true, limit
 });
 
 router.get("/storage/objects/*path", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  // Authorization first, for BOTH storage backends: the owner or an administrator only. A file that
+  // belongs to someone else (or has no recorded owner) looks nonexistent to everyone else.
+  const requested = "/objects/" + ([] as string[]).concat(req.params.path as string | string[]).join("/");
+  if (!(await canReadObject(requested, req.user!))) {
+    res.status(404).json({ error: "Object not found" });
+    return;
+  }
+
   if (localStorageEnabled()) {
     const rel = ([] as string[]).concat(req.params.path as string | string[]).join("/");
     const id = /^uploads\/([^/]+)$/.exec(rel)?.[1];

@@ -457,10 +457,16 @@ router.get("/scheme/participants", requireAuth, async (_req: AuthenticatedReques
   });
 });
 
-router.get("/scheme/stats", requireAuth, async (_req: AuthenticatedRequest, res): Promise<void> => {
+router.get("/scheme/stats", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
   const participants = await db.select().from(schemeParticipantsTable);
-  const transfers = await db.select().from(schemeTransfersTable);
   const countries = new Set(participants.map((p) => p.country));
+  // Network coverage (how many institutions, in how many countries) is shown to every member.
+  // Network-wide payment counts and volumes are commercially sensitive: administrators only.
+  if (!(await requireAdmin(req))) {
+    res.json({ success: true, stats: { participants: participants.length, countries: countries.size } });
+    return;
+  }
+  const transfers = await db.select().from(schemeTransfersTable);
   const totalVolume = transfers.reduce((s, t) => s + Number(t.amount), 0);
   res.json({
     success: true,

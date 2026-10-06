@@ -4,6 +4,7 @@ import { db, usersTable, walletsTable, transactionsTable, notificationsTable, ky
 import { LoginBody } from "@workspace/api-zod";
 import { hashPassword, comparePassword, signToken } from "../lib/auth";
 import { validatePassword } from "../lib/security.js";
+import { accountIsActive } from "../lib/accounts";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
 import { emailService } from "../services/email";
 import crypto from "crypto";
@@ -91,7 +92,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     res.status(401).json({ success: false, message: "Invalid credentials" });
     return;
   }
-  if (user.status !== "active" && user.isActive === "false") { res.status(401).json({ success: false, message: "Account is suspended" }); return; }
+  if (!accountIsActive(user)) { res.status(401).json({ success: false, message: "Account is suspended" }); return; }
 
   if (user.twoFaEnabled === "true") {
     if (!totp_code) {

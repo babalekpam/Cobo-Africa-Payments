@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, and, SQL, count, gte, lte, or } from "drizzle-orm";
+import { eq, ilike, and, SQL, count, gte, lte, or, inArray } from "drizzle-orm";
 import { db, transactionsTable, merchantsTable, usersTable } from "@workspace/db";
 import {
   ListTransactionsQueryParams,
@@ -8,7 +8,8 @@ import {
   UpdateTransactionParams,
   UpdateTransactionBody,
 } from "@workspace/api-zod";
-import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
+import { requireAuth, requireAdmin, type AuthenticatedRequest } from "../middlewares/requireAuth";
+import { canSeeTransaction, ownedMerchantIds } from "../lib/access";
 
 const router: IRouter = Router();
 
@@ -50,6 +51,13 @@ router.get("/transactions", requireAuth, async (req: AuthenticatedRequest, res):
   const offset = (page - 1) * limit;
 
   const conditions: SQL[] = [];
+  // Privacy boundary: users only ever see their own transactions and those at merchants they own.
+  // Administrators see everything. (A client-supplied merchantId filter can only narrow this.)
+  if (req.user!.role !== "admin") {
+    const mine = await ownedMerchantIds(req.user!.id);
+    const scope = mine.length > 0 ? or(eq(transactionsTable.customerId, req.user!.id), inArray(transactionsTable.merchantId, mine)) : eq(transactionsTable.customerId, req.user!.id);
+    conditions.push(scope!);
+  }
   if (status) conditions.push(eq(transactionsTable.status, status));
   if (merchantId) conditions.push(eq(transactionsTable.merchantId, merchantId));
   if (startDate) conditions.push(gte(transactionsTable.createdAt, new Date(startDate)));
@@ -75,7 +83,9 @@ router.get("/transactions", requireAuth, async (req: AuthenticatedRequest, res):
   });
 });
 
-router.post("/transactions", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+// Ledger records are created by the payment flows themselves; creating or rewriting one by hand is an
+// administrator-only correction tool (it does not move wallet funds).
+router.post("/transactions", requireAuth, requireAdmin, async (req: AuthenticatedRequest, res): Promise<void> => {
   const parsed = CreateTransactionBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid request", message: parsed.error.message });
@@ -104,7 +114,8 @@ router.get("/transactions/:id", requireAuth, async (req: AuthenticatedRequest, r
   }
 
   const [tx] = await db.select().from(transactionsTable).where(eq(transactionsTable.id, params.data.id));
-  if (!tx) {
+  // Someone else's transaction is indistinguishable from a nonexistent one (404, not 403).
+  if (!tx || !canSeeTransaction(req.user!, tx, req.user!.role === "admin" ? [] : await ownedMerchantIds(req.user!.id))) {
     res.status(404).json({ error: "Not found", message: "Transaction not found" });
     return;
   }
@@ -113,7 +124,7 @@ router.get("/transactions/:id", requireAuth, async (req: AuthenticatedRequest, r
   res.json(enriched);
 });
 
-router.put("/transactions/:id", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+router.put("/transactions/:id", requireAuth, requireAdmin, async (req: AuthenticatedRequest, res): Promise<void> => {
   const params = UpdateTransactionParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: "Invalid params", message: params.error.message });

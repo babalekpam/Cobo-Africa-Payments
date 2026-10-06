@@ -2,11 +2,12 @@ import { Router, type IRouter } from "express";
 import { eq, count, sum, sql } from "drizzle-orm";
 import { db, transactionsTable, merchantsTable, usersTable } from "@workspace/db";
 import { GetRecentTransactionsQueryParams } from "@workspace/api-zod";
-import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
+import { requireAuth, requireAdmin, type AuthenticatedRequest } from "../middlewares/requireAuth";
 
 const router: IRouter = Router();
 
-router.get("/dashboard/summary", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+// Platform-wide reporting (all users' volumes, merchants and transactions): administrators only.
+router.get("/dashboard/summary", requireAuth, requireAdmin, async (req: AuthenticatedRequest, res): Promise<void> => {
   const [txStats] = await db
     .select({
       total: count(),
@@ -38,7 +39,7 @@ router.get("/dashboard/summary", requireAuth, async (req: AuthenticatedRequest, 
   });
 });
 
-router.get("/dashboard/recent-transactions", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+router.get("/dashboard/recent-transactions", requireAuth, requireAdmin, async (req: AuthenticatedRequest, res): Promise<void> => {
   const parsed = GetRecentTransactionsQueryParams.safeParse(req.query);
   const limit = parsed.success ? (parsed.data.limit ?? 10) : 10;
 
@@ -69,7 +70,7 @@ router.get("/dashboard/recent-transactions", requireAuth, async (req: Authentica
   res.json(enriched);
 });
 
-router.get("/dashboard/volume-by-country", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+router.get("/dashboard/volume-by-country", requireAuth, requireAdmin, async (req: AuthenticatedRequest, res): Promise<void> => {
   const results = await db
     .select({
       country: transactionsTable.country,
@@ -91,7 +92,7 @@ router.get("/dashboard/volume-by-country", requireAuth, async (req: Authenticate
   );
 });
 
-router.get("/dashboard/monthly-volume", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+router.get("/dashboard/monthly-volume", requireAuth, requireAdmin, async (req: AuthenticatedRequest, res): Promise<void> => {
   const results = await db
     .select({
       month: sql<string>`TO_CHAR(DATE_TRUNC('month', ${transactionsTable.createdAt}), 'YYYY-MM')`,
@@ -112,7 +113,7 @@ router.get("/dashboard/monthly-volume", requireAuth, async (req: AuthenticatedRe
   );
 });
 
-router.get("/dashboard/top-merchants", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+router.get("/dashboard/top-merchants", requireAuth, requireAdmin, async (req: AuthenticatedRequest, res): Promise<void> => {
   const limitParam = req.query.limit;
   const limit = limitParam ? parseInt(String(limitParam), 10) : 5;
 
