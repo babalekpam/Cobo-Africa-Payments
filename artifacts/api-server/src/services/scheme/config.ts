@@ -29,6 +29,11 @@ export interface SchemeConfig {
    * sets its cap, because unsettled credit extended to it is the operator's risk.
    */
   defaultNetDebitCapUsd: number;
+  /**
+   * Refuse to move money between institutions unless exchange rates were fetched live recently.
+   * Defaults ON in production: the built-in static fallback rates misstate FX and exposure.
+   */
+  gatewayRequireLiveRates: boolean;
 }
 
 type Env = Record<string, string | undefined>;
@@ -51,7 +56,21 @@ export function loadSchemeConfig(env: Env = process.env): SchemeConfig {
     gatewayMaxClockSkewSec: positiveInt(env.GATEWAY_MAX_CLOCK_SKEW_SEC, 300),
     gatewayMaxSingleAmountUsd: positiveInt(env.GATEWAY_MAX_SINGLE_AMOUNT_USD, 10000),
     defaultNetDebitCapUsd: Math.max(0, Number(env.GATEWAY_DEFAULT_NET_DEBIT_CAP_USD) || 0),
+    gatewayRequireLiveRates:
+      env.GATEWAY_REQUIRE_LIVE_RATES !== undefined ? env.GATEWAY_REQUIRE_LIVE_RATES.trim().toLowerCase() === "true" : env.NODE_ENV === "production",
   };
+}
+
+/** Human-readable warnings for settings that are unsafe for a real deployment. */
+export function schemeConfigWarnings(env: Env = process.env): string[] {
+  const cfg = loadSchemeConfig(env);
+  const warnings: string[] = [];
+  const prod = env.NODE_ENV === "production";
+  if (prod && cfg.seedDemoParticipants) warnings.push("SCHEME_SEED_DEMO_PARTICIPANTS is on in production: fictional member banks will be created. Set it to false.");
+  if (prod && !env.EXCHANGERATE_API_KEY) warnings.push("EXCHANGERATE_API_KEY is not set: exchange rates are static fallbacks, so the participant gateway will refuse to move money until live rates are available.");
+  if (!env.GATEWAY_SECRETS_KEY || env.GATEWAY_SECRETS_KEY.length < 32) warnings.push("GATEWAY_SECRETS_KEY (>= 32 chars) is not set: operators cannot onboard participants with stored secrets.");
+  if (prod && cfg.defaultNetDebitCapUsd > 0) warnings.push("GATEWAY_DEFAULT_NET_DEBIT_CAP_USD is above 0: participants without their own cap can originate payments. Prefer per-participant caps.");
+  return warnings;
 }
 
 /** Per-participant shared secrets for inbound gateway signatures. Malformed config yields none (fail closed). */

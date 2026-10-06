@@ -17,6 +17,8 @@ process.env.SCHEME_SEED_DEMO_PARTICIPANTS = "false";
 const SECRET_A = "bank-a-shared-secret-0123456789";
 const SECRET_B = "bank-b-shared-secret-0123456789";
 process.env.GATEWAY_PARTICIPANT_SECRETS = JSON.stringify({ BANKAKEN: SECRET_A, BANKBGHA: SECRET_B });
+const SECRETS_KEY = "integration-test-secrets-key-0123456789abcdef";
+process.env.GATEWAY_SECRETS_KEY = SECRETS_KEY;
 
 const skip = !process.env.DATABASE_URL;
 
@@ -649,6 +651,144 @@ test("review #10: the operator's own code can never act as an external sender", 
   } finally {
     process.env.GATEWAY_PARTICIPANT_SECRETS = prior;
   }
+});
+
+// ---------- operator self-service onboarding ----------
+async function adminApi(path: string, init: { method?: string; body?: unknown; token?: string } = {}): Promise<{ status: number; json: Record<string, any>; raw: string }> {
+  const res = await fetch(baseUrl + path, {
+    method: init.method ?? "GET",
+    headers: { "content-type": "application/json", ...(init.token ? { authorization: `Bearer ${init.token}` } : {}) },
+    body: init.body === undefined ? undefined : JSON.stringify(init.body),
+  });
+  const raw = await res.text();
+  let json: Record<string, any> = {};
+  try { json = JSON.parse(raw); } catch { /* non-JSON */ }
+  return { status: res.status, json, raw };
+}
+async function tokenFor(userId: number, email: string, role: string): Promise<string> {
+  const { signToken } = await import("../lib/auth.js");
+  return signToken({ id: userId, email, role });
+}
+const newBank = { code: "NEWBANKNGA", name: "New Bank Nigeria", type: "bank", country: "NG", currency: "USD", net_debit_cap_usd: 500 };
+
+test("onboarding: an operator brings a bank online end to end with no restart or env edit", { skip }, async () => {
+  const admin = await tokenFor(await makeAdmin(), "admin@example.com", "admin");
+  const created = await adminApi("/api/scheme/participants", { method: "POST", token: admin, body: newBank });
+  assert.equal(created.status, 201);
+  const secret: string = created.json.gateway_secret;
+  assert.ok(typeof secret === "string" && secret.length >= 40, "a strong secret is generated");
+  assert.equal(created.json.participant.has_gateway_secret, true);
+  assert.equal(created.json.participant.net_debit_cap_usd, 500);
+  assert.ok(!created.raw.includes("gateway_secret_enc"), "the encrypted blob is never returned");
+
+  const [row] = await m.db.db.select().from(m.db.schemeParticipantsTable).where(m.drizzle.eq(m.db.schemeParticipantsTable.code, "NEWBANKNGA"));
+  assert.ok(row.gatewaySecretEnc!.startsWith("v1."), "stored encrypted");
+  assert.ok(!row.gatewaySecretEnc!.includes(secret), "never stored in plaintext");
+
+  const publicList = await adminApi("/api/scheme/participants", { token: admin });
+  assert.ok(!publicList.raw.includes(secret) && !publicList.raw.includes("gateway_secret") && !publicList.raw.includes("v1."), "public registry leaks nothing");
+  const adminList = await adminApi("/api/scheme/admin/participants", { token: admin });
+  assert.ok(!adminList.raw.includes(secret) && !adminList.raw.includes("v1."), "admin registry shows only has_gateway_secret");
+
+  const asNew = (e2e: string, amount: number) => credit(pacs008({ e2e, alias: "+254700000001", amount, debtorCode: "NEWBANKNGA" }), { code: "NEWBANKNGA", secret });
+  assert.equal((await asNew("EONB00000000000000001", 100)).status, 200, "the new bank can send immediately with its issued secret");
+  assert.equal(reason((await asNew("EONB00000000000000002", 600)).text), "AM23", "its cap (500) is enforced");
+
+  assert.equal((await adminApi("/api/scheme/participants/newbanknga", { method: "PUT", token: admin, body: { net_debit_cap_usd: 5000 } })).status, 200);
+  assert.equal((await asNew("EONB00000000000000003", 600)).status, 200, "raised cap takes effect at once");
+
+  assert.equal((await adminApi("/api/scheme/participants/NEWBANKNGA", { method: "PUT", token: admin, body: { status: "suspended" } })).status, 200);
+  assert.equal((await asNew("EONB00000000000000004", 1)).status, 401, "a suspended bank is locked out");
+  assert.equal((await adminApi("/api/scheme/participants/NEWBANKNGA", { method: "PUT", token: admin, body: { status: "active" } })).status, 200);
+  assert.equal((await asNew("EONB00000000000000005", 1)).status, 200);
+
+  const rotated = await adminApi("/api/scheme/participants/NEWBANKNGA/rotate-secret", { method: "POST", token: admin });
+  assert.equal(rotated.status, 200);
+  const newSecret: string = rotated.json.gateway_secret;
+  assert.notEqual(newSecret, secret);
+  assert.equal((await asNew("EONB00000000000000006", 1)).status, 401, "the old secret stops working immediately");
+  const withNew = await credit(pacs008({ e2e: "EONB00000000000000007", alias: "+254700000001", amount: 1, debtorCode: "NEWBANKNGA" }), { code: "NEWBANKNGA", secret: newSecret });
+  assert.equal(withNew.status, 200);
+
+  const actions = (await m.db.db.select().from(m.db.auditLogsTable)).map((a) => a.action);
+  for (const a of ["iapay_participant_created", "iapay_participant_updated", "iapay_participant_secret_rotated"]) assert.ok(actions.includes(a), `audit: ${a}`);
+});
+
+test("onboarding: validation and authorization", { skip }, async () => {
+  const adminId = await makeAdmin();
+  const admin = await tokenFor(adminId, "admin@example.com", "admin");
+  const user = await tokenFor(w.bob.id, "bob@example.com", "user");
+  for (const [method, path, body] of [
+    ["POST", "/api/scheme/participants", newBank],
+    ["PUT", "/api/scheme/participants/BANKAKEN", { net_debit_cap_usd: 999999 }],
+    ["POST", "/api/scheme/participants/BANKAKEN/rotate-secret", undefined],
+    ["GET", "/api/scheme/admin/participants", undefined],
+  ] as const) {
+    assert.equal((await adminApi(path, { method, body, token: user })).status, 403, `${method} ${path} must be admin-only`);
+    assert.equal((await adminApi(path, { method, body })).status, 401, `${method} ${path} must require login`);
+  }
+  const post = (body: unknown) => adminApi("/api/scheme/participants", { method: "POST", token: admin, body });
+  assert.equal((await post({ ...newBank, code: "IAPAYPAN" })).status, 400, "cannot create a participant with the operator's code");
+  assert.equal((await post({ ...newBank, code: "ab" })).status, 400);
+  assert.equal((await post({ ...newBank, country: "Nigeria" })).status, 400);
+  assert.equal((await post({ ...newBank, type: "casino" })).status, 400);
+  assert.equal((await post({ ...newBank, net_debit_cap_usd: -1 })).status, 400);
+  assert.equal((await post({ ...newBank, net_debit_cap_usd: "1000" })).status, 400, "cap must be a number");
+  assert.equal((await post({ ...newBank, api_url: "http://localhost/internal" })).status, 400, "internal URLs are refused");
+  assert.equal((await post({ ...newBank, api_url: "https://169.254.169.254/x" })).status, 400);
+  assert.equal((await post({ ...newBank, code: "BANKAKEN" })).status, 409);
+  assert.equal((await adminApi("/api/scheme/participants/IAPAYPAN", { method: "PUT", token: admin, body: { status: "suspended" } })).status, 400, "the operator cannot be suspended");
+  assert.equal((await adminApi("/api/scheme/participants/NOPE", { method: "PUT", token: admin, body: { status: "active" } })).status, 404);
+  assert.equal((await adminApi("/api/scheme/participants/BANKAKEN", { method: "PUT", token: admin, body: {} })).status, 400);
+  assert.equal((await adminApi("/api/scheme/participants/IAPAYPAN/rotate-secret", { method: "POST", token: admin })).status, 400);
+});
+
+test("onboarding: without GATEWAY_SECRETS_KEY no secret is stored or issued (fail closed)", { skip }, async () => {
+  const admin = await tokenFor(await makeAdmin(), "admin@example.com", "admin");
+  delete process.env.GATEWAY_SECRETS_KEY;
+  try {
+    const created = await adminApi("/api/scheme/participants", { method: "POST", token: admin, body: newBank });
+    assert.equal(created.status, 201);
+    assert.equal(created.json.gateway_secret, null);
+    assert.equal(created.json.participant.has_gateway_secret, false);
+    assert.equal((await adminApi("/api/scheme/participants/NEWBANKNGA/rotate-secret", { method: "POST", token: admin })).status, 503);
+  } finally {
+    process.env.GATEWAY_SECRETS_KEY = SECRETS_KEY;
+  }
+});
+
+test("onboarding: a stored secret that cannot be decrypted (wrong key) authenticates nobody", { skip }, async () => {
+  const admin = await tokenFor(await makeAdmin(), "admin@example.com", "admin");
+  const created = await adminApi("/api/scheme/participants", { method: "POST", token: admin, body: newBank });
+  const secret: string = created.json.gateway_secret;
+  const attempt = () => credit(pacs008({ e2e: `EKEY${Math.random().toString(36).slice(2, 14).padEnd(12, "0")}`, alias: "+254700000001", amount: 1, debtorCode: "NEWBANKNGA" }), { code: "NEWBANKNGA", secret });
+  assert.equal((await attempt()).status, 200);
+  process.env.GATEWAY_SECRETS_KEY = "a-completely-different-key-0123456789abcdef";
+  try {
+    assert.equal((await attempt()).status, 401, "wrong master key => cannot verify => rejected");
+  } finally {
+    process.env.GATEWAY_SECRETS_KEY = SECRETS_KEY;
+  }
+  assert.equal((await attempt()).status, 200, "restoring the key restores access");
+});
+
+test("stale exchange rates pause inter-institution payments in production mode and create nothing", { skip }, async () => {
+  await registerBankBKey();
+  bankBOverride({});
+  process.env.GATEWAY_REQUIRE_LIVE_RATES = "true"; // as in production; rates here are static fallbacks (never fresh)
+  try {
+    const inbound = await credit(pacs008({ e2e: "ERATE0000000000000001", alias: "+254700000001", amount: 10 }));
+    assert.equal(inbound.status, 503);
+    assert.equal((await m.db.db.select().from(m.db.gatewayMessagesTable)).filter((r) => r.msgId.startsWith("MERATE")).length, 0, "nothing recorded");
+    const outbound = await pay();
+    assert.equal(outbound.ok, false);
+    assert.equal(outbound.code, "RATES_UNAVAILABLE");
+    assert.equal(await balance(w.alice.walletId), 1000, "nothing debited");
+    assert.equal((await transfers()).length, 0);
+  } finally {
+    delete process.env.GATEWAY_REQUIRE_LIVE_RATES;
+  }
+  assert.equal((await credit(pacs008({ e2e: "ERATE0000000000000002", alias: "+254700000001", amount: 10 }))).status, 200, "unaffected when not required");
 });
 
 test("review #6: a late bank ACSC after an operator refund is flagged for reconciliation, not silently dropped", { skip }, async () => {

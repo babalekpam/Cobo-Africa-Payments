@@ -13,7 +13,11 @@ import {
   settlementBatchesTable,
   schemeDisputesTable,
   notificationsTable,
+  auditLogsTable,
 } from "@workspace/db";
+import { isSafeOutboundUrl } from "../lib/urlSafety.js";
+import { isProduction } from "../lib/security.js";
+import { encryptSecret, generateParticipantSecret, secretBoxAvailable } from "../lib/secretBox.js";
 import type { NextFunction, Response } from "express";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth.js";
 import { idempotencyMiddleware } from "../middlewares/idempotency.js";
@@ -25,6 +29,7 @@ import {
   deleteAlias,
   resolveAlias,
   getHomeParticipant,
+  HOME_PARTICIPANT_CODE,
   ALIAS_TYPES,
 } from "../services/scheme/directory.js";
 import { sendSms } from "../services/sms.js";
@@ -471,20 +476,153 @@ router.get("/scheme/stats", requireAuth, async (_req: AuthenticatedRequest, res)
 
 // ---------- Settlement operations (scheme operator / admin) ----------
 
+// ---------- Operator onboarding of participants (banks, MNOs, PSPs) ----------
+// Everything an operator needs to bring an institution onto the scheme, with no server
+// restart or environment edit: create it (a gateway secret is generated and shown ONCE),
+// set its net-debit cap and endpoint, suspend/reactivate it, rotate its secret. Secrets are
+// stored AES-256-GCM encrypted (GATEWAY_SECRETS_KEY) and are never returned again.
+
+const PARTICIPANT_TYPES = ["bank", "mobile_money", "fintech", "central_bank"];
+
+function adminParticipantView(p: typeof schemeParticipantsTable.$inferSelect) {
+  return {
+    id: p.id,
+    code: p.code,
+    name: p.name,
+    type: p.type,
+    country: p.country,
+    currency: p.currency,
+    status: p.status,
+    api_url: p.apiUrl,
+    net_debit_cap_usd: p.netDebitCapUsd === null ? null : Number(p.netDebitCapUsd),
+    has_gateway_secret: !!p.gatewaySecretEnc,
+    secret_rotated_at: p.secretRotatedAt,
+    joined_at: p.joinedAt,
+  };
+}
+
+async function adminAudit(adminId: number, action: string, meta: Record<string, unknown>): Promise<void> {
+  await db.insert(auditLogsTable).values({ userId: adminId, action, ip: "admin", meta });
+}
+
+function validApiUrl(url: unknown): url is string {
+  return typeof url === "string" && isSafeOutboundUrl(url, { requireHttps: isProduction() });
+}
+
+function parseCap(value: unknown): number | null | undefined {
+  if (value === null) return null;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1e12) return undefined;
+  return Math.round(value * 100) / 100;
+}
+
+router.get("/scheme/admin/participants", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+  if (!(await requireAdmin(req))) { res.status(403).json({ success: false, message: "Admin access required" }); return; }
+  const rows = await db.select().from(schemeParticipantsTable).orderBy(schemeParticipantsTable.code);
+  res.json({ success: true, participants: rows.map(adminParticipantView) });
+});
+
 router.post("/scheme/participants", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
   if (!(await requireAdmin(req))) { res.status(403).json({ success: false, message: "Admin access required" }); return; }
-  const { code, name, type, country, currency, api_url } = req.body as Record<string, string>;
-  if (!code || !name || !country || !currency) {
-    res.status(400).json({ success: false, message: "code, name, country and currency are required" });
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const code = typeof b.code === "string" ? b.code.trim().toUpperCase() : "";
+  const name = typeof b.name === "string" ? b.name.trim() : "";
+  const type = typeof b.type === "string" ? b.type : "bank";
+  const country = typeof b.country === "string" ? b.country.trim().toUpperCase() : "";
+  const currency = typeof b.currency === "string" ? b.currency.trim().toUpperCase() : "";
+  if (!/^[A-Z0-9]{3,20}$/.test(code) || code === HOME_PARTICIPANT_CODE) {
+    res.status(400).json({ success: false, message: "code must be 3-20 characters A-Z/0-9 and not the operator's own code" });
     return;
   }
-  const [existing] = await db.select().from(schemeParticipantsTable).where(eq(schemeParticipantsTable.code, code.toUpperCase()));
+  if (name.length < 2 || name.length > 100 || !PARTICIPANT_TYPES.includes(type) || !/^[A-Z]{2}$/.test(country) || !/^[A-Z]{3}$/.test(currency)) {
+    res.status(400).json({ success: false, message: `name, country (ISO-2), currency (ISO-4217) are required; type one of ${PARTICIPANT_TYPES.join(", ")}` });
+    return;
+  }
+  if (b.api_url !== undefined && b.api_url !== null && !validApiUrl(b.api_url)) {
+    res.status(400).json({ success: false, message: "api_url must be a public https URL" });
+    return;
+  }
+  const cap = b.net_debit_cap_usd === undefined ? null : parseCap(b.net_debit_cap_usd);
+  if (cap === undefined) {
+    res.status(400).json({ success: false, message: "net_debit_cap_usd must be a number >= 0" });
+    return;
+  }
+  const [existing] = await db.select().from(schemeParticipantsTable).where(eq(schemeParticipantsTable.code, code));
   if (existing) { res.status(409).json({ success: false, message: "Participant code already exists" }); return; }
+
+  const secret = secretBoxAvailable() ? generateParticipantSecret() : null;
   const [participant] = await db
     .insert(schemeParticipantsTable)
-    .values({ code: code.toUpperCase(), name, type: type || "bank", country: country.toUpperCase(), currency: currency.toUpperCase(), apiUrl: api_url || null })
+    .values({
+      code,
+      name,
+      type,
+      country,
+      currency,
+      apiUrl: (b.api_url as string | null | undefined) ?? null,
+      netDebitCapUsd: cap === null ? null : String(cap),
+      gatewaySecretEnc: secret ? encryptSecret(secret) : null,
+      secretRotatedAt: secret ? new Date() : null,
+    })
     .returning();
-  res.status(201).json({ success: true, participant });
+  await adminAudit(req.user!.id, "iapay_participant_created", { code, type, country, currency, cap, secretIssued: !!secret });
+  res.status(201).json({
+    success: true,
+    participant: adminParticipantView(participant),
+    // Shown exactly once. Hand it to the institution over a secure channel.
+    gateway_secret: secret,
+    note: secret
+      ? "Store this gateway secret now; it cannot be shown again. The participant cannot send until you set net_debit_cap_usd."
+      : "No gateway secret was issued: set GATEWAY_SECRETS_KEY (>= 32 chars) on the server, then call rotate-secret.",
+  });
+});
+
+router.put("/scheme/participants/:code", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+  if (!(await requireAdmin(req))) { res.status(403).json({ success: false, message: "Admin access required" }); return; }
+  const code = String(req.params.code).toUpperCase();
+  const [p] = await db.select().from(schemeParticipantsTable).where(eq(schemeParticipantsTable.code, code));
+  if (!p) { res.status(404).json({ success: false, message: "Participant not found" }); return; }
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const patch: Partial<typeof schemeParticipantsTable.$inferInsert> = {};
+  if (b.net_debit_cap_usd !== undefined) {
+    const cap = parseCap(b.net_debit_cap_usd);
+    if (cap === undefined) { res.status(400).json({ success: false, message: "net_debit_cap_usd must be a number >= 0 or null" }); return; }
+    patch.netDebitCapUsd = cap === null ? null : String(cap);
+  }
+  if (b.status !== undefined) {
+    if ((b.status !== "active" && b.status !== "suspended") || code === HOME_PARTICIPANT_CODE) {
+      res.status(400).json({ success: false, message: 'status must be "active" or "suspended" (the operator itself cannot be suspended)' });
+      return;
+    }
+    patch.status = b.status;
+  }
+  if (b.api_url !== undefined) {
+    if (b.api_url !== null && !validApiUrl(b.api_url)) { res.status(400).json({ success: false, message: "api_url must be a public https URL or null" }); return; }
+    patch.apiUrl = b.api_url as string | null;
+  }
+  if (Object.keys(patch).length === 0) { res.status(400).json({ success: false, message: "Nothing to update" }); return; }
+  const [updated] = await db.update(schemeParticipantsTable).set(patch).where(eq(schemeParticipantsTable.id, p.id)).returning();
+  await adminAudit(req.user!.id, "iapay_participant_updated", { code, changes: Object.keys(patch), cap: b.net_debit_cap_usd, status: b.status });
+  res.json({ success: true, participant: adminParticipantView(updated) });
+});
+
+router.post("/scheme/participants/:code/rotate-secret", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+  if (!(await requireAdmin(req))) { res.status(403).json({ success: false, message: "Admin access required" }); return; }
+  const code = String(req.params.code).toUpperCase();
+  if (code === HOME_PARTICIPANT_CODE) { res.status(400).json({ success: false, message: "The operator has no gateway secret" }); return; }
+  if (!secretBoxAvailable()) {
+    res.status(503).json({ success: false, message: "GATEWAY_SECRETS_KEY (>= 32 chars) is not configured on the server" });
+    return;
+  }
+  const [p] = await db.select().from(schemeParticipantsTable).where(eq(schemeParticipantsTable.code, code));
+  if (!p) { res.status(404).json({ success: false, message: "Participant not found" }); return; }
+  const secret = generateParticipantSecret();
+  await db.update(schemeParticipantsTable).set({ gatewaySecretEnc: encryptSecret(secret), secretRotatedAt: new Date() }).where(eq(schemeParticipantsTable.id, p.id));
+  await adminAudit(req.user!.id, "iapay_participant_secret_rotated", { code });
+  res.json({
+    success: true,
+    gateway_secret: secret,
+    note: "The previous secret stopped working immediately. Store this one now; it cannot be shown again.",
+  });
 });
 
 router.post("/scheme/settlement/close", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {

@@ -22,12 +22,12 @@ import rateLimit from "express-rate-limit";
 import { and, eq } from "drizzle-orm";
 import { db, paymentAliasesTable, gatewayMessagesTable, type SchemeParticipant } from "@workspace/db";
 import { logger } from "../lib/logger.js";
-import { getAllRates } from "../services/fxRates.js";
-import { loadParticipantSecrets, loadSchemeConfig } from "../services/scheme/config.js";
+import { getAllRates, ratesAreFresh } from "../services/fxRates.js";
+import { loadSchemeConfig } from "../services/scheme/config.js";
 import { SIGNATURE_HEADERS, verifySignature } from "../services/scheme/gateway/signing.js";
 import { parsePacs008, Iso20022ParseError } from "../services/scheme/iso20022Parse.js";
 import { ALIAS_TYPES, normalizeAlias } from "../services/scheme/directory.js";
-import { getParticipantByCode, handleInboundMessage, statusForParticipant } from "../services/scheme/externalSwitch.js";
+import { getParticipantByCode, handleInboundMessage, participantSecret, statusForParticipant } from "../services/scheme/externalSwitch.js";
 
 interface GatewayRequest extends Request {
   participant?: SchemeParticipant;
@@ -37,6 +37,8 @@ interface GatewayRequest extends Request {
 const router: IRouter = Router();
 
 const UNAUTHORIZED = { success: false, message: "Unauthorized" };
+// Stand-in secret so an unknown participant still costs one HMAC (never matches a real signature).
+const DUMMY_SECRET = "0".repeat(64);
 
 // Pre-auth: protect the endpoint itself, per client IP.
 const gatewayIpLimit = rateLimit({
@@ -73,20 +75,23 @@ function authenticate(signedBytes: (req: GatewayRequest) => Buffer) {
       res.status(401).json(UNAUTHORIZED);
     };
     if (!/^[A-Z0-9]{3,20}$/.test(code)) return fail("bad_participant_header");
-    const secret = loadParticipantSecrets()[code];
-    if (!secret) return fail("no_secret");
 
+    // Every request does exactly one participant lookup and one HMAC computation — known or
+    // unknown code, with or without a secret — so response timing doesn't reveal which
+    // participant codes exist or have credentials. Failure reasons are checked afterwards.
+    const participant = await getParticipantByCode(code);
+    const secret = participant ? participantSecret(participant) : null;
     const check = verifySignature({
-      secret,
+      secret: secret ?? DUMMY_SECRET,
       timestamp: req.headers[SIGNATURE_HEADERS.timestamp] as string | undefined,
       signature: req.headers[SIGNATURE_HEADERS.signature] as string | undefined,
       body: signedBytes(req),
       maxSkewSec: loadSchemeConfig().gatewayMaxClockSkewSec,
     });
+    if (!participant) return fail("unknown_participant");
+    if (!secret) return fail("no_secret");
     if (!check.ok) return fail(check.reason);
-
-    const participant = await getParticipantByCode(code);
-    if (!participant || participant.status !== "active") return fail("participant_inactive");
+    if (participant.status !== "active") return fail("participant_inactive");
     req.participant = participant;
     next();
   };
@@ -99,6 +104,12 @@ router.post(
   gatewayParticipantLimit,
   async (req: GatewayRequest, res: Response): Promise<void> => {
     const participant = req.participant!;
+    // Fail closed on stale FX: nothing is reserved or recorded, and 503 tells the bank the outcome
+    // is "not processed — retry/poll", so it keeps its funds reserved.
+    if (loadSchemeConfig().gatewayRequireLiveRates && !ratesAreFresh()) {
+      res.status(503).json({ success: false, message: "Exchange rates unavailable; payments are paused" });
+      return;
+    }
     let parsed;
     try {
       parsed = parsePacs008(bodyBytes(req).toString("utf8"));

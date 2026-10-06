@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { exposureUsd, toUsd, withinNetDebitCap, MissingRateError, type ExposureRow } from "../services/scheme/exposure.js";
 import { isSafeOutboundUrl } from "../lib/urlSafety.js";
-import { loadSchemeConfig } from "../services/scheme/config.js";
+import { loadSchemeConfig, schemeConfigWarnings } from "../services/scheme/config.js";
+import { decryptSecret, encryptSecret, generateParticipantSecret, secretBoxAvailable } from "../lib/secretBox.js";
 
 const RATES = { KES: 100, NGN: 1000, EUR: 0.5 }; // units per 1 USD
 const row = (over: Partial<ExposureRow>): ExposureRow => ({
@@ -72,6 +73,56 @@ test("outbound URL policy blocks internal, private, credentialed and obfuscated 
   assert.equal(isSafeOutboundUrl("http://bank.example.com/iapay"), true, "http allowed when https is not required");
   assert.equal(isSafeOutboundUrl("http://bank.example.com/iapay", { requireHttps: true }), false);
   assert.equal(isSafeOutboundUrl("https://bank.example.com/iapay", { requireHttps: true }), true);
+});
+
+// ---- secret box (encryption at rest) ----
+test("secretBox: round-trips, is authenticated, and fails closed without a key or with the wrong key", () => {
+  const prior = process.env.GATEWAY_SECRETS_KEY;
+  try {
+    delete process.env.GATEWAY_SECRETS_KEY;
+    assert.equal(secretBoxAvailable(), false);
+    assert.throws(() => encryptSecret("x"), /GATEWAY_SECRETS_KEY/);
+    assert.equal(decryptSecret("v1.a.b.c"), null);
+
+    process.env.GATEWAY_SECRETS_KEY = "k".repeat(32);
+    assert.equal(secretBoxAvailable(), true);
+    const blob = encryptSecret("super-secret-value");
+    assert.ok(blob.startsWith("v1.") && !blob.includes("super-secret-value"));
+    assert.equal(decryptSecret(blob), "super-secret-value");
+    assert.notEqual(encryptSecret("super-secret-value"), blob, "fresh IV every time");
+
+    const parts = blob.split(".");
+    const flipped = [parts[0], parts[1], parts[2], Buffer.from("tampered").toString("base64url")].join(".");
+    assert.equal(decryptSecret(flipped), null, "tampered ciphertext is rejected");
+    assert.equal(decryptSecret("v2." + parts.slice(1).join(".")), null, "unknown version");
+    assert.equal(decryptSecret("garbage"), null);
+
+    process.env.GATEWAY_SECRETS_KEY = "z".repeat(32);
+    assert.equal(decryptSecret(blob), null, "wrong key");
+    process.env.GATEWAY_SECRETS_KEY = "short";
+    assert.equal(secretBoxAvailable(), false, "keys under 32 chars are refused");
+  } finally {
+    if (prior === undefined) delete process.env.GATEWAY_SECRETS_KEY;
+    else process.env.GATEWAY_SECRETS_KEY = prior;
+  }
+});
+
+test("generated participant secrets are long and unique", () => {
+  const a = generateParticipantSecret();
+  assert.ok(a.length >= 43);
+  assert.notEqual(a, generateParticipantSecret());
+});
+
+test("deployment warnings flag every unsafe production setting", () => {
+  const prod = schemeConfigWarnings({ NODE_ENV: "production" }).join("\n");
+  for (const needle of ["SCHEME_SEED_DEMO_PARTICIPANTS", "EXCHANGERATE_API_KEY", "GATEWAY_SECRETS_KEY"]) assert.ok(prod.includes(needle), needle);
+  const clean = schemeConfigWarnings({
+    NODE_ENV: "production", SCHEME_SEED_DEMO_PARTICIPANTS: "false", EXCHANGERATE_API_KEY: "k", GATEWAY_SECRETS_KEY: "s".repeat(32),
+  });
+  assert.deepEqual(clean, []);
+  assert.equal(loadSchemeConfig({ NODE_ENV: "production" }).gatewayRequireLiveRates, true);
+  assert.equal(loadSchemeConfig({}).gatewayRequireLiveRates, false);
+  assert.equal(loadSchemeConfig({ NODE_ENV: "production", GATEWAY_REQUIRE_LIVE_RATES: "false" }).gatewayRequireLiveRates, false);
 });
 
 // ---- gateway risk config ----

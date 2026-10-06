@@ -102,6 +102,8 @@ if [ "$DEPLOY_API" = true ]; then
     ALTER TABLE payment_aliases ALTER COLUMN user_id DROP NOT NULL;
     ALTER TABLE payment_aliases ADD COLUMN IF NOT EXISTS holder_name TEXT;
     ALTER TABLE scheme_participants ADD COLUMN IF NOT EXISTS net_debit_cap_usd NUMERIC(18, 2);
+    ALTER TABLE scheme_participants ADD COLUMN IF NOT EXISTS gateway_secret_enc TEXT;
+    ALTER TABLE scheme_participants ADD COLUMN IF NOT EXISTS secret_rotated_at TIMESTAMPTZ;
     CREATE TABLE IF NOT EXISTS gateway_messages (
       id SERIAL PRIMARY KEY,
       participant_code TEXT NOT NULL,

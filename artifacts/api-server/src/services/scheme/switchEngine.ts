@@ -16,7 +16,8 @@ import {
   schemeTransfersTable,
   type SchemeTransfer,
 } from "@workspace/db";
-import { getRate, getAllRates } from "../fxRates.js";
+import { getRate, getAllRates, ratesAreFresh } from "../fxRates.js";
+import { loadSchemeConfig } from "./config.js";
 import { checkAndCreateCTR } from "../../lib/ctr.js";
 import { generateRef } from "../../lib/refgen.js";
 import { checkDailyLimit, getKycLevel } from "../../lib/limits.js";
@@ -151,6 +152,9 @@ export async function processInstantPayment(input: InstantPaymentInput): Promise
   if (resolved.holderUserId === null || externalAdapter) {
     if (!externalAdapter || !home) {
       return { ok: false, status: 503, message: "The recipient's institution is not reachable right now. Nothing was charged.", code: "PARTICIPANT_UNAVAILABLE" };
+    }
+    if (loadSchemeConfig().gatewayRequireLiveRates && !ratesAreFresh()) {
+      return { ok: false, status: 503, message: "Payments to other institutions are paused while exchange rates are unavailable. Nothing was charged.", code: "RATES_UNAVAILABLE" };
     }
     const roundedRecipientAmount = Math.round(recipientAmount * 100) / 100;
     const extRef = generateSchemeRef();

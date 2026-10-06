@@ -17,6 +17,9 @@ export const schemeParticipantsTable = pgTable("scheme_participants", {
   // Maximum unsettled net debit (USD) this participant may run before the switch
   // rejects further payments it originates. NULL = fall back to the deployment default.
   netDebitCapUsd: numeric("net_debit_cap_usd", { precision: 18, scale: 2 }),
+  // Gateway shared secret, AES-256-GCM encrypted (see lib/secretBox.ts); never returned by any API.
+  gatewaySecretEnc: text("gateway_secret_enc"),
+  secretRotatedAt: timestamp("secret_rotated_at", { withTimezone: true }),
   joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

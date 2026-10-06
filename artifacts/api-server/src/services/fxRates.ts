@@ -31,6 +31,11 @@ async function fetchRates(): Promise<void> {
   }
 }
 
+/** True only if rates were successfully fetched live within `maxAgeMs` (never true on static fallbacks). */
+export function ratesAreFresh(maxAgeMs = 24 * 60 * 60 * 1000): boolean {
+  return lastFetch > 0 && Date.now() - lastFetch < maxAgeMs;
+}
+
 export async function initFxRates(): Promise<void> {
   await fetchRates();
   setInterval(() => { fetchRates().catch(() => {}); }, CACHE_TTL);

@@ -39,6 +39,7 @@ import { generateRef } from "../../lib/refgen.js";
 import { checkAndCreateCTR } from "../../lib/ctr.js";
 import { isSafeOutboundUrl } from "../../lib/urlSafety.js";
 import { isProduction } from "../../lib/security.js";
+import { decryptSecret } from "../../lib/secretBox.js";
 import { logger } from "../../lib/logger.js";
 import { emitPaymentUpdate } from "../socketio.js";
 import { loadParticipantSecrets, loadSchemeConfig } from "./config.js";
@@ -128,13 +129,26 @@ export function setAdapterOverrideForTests(fn: typeof adapterOverride): void {
  * The adapter for a participant, or null when the switch cannot reach it safely:
  * no apiUrl, no shared secret (cannot sign), or an unsafe/non-https URL in production.
  */
+/**
+ * A participant's shared secret: the encrypted value stored by operator onboarding if present,
+ * else the GATEWAY_PARTICIPANT_SECRETS env map. Returns null (fail closed) when neither yields one —
+ * including when a stored secret cannot be decrypted (wrong/missing GATEWAY_SECRETS_KEY).
+ */
+export function participantSecret(p: Pick<SchemeParticipant, "code" | "gatewaySecretEnc">): string | null {
+  if (p.gatewaySecretEnc) {
+    const stored = decryptSecret(p.gatewaySecretEnc);
+    if (stored) return stored;
+  }
+  return loadParticipantSecrets()[p.code] ?? null;
+}
+
 export function adapterFor(p: SchemeParticipant): ParticipantAdapter | null {
   if (adapterOverride) {
     const a = adapterOverride(p);
     if (a) return a;
   }
   if (!p.apiUrl) return null;
-  const secret = loadParticipantSecrets()[p.code];
+  const secret = participantSecret(p);
   if (!secret) return null;
   if (!isSafeOutboundUrl(p.apiUrl, { requireHttps: isProduction() })) {
     logger.warn({ participant: p.code }, "Participant apiUrl rejected by outbound URL policy");

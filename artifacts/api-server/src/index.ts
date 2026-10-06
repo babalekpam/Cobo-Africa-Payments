@@ -4,6 +4,7 @@ import { logger } from "./lib/logger.js";
 import { initSocketIO } from "./services/socketio.js";
 import { ensureSchemeParticipants } from "./services/scheme/participants.js";
 import { startSettlementScheduler, startReconciliationSweeper } from "./services/scheme/scheduler.js";
+import { schemeConfigWarnings } from "./services/scheme/config.js";
 import { securityConfigWarnings } from "./lib/security.js";
 
 const rawPort = process.env["PORT"];
@@ -29,4 +30,5 @@ httpServer.listen(port, () => {
   startSettlementScheduler();
   startReconciliationSweeper();
   for (const warning of securityConfigWarnings()) logger.warn(warning);
+  for (const warning of schemeConfigWarnings()) logger.warn(warning);
 });
