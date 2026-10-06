@@ -33,6 +33,7 @@ import { processInstantPayment } from "../services/scheme/switchEngine.js";
 import { returnSchemeTransfer } from "../services/scheme/returns.js";
 import { closeSettlementCycle, getBatchPositions } from "../services/scheme/settlement.js";
 import { encodeIapayQr, decodeIapayQr } from "../services/scheme/qrStandard.js";
+import { buildPacs008, buildPacs002 } from "../services/scheme/iso20022.js";
 
 const router: IRouter = Router();
 
@@ -185,6 +186,62 @@ router.get("/scheme/transfers/:reference", requireAuth, async (req: Authenticate
     return;
   }
   res.json({ success: true, transfer });
+});
+
+// ISO 20022 view of a transfer (pacs.008 credit transfer / pacs.002 status report) —
+// the format participant banks integrate against. Same access rule as the detail route.
+router.get("/scheme/transfers/:reference/iso20022", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+  const msg = typeof req.query.msg === "string" ? req.query.msg : "pacs.008";
+  if (msg !== "pacs.008" && msg !== "pacs.002") {
+    res.status(400).json({ success: false, message: "msg must be pacs.008 or pacs.002" });
+    return;
+  }
+  const [transfer] = await db
+    .select()
+    .from(schemeTransfersTable)
+    .where(
+      and(
+        eq(schemeTransfersTable.reference, String(req.params.reference)),
+        or(eq(schemeTransfersTable.senderUserId, req.user!.id), eq(schemeTransfersTable.recipientUserId, req.user!.id))
+      )
+    );
+  if (!transfer) {
+    res.status(404).json({ success: false, message: "Transfer not found" });
+    return;
+  }
+
+  const [debtorAgent] = await db.select().from(schemeParticipantsTable).where(eq(schemeParticipantsTable.id, transfer.senderParticipantId));
+  const [creditorAgent] = await db.select().from(schemeParticipantsTable).where(eq(schemeParticipantsTable.id, transfer.recipientParticipantId));
+  const [sender] = transfer.senderUserId ? await db.select().from(usersTable).where(eq(usersTable.id, transfer.senderUserId)) : [];
+  const [recipient] = transfer.recipientUserId ? await db.select().from(usersTable).where(eq(usersTable.id, transfer.recipientUserId)) : [];
+  if (!debtorAgent || !creditorAgent) {
+    res.status(500).json({ success: false, message: "Participant record missing for transfer" });
+    return;
+  }
+
+  const fullName = (u?: { firstName?: string | null; lastName?: string | null; businessName?: string | null }) =>
+    u?.businessName || [u?.firstName, u?.lastName].filter(Boolean).join(" ") || "IAPAY customer";
+  const description = (transfer.metadata as { description?: string | null } | null)?.description ?? null;
+  const iso = {
+    reference: transfer.reference,
+    endToEndId: transfer.endToEndId,
+    amount: Number(transfer.amount),
+    currency: transfer.currency,
+    recipientAmount: Number(transfer.recipientAmount),
+    recipientCurrency: transfer.recipientCurrency,
+    fxRate: transfer.fxRate ? Number(transfer.fxRate) : null,
+    initiatedAt: transfer.initiatedAt,
+    clearedAt: transfer.clearedAt,
+    description,
+    debtor: { name: fullName(sender), participantCode: debtorAgent.code, country: debtorAgent.country },
+    creditor: { name: fullName(recipient), participantCode: creditorAgent.code, country: creditorAgent.country },
+  };
+
+  const xml =
+    msg === "pacs.008"
+      ? buildPacs008(iso)
+      : buildPacs002(iso, transfer.status === "rejected" ? "RJCT" : "ACSC", transfer.statusReason ?? undefined);
+  res.type("application/xml").send(xml);
 });
 
 // ---------- Returns & disputes (Pix devolução + MED equivalent) ----------

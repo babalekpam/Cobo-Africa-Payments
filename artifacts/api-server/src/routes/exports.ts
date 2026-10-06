@@ -68,7 +68,7 @@ router.get("/exports/receipt/:txId", requireAuthOrQueryToken, async (req: Authen
 <div class="row"><span class="lbl">Type</span><span class="val">${safeType}</span></div>
 ${safeDesc ? `<div class="row"><span class="lbl">Description</span><span class="val">${safeDesc}</span></div>` : ""}
 <div class="row" style="border:none"><span class="lbl">Amount</span><span class="val" style="color:#C8921A;font-size:16px">${safeCurrency} ${amt.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span></div>
-<div class="footer">${safeEmail}<br>${safeName}<br><strong>IAPAY &middot; Inter-Africa Pay &middot; iapay.africa</strong><br>Generated: ${escapeHtml(new Date().toLocaleString())}</div>
+<div class="footer">${safeEmail}<br>${safeName}<br><strong>IAPAY &middot; Intra-African Payments &middot; iapay.africa</strong><br>Generated: ${escapeHtml(new Date().toLocaleString())}</div>
 </div><script>window.addEventListener('load',()=>window.print())</script></body></html>`;
   res.setHeader("Content-Type", "text/html;charset=utf-8");
   res.send(html);

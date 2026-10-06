@@ -91,7 +91,7 @@ export default function TheSolution() {
           textTransform: "uppercase",
         }}
       >
-        <span>IAPAY — Inter-Africa Pay</span>
+        <span>IAPAY — Intra-African Payments</span>
         <span>04</span>
       </div>
     </div>

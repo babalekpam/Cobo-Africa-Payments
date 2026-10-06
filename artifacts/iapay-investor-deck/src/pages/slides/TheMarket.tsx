@@ -82,7 +82,7 @@ export default function TheMarket() {
           textTransform: "uppercase",
         }}
       >
-        <span>IAPAY — Inter-Africa Pay</span>
+        <span>IAPAY — Intra-African Payments</span>
         <span>03</span>
       </div>
     </div>

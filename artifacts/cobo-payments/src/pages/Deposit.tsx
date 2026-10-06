@@ -21,14 +21,14 @@ const CURRENCY_INFO: Record<string, { flag: string; name: string; symbol: string
 };
 
 const BANK_DETAILS: Record<string, { bank: string; account: string; name: string; swift: string; branch: string }> = {
-  USD: { bank: "IAPAY International Bank", account: "IAPAY-USD-001-2024", name: "IAPAY (Inter-Africa Pay) Ltd", swift: "IAPAYUSGX", branch: "New York, USA" },
-  NGN: { bank: "Guaranty Trust Bank", account: "0123456789", name: "IAPAY (Inter-Africa Pay) Ltd", swift: "GTBINGLA", branch: "Lagos, Nigeria" },
-  GHS: { bank: "GCB Bank", account: "1234567890", name: "IAPAY (Inter-Africa Pay) GH", swift: "GCBLGHAC", branch: "Accra, Ghana" },
-  KES: { bank: "Kenya Commercial Bank", account: "1234567890", name: "IAPAY (Inter-Africa Pay) KE", swift: "KCBLKENX", branch: "Nairobi, Kenya" },
-  ZAR: { bank: "Standard Bank", account: "987654321", name: "IAPAY (Inter-Africa Pay) ZA", swift: "SBZAZAJJ", branch: "Johannesburg, South Africa" },
-  XOF: { bank: "Ecobank UEMOA", account: "SN001-234567", name: "IAPAY (Inter-Africa Pay) SN", swift: "EABORWRW", branch: "Dakar, Senegal" },
-  EUR: { bank: "IAPAY EU Account", account: "IAPAY-EUR-001-2024", name: "IAPAY (Inter-Africa Pay) Ltd", swift: "IAPAYEU2X", branch: "Brussels, Belgium" },
-  GBP: { bank: "IAPAY UK Account", account: "IAPAY-GBP-001-2024", name: "IAPAY (Inter-Africa Pay) Ltd", swift: "IAPAYGB2L", branch: "London, UK" },
+  USD: { bank: "IAPAY International Bank", account: "IAPAY-USD-001-2024", name: "IAPAY (Intra-African Payments) Ltd", swift: "IAPAYUSGX", branch: "New York, USA" },
+  NGN: { bank: "Guaranty Trust Bank", account: "0123456789", name: "IAPAY (Intra-African Payments) Ltd", swift: "GTBINGLA", branch: "Lagos, Nigeria" },
+  GHS: { bank: "GCB Bank", account: "1234567890", name: "IAPAY (Intra-African Payments) GH", swift: "GCBLGHAC", branch: "Accra, Ghana" },
+  KES: { bank: "Kenya Commercial Bank", account: "1234567890", name: "IAPAY (Intra-African Payments) KE", swift: "KCBLKENX", branch: "Nairobi, Kenya" },
+  ZAR: { bank: "Standard Bank", account: "987654321", name: "IAPAY (Intra-African Payments) ZA", swift: "SBZAZAJJ", branch: "Johannesburg, South Africa" },
+  XOF: { bank: "Ecobank UEMOA", account: "SN001-234567", name: "IAPAY (Intra-African Payments) SN", swift: "EABORWRW", branch: "Dakar, Senegal" },
+  EUR: { bank: "IAPAY EU Account", account: "IAPAY-EUR-001-2024", name: "IAPAY (Intra-African Payments) Ltd", swift: "IAPAYEU2X", branch: "Brussels, Belgium" },
+  GBP: { bank: "IAPAY UK Account", account: "IAPAY-GBP-001-2024", name: "IAPAY (Intra-African Payments) Ltd", swift: "IAPAYGB2L", branch: "London, UK" },
 };
 
 const MOBILE_MONEY_PROVIDERS: Record<string, { name: string; code: string; icon: string }[]> = {

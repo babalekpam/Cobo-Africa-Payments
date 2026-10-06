@@ -22,7 +22,7 @@ import { AmountInput } from '../../components/AmountInput';
 import { LoadingSpinner } from '../../components/LoadingSpinner';
 import { COUNTRIES, MOBILE_PROVIDERS, formatBalance } from '../../constants/currencies';
 
-type Tab = 'mobile' | 'bank' | 'cobo';
+type Tab = 'mobile' | 'bank' | 'iapay';
 
 interface DropdownOption {
   label: string;
@@ -183,7 +183,7 @@ export default function SendScreen() {
     return null;
   };
 
-  const validateCobo = (): string | null => {
+  const validateIapay = (): string | null => {
     if (!selectedWallet) return 'Select a source wallet';
     if (!amount || parseFloat(amount) <= 0) return 'Enter a valid amount';
     if (parseFloat(amount) > selectedWallet.balance) return 'Insufficient balance';
@@ -197,7 +197,7 @@ export default function SendScreen() {
     let validationError: string | null = null;
     if (activeTab === 'mobile') validationError = validateMobile();
     else if (activeTab === 'bank') validationError = validateBank();
-    else validationError = validateCobo();
+    else validationError = validateIapay();
 
     if (validationError) { setError(validationError); return; }
     setShowConfirm(true);
@@ -283,7 +283,7 @@ export default function SendScreen() {
 
         {/* Tabs */}
         <View style={styles.tabBar}>
-          {(['mobile', 'bank', 'cobo'] as Tab[]).map((tab) => (
+          {(['mobile', 'bank', 'iapay'] as Tab[]).map((tab) => (
             <TouchableOpacity
               key={tab}
               style={[styles.tabItem, activeTab === tab && styles.tabItemActive]}
@@ -443,7 +443,7 @@ export default function SendScreen() {
           )}
 
           {/* IAPAY-to-IAPAY Form */}
-          {activeTab === 'cobo' && (
+          {activeTab === 'iapay' && (
             <>
               <Field label="Recipient Email">
                 <View style={styles.inputWrapper}>
@@ -498,7 +498,7 @@ export default function SendScreen() {
               >
                 <Ionicons name="paper-plane" size={18} color={Colors.white} />
                 <Text style={styles.sendBtnText}>
-                  {activeTab === 'cobo' ? 'Send to IAPAY User' : activeTab === 'bank' ? 'Send to Bank' : 'Send via Mobile Money'}
+                  {activeTab === 'iapay' ? 'Send to IAPAY User' : activeTab === 'bank' ? 'Send to Bank' : 'Send via Mobile Money'}
                 </Text>
               </LinearGradient>
             )}
@@ -581,7 +581,7 @@ export default function SendScreen() {
                   </View>
                 </>
               )}
-              {activeTab === 'cobo' && (
+              {activeTab === 'iapay' && (
                 <View style={styles.confirmRow}>
                   <Text style={styles.confirmKey}>To</Text>
                   <Text style={styles.confirmValue}>{recipientEmail}</Text>

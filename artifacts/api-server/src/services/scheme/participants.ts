@@ -9,7 +9,7 @@ import { logger } from "../../lib/logger.js";
 import { HOME_PARTICIPANT_CODE } from "./directory.js";
 
 const FOUNDING_PARTICIPANTS = [
-  { code: HOME_PARTICIPANT_CODE, name: "IAPAY (Inter-Africa Pay)", type: "fintech", country: "KE", currency: "USD" },
+  { code: HOME_PARTICIPANT_CODE, name: "IAPAY (Intra-African Payments)", type: "fintech", country: "KE", currency: "USD" },
   { code: "MPESAKEN", name: "M-Pesa (Safaricom)", type: "mobile_money", country: "KE", currency: "KES" },
   { code: "MTNMOGHA", name: "MTN Mobile Money Ghana", type: "mobile_money", country: "GH", currency: "GHS" },
   { code: "MTNMOUGA", name: "MTN Mobile Money Uganda", type: "mobile_money", country: "UG", currency: "UGX" },

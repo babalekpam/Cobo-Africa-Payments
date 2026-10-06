@@ -25,7 +25,7 @@ export default function TitleSlide() {
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ fontSize: "1.2vw", fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase", opacity: 0.8 }}>
-            Inter-Africa Pay
+            Intra-African Payments
           </div>
           <div style={{ fontSize: "1.2vw", fontWeight: 500, letterSpacing: "0.1em", opacity: 0.8 }}>
             cob-o.com

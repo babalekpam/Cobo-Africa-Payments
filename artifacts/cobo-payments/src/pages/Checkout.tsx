@@ -201,7 +201,7 @@ export default function Checkout() {
         <div style={styles.footer}>
           <span style={{ fontSize: 11, color: "#9A8F75" }}>Secured by</span>
           <span style={{ fontSize: 13, fontWeight: 700, color: "#C98A1A" }}>IAPAY</span>
-          <span style={{ fontSize: 11, color: "#9A8F75" }}>Inter-Africa Pay</span>
+          <span style={{ fontSize: 11, color: "#9A8F75" }}>Intra-African Payments</span>
         </div>
       </div>
     </div>

@@ -78,7 +78,7 @@ export default function ComplianceBuiltIn() {
           textTransform: "uppercase",
         }}
       >
-        <span>IAPAY — Inter-Africa Pay</span>
+        <span>IAPAY — Intra-African Payments</span>
         <span>06</span>
       </div>
     </div>
