@@ -42,6 +42,29 @@ function sign(secret, body) {
 
 The switch signs its calls to you the same way (it sends `X-IAPAY-Participant: IAPAYPAN` — the operator's code — and your own shared secret). **Verify the signature and the timestamp window before parsing anything.**
 
+### 2.1 Ed25519 signatures (recommended — your private key never leaves your bank)
+
+Instead of a shared secret, send the operator your **Ed25519 public key** (PEM). Generate the pair in your HSM, or with
+`openssl genpkey -algorithm ed25519 -out bank.key && openssl pkey -in bank.key -pubout -out bank.pub`. The operator registers it
+(`PUT /api/scheme/participants/{code}` with `{"public_key_pem": "..."}`); from that moment **only Ed25519 signatures are accepted from
+you — the shared secret stops working** (no downgrade).
+
+```
+X-IAPAY-Signature: ed25519=<base64( Ed25519_sign( privateKey, "<timestamp>." + <exact request bytes> ) )>
+```
+
+```js
+const crypto = require("crypto");
+function sign(privateKeyPem, body) {
+  const ts = Math.floor(Date.now() / 1000);
+  const sig = crypto.sign(null, Buffer.concat([Buffer.from(`${ts}.`), Buffer.from(body)]), crypto.createPrivateKey(privateKeyPem));
+  return { "x-iapay-participant": "MYBANKKEN", "x-iapay-timestamp": String(ts), "x-iapay-signature": "ed25519=" + sig.toString("base64") };
+}
+```
+
+The switch then signs the messages it sends you with the **scheme's** Ed25519 key; fetch its public key once from
+`GET /api/gateway/v1/signing-key` (pin it) and verify every inbound call with `crypto.verify(null, "<timestamp>." + body, schemePublicKey, signature)`.
+
 ## 3. Sending a payment (pacs.008)
 
 `POST /api/gateway/v1/credit-transfer`, `Content-Type: application/xml`, body ≤ 256 KB, one `CdtTrfTxInf` per message.
@@ -134,9 +157,9 @@ All of this is done through the operator (admin) API — no SQL, no environment 
 
 ## 8. Security properties and their limits
 
-Implemented and tested: HMAC authentication over exact bytes with a replay window; identical failure responses; idempotency ledger committed atomically with the credit; single-winner state transitions (no double credit/refund); per-bank net-debit cap under a database lock; fail-closed defaults; no bank call inside a database transaction; redirect-refusing, timeout-bounded outbound calls with HTTPS required in production; hardened XML parsing (size cap, DOCTYPE/ENTITY rejected, strict amount/currency validation); sanctions screening on real names; audit log for operator resolutions.
+Implemented and tested: HMAC or Ed25519 authentication over exact bytes with a replay window (Ed25519 participants cannot be downgraded to HMAC); identical failure responses; idempotency ledger committed atomically with the credit; single-winner state transitions (no double credit/refund); per-bank net-debit cap under a database lock; fail-closed defaults; no bank call inside a database transaction; redirect-refusing, timeout-bounded outbound calls with HTTPS required in production; hardened XML parsing (size cap, DOCTYPE/ENTITY rejected, strict amount/currency validation); sanctions screening on real names (built-in list plus a licensed provider when `SANCTIONS_API_KEY` is set, fail closed when it is unreachable); two-phase settlement (exposure is released only when an operator records the settlement reference); rate limits, lockouts and idempotency records shared by all API instances (Postgres); audit log for operator resolutions.
 
-Known limits to close before production (also section 9): the HMAC window alone does not stop an attacker who can capture a *live* message from re-sending it within 5 minutes — this is safe for payments (the idempotency ledger returns the stored answer) but the switch does not yet record signature nonces; secrets are environment variables (no HSM/KMS, no per-participant rotation schedule); in-memory limiters/lockouts are per-instance; DNS-rebinding is not blocked at the application layer (use egress rules); sanctions matching is a stopgap, not a licensed list provider.
+Known limits to close before production (also section 9): the HMAC window alone does not stop an attacker who can capture a *live* message from re-sending it within 5 minutes — this is safe for payments (the idempotency ledger returns the stored answer) but the switch does not yet record signature nonces; the scheme's own keys are environment variables (no HSM/KMS integration yet — banks can keep theirs in an HSM with Ed25519); DNS-rebinding is not blocked at the application layer (use egress rules); without `SANCTIONS_API_KEY` only the small built-in list is checked.
 
 ### 8.1 Independent review (adversarial, same branch)
 
@@ -144,14 +167,14 @@ A separate reviewer attacked the money path. **Fixed and regression-tested:** su
 
 **Open — decide/close before real money:**
 
-* Exposure drops out of the cap when a batch is marked `settled`, even though no money has actually moved between settlement accounts. A bank that never pays its net could originate up to its cap again each cycle. Tie "settled" to confirmed funds (and count an unpaid settlement balance as exposure).
+* ~~Exposure drops out of the cap when a batch is marked `settled` without money moving.~~ **Fixed:** on a live installation closing a cycle leaves the batch `awaiting_settlement` with exposure still counted; only `POST /api/scheme/settlement/batches/{id}/confirm` with the settlement-bank/RTGS reference settles it (exactly once).
 * Exposure is computed by loading unsettled rows under the participant lock (now indexed). At high volume replace it with a SQL `SUM`.
-* A bank's `pacs.002` reply is trusted on TLS alone (no response signature). The shared secret is symmetric and used in both directions, so a bank could forge switch-signed requests; prefer asymmetric signatures (mTLS client certificates or JWS).
+* A bank's `pacs.002` reply is trusted on TLS alone (no response signature). **Partly fixed:** requests can now use Ed25519 in both directions (a bank on Ed25519 can no longer forge switch-signed requests); HMAC participants still share a symmetric secret, and replies are not yet signed.
 * A bank can register any phone/email/ID key before its real owner does; only the participation contract (and, later, a verification attestation) stops this. `end_to_end_id` is unique network-wide, so a bank can pre-use ids (the `DUPL` reply is an oracle); consider scoping ids to the sender.
 * Signatures are not bound to method or path (safe today because the ledger is idempotent and the status route is read-only); a missing-secret 401 returns slightly faster than a bad-signature 401.
-* `/api/scheme/pay` idempotency is an in-memory map (lost on restart, not shared across instances, absent without an `Idempotency-Key`), and the daily-limit check is not atomic. Other rails (`/transfers/*`) have the same amount-precision and limit patterns and were **not** audited in this change.
+* ~~`/api/scheme/pay` idempotency is an in-memory map.~~ **Fixed:** stored in Postgres, shared by all instances, and a duplicate still in flight is refused. The daily-limit check is atomic on the `/transfers/*` rails (per-customer lock inside the payment transaction); on `/api/scheme/pay` and USSD it is still checked before the transaction. ~~Other rails were not audited.~~ **Fixed:** `/transfers/*`, FX swap, deposits, checkout, mobile-money callbacks and test funding were reviewed; money-creation and double-refund bugs found there are fixed with regression tests.
 * A cleared-but-unsettled transfer that is later returned is marked `returned`, so settlement nets the return leg but not the original.
-* Sanctions screening is a stopgap: ≥2-word names, ASCII only, short hardcoded list, no creditor-name screening on bank-supplied names. Use a licensed provider with transliteration and fuzzy/subset matching.
+* Sanctions: set `SANCTIONS_API_KEY` (OpenSanctions consolidated lists, fail closed). Without it the built-in stopgap applies (≥2-word names, ASCII only, short list). The compliance officer must still sign off the matching thresholds.
 * DNS rebinding is not blocked in the application; enforce egress rules.
 * Exchange rates fall back to static values if `EXCHANGERATE_API_KEY` is unset; a stale rate misstates exposure and FX. Fail closed on stale rates in production.
 * Operator resolution has no four-eyes approval or evidence attachment, and `unresolved` rows are not auto-polled via `pacs.028`.

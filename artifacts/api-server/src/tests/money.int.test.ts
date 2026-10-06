@@ -278,3 +278,15 @@ test("sanctions provider: a match blocks, an outage fails closed, a clear result
     provider.close();
   }
 });
+
+test("the daily KYC limit holds under simultaneous transfers", { skip }, async () => {
+  // An unverified customer (limit $100/day) with plenty of money tries 6 x $30 at once.
+  await m.db.db.update(m.db.usersTable).set({ kycLevel: "0" }).where(m.drizzle.eq(m.db.usersTable.id, alice.id));
+  await m.db.db.update(m.db.walletsTable).set({ balance: "1000.00" }).where(m.drizzle.eq(m.db.walletsTable.id, alice.walletId));
+  const results = await Promise.all(
+    Array.from({ length: 6 }, () => api("/transfers/internal", { method: "POST", token: alice.token, body: { recipient_email: bob.email, amount: "30", currency: "USD" } })),
+  );
+  assert.equal(results.filter((r) => r.status === 200).length, 3, "3 x 30 = 90 fits the $100 limit; a 4th would not");
+  assert.ok(results.filter((r) => r.status === 403).every((r) => r.json.code === "LIMIT_EXCEEDED"));
+  assert.equal((await wallet(bob.walletId)).balance, 90);
+});

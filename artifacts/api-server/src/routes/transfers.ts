@@ -9,7 +9,7 @@ import { assessCountryRisk as checkCountry } from "../lib/ofac.js";
 import { screenNames } from "../services/scheme/externalSwitch.js";
 import { getRate } from "../services/fxRates.js";
 import { initiateTransfer } from "../services/paymentGateway.js";
-import { checkDailyLimit, sentTodayUSD, KYC_LIMITS } from "../lib/limits.js";
+import { checkDailyLimit, enforceDailyLimit, DailyLimitExceeded, sentTodayUSD, KYC_LIMITS } from "../lib/limits.js";
 import { getCallbackSecret } from "../lib/security.js";
 import { parseAmount, toCents, addAmounts, hold, debit, credit, walletFor, InsufficientFunds } from "../lib/ledger.js";
 import { finalizePayout } from "../lib/payouts.js";
@@ -114,6 +114,7 @@ router.post("/transfers/bank", requireAuth, async (req: AuthenticatedRequest, re
   const desc = description || `Bank transfer to ${recipientName}${isInternational ? ` (${wallet.currency} → ${recipCurrency})` : ""}`;
   try {
     await db.transaction(async (tx) => {
+      await enforceDailyLimit(tx, req.user!.id, kycLevel, Number(amount));
       if (!(await hold(tx, wallet.id, total))) throw new InsufficientFunds();
       await tx.insert(transactionsTable).values({
         reference: ref, amount, currency: wallet.currency, status: "pending", type: "send",
@@ -128,6 +129,7 @@ router.post("/transfers/bank", requireAuth, async (req: AuthenticatedRequest, re
     });
   } catch (err) {
     if (err instanceof InsufficientFunds) { res.status(400).json({ success: false, message: "Insufficient funds" }); return; }
+    if (err instanceof DailyLimitExceeded) { res.status(403).json({ success: false, ...err.check }); return; }
     throw err;
   }
 
@@ -191,6 +193,7 @@ router.post("/transfers/mobile", requireAuth, async (req: AuthenticatedRequest, 
   //    provider is called, so a crash afterwards leaves a pending payout an operator can see.
   try {
     await db.transaction(async (tx) => {
+      await enforceDailyLimit(tx, req.user!.id, kycLevel, Number(amount));
       if (!(await hold(tx, wallet.id, total))) throw new InsufficientFunds();
       await tx.insert(transactionsTable).values({
         reference: ref, amount, currency: wallet.currency, status: "pending", type: "send",
@@ -206,6 +209,7 @@ router.post("/transfers/mobile", requireAuth, async (req: AuthenticatedRequest, 
     });
   } catch (err) {
     if (err instanceof InsufficientFunds) { res.status(400).json({ success: false, message: "Insufficient funds" }); return; }
+    if (err instanceof DailyLimitExceeded) { res.status(403).json({ success: false, ...err.check }); return; }
     throw err;
   }
 
@@ -305,6 +309,7 @@ router.post("/transfers/internal", requireAuth, async (req: AuthenticatedRequest
   try {
     // Debit and credit commit together or not at all.
     await db.transaction(async (tx) => {
+      await enforceDailyLimit(tx, req.user!.id, Number(senderUser?.kycLevel || 0), Number(amount));
       if (!(await debit(tx, senderWallet.id, amount))) throw new InsufficientFunds();
       const recipientWallet = await walletFor(tx, recipient.id, senderWallet.currency);
       await credit(tx, recipientWallet.id, amount);
@@ -313,6 +318,7 @@ router.post("/transfers/internal", requireAuth, async (req: AuthenticatedRequest
     });
   } catch (err) {
     if (err instanceof InsufficientFunds) { res.status(400).json({ success: false, message: "Insufficient funds" }); return; }
+    if (err instanceof DailyLimitExceeded) { res.status(403).json({ success: false, ...err.check }); return; }
     throw err;
   }
 
