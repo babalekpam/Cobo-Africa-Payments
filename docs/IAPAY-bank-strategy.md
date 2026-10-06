@@ -2,6 +2,26 @@
 
 *Working strategy document. Facts about the codebase were checked against the repo on 2026-10-06. Market and regulatory statements are directional and must be verified with counsel and local regulators before being used with a bank.*
 
+## 0. Agreed product direction (confirmed 2026-10-06)
+
+**Customers use their existing bank or mobile-money app and account. IAPAY connects institutions:
+bank-to-bank, bank-to-wallet, wallet-to-bank and wallet-to-wallet. No separate IAPAY customer account or wallet is
+required in the target model.** IAPAY is the network between institutions (alias directory, instant switch, ISO 20022
+messaging, risk caps, sanctions screening, netting and settlement coordination), not a wallet app.
+
+What this means for the codebase:
+
+| Part | Role in the target model | Status |
+|---|---|---|
+| Participant gateway (`/api/gateway/v1/*`), alias directory, switch, settlement | **The product.** Banks and mobile-money operators join as participants (`type` = `bank` or `mobile_money`), register their customers' keys and exchange `pacs.008`/`pacs.002`. | Built and tested, including wallet-provider → bank forwarding with no IAPAY wallet involved (`scheme.int.test.ts`). |
+| Operator console (admin: participants, caps, keys, unresolved payments, settlement confirmation, payout desk) | How the scheme operator runs the network. | Built (API); console screens exist for the main items. |
+| IAPAY consumer wallet app (sign-up, wallets, P2P, checkout) | **Optional / demo only.** Useful in a sandbox to show the flows end to end; not needed by a bank or wallet operator, whose customers stay in their own app. | Works, sandboxed; hardened, but not the go-to-market. |
+
+**Not yet done:** no real institution is connected — each bank or mobile-money operator must implement the participant
+API (signing, `pacs.008`/`pacs.002`, key registration) and pass `tools/iapay-certify.mjs`; settlement is coordinated, not
+executed (an operator confirms the settlement-bank/RTGS reference); licences, rulebook and participation agreements are
+outside the code.
+
 ## 1. The positioning shift
 
 | Today (aggregator) | Target (scheme / network) |

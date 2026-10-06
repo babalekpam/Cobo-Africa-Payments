@@ -2,7 +2,9 @@
 
 ## Overview
 
-IAPAY (Intra-African Payments) — full-stack pan-African payment platform for managing payments, wallets, FX exchange, and transfers across Africa. Built as a pnpm monorepo with Express API + React frontend. Features a cream/warm white theme with gold accents, dark sidebar, and Plus Jakarta Sans/DM Sans fonts.
+IAPAY (Intra-African Payments) — full-stack pan-African payment platform for managing payments, wallets, FX exchange, and transfers across Africa.
+
+**Agreed product direction:** customers use their existing bank or mobile-money app and account; IAPAY connects institutions (bank-to-bank, bank-to-wallet, wallet-to-bank, wallet-to-wallet) through the participant gateway, alias directory, switch and settlement. No separate IAPAY customer account or wallet is required in the target model; the consumer wallet app here is optional/demo (sandbox). Live institution integrations are not yet complete. See `docs/IAPAY-bank-strategy.md` section 0. Built as a pnpm monorepo with Express API + React frontend. Features a cream/warm white theme with gold accents, dark sidebar, and Plus Jakarta Sans/DM Sans fonts.
 
 ## Admin Credentials
 - Email: `abel@argilette.com`

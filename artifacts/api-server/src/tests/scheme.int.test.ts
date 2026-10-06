@@ -987,3 +987,29 @@ test("ed25519: the scheme signs outbound messages with its own key and publishes
     delete process.env.GATEWAY_SIGNING_PRIVATE_KEY;
   }
 });
+
+// ---------- target model: institutions only, no IAPAY customer account or wallet ----------
+test("institution-to-institution: a mobile-money wallet pays a bank customer and back, with no IAPAY account or wallet involved", { skip }, async () => {
+  // bank A acts as a mobile-money provider (e.g. a wallet operator); bank B is a bank.
+  await m.db.db.update(m.db.schemeParticipantsTable).set({ type: "mobile_money" }).where(m.drizzle.eq(m.db.schemeParticipantsTable.id, w.bankA.id));
+  await registerBankBKey(); // a bank B customer's phone key, held at bank B
+  const mock = bankBOverride({});
+  const walletsBefore = await m.db.db.select().from(m.db.walletsTable);
+
+  const r = await credit(pacs008({ e2e: "EW2B00000000000000001", alias: "+233200000001", creditorCode: "BANKBGHA", amount: 75 }));
+  assert.equal(r.status, 200);
+  assert.equal(txStatus(r.text), "ACSC");
+  assert.equal(mock.calls.length, 1, "relayed to the bank, which credits its own customer");
+  const [t] = await transfers();
+  assert.equal(t.senderParticipantId, w.bankA.id);
+  assert.equal(t.recipientParticipantId, w.bankB.id);
+
+  const walletsAfter = await m.db.db.select().from(m.db.walletsTable);
+  assert.deepEqual(walletsAfter.map((x) => [x.id, x.balance]), walletsBefore.map((x) => [x.id, x.balance]), "no IAPAY wallet moved: the money stays inside the institutions");
+
+  // Settlement nets what the wallet provider owes the bank.
+  const summary = await m.settlement.closeSettlementCycle();
+  const net = (id: number) => Number(summary!.positions.find((p) => p.participantId === id)?.netPosition);
+  assert.equal(net(w.bankA.id), -75);
+  assert.equal(net(w.bankB.id), 75);
+});
