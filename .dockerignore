@@ -1,0 +1,14 @@
+.git
+**/node_modules
+**/dist
+**/dist-tests
+.env
+.env.*
+!.env.example
+*.mp4
+attached_assets
+.agents
+.local
+.replit
+.replitignore
+data

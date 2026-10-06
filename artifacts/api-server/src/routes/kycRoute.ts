@@ -3,6 +3,7 @@ import { eq, and } from "drizzle-orm";
 import { db, kycDocumentsTable, usersTable, notificationsTable } from "@workspace/db";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
 import { ObjectStorageService } from "../lib/objectStorage";
+import { createLocalUploadURL, localStorageEnabled } from "../lib/localObjectStore";
 
 const router: IRouter = Router();
 
@@ -21,6 +22,14 @@ router.get("/kyc/documents", requireAuth, async (req: AuthenticatedRequest, res)
 });
 
 router.post("/kyc/upload-url", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+  if (localStorageEnabled()) {
+    try {
+      res.json({ success: true, ...createLocalUploadURL(String(req.body?.contentType)) });
+    } catch {
+      res.status(400).json({ success: false, message: "Unsupported file type. Use JPEG, PNG, WebP or PDF." });
+    }
+    return;
+  }
   if (!storageService) {
     res.status(503).json({ success: false, message: "File storage not available" });
     return;

@@ -33,7 +33,7 @@
 
 **Phase 0 — done in this change:** rebrand to IAPAY / Intra-African Payments; ISO 20022 outbound messages with tests.
 
-**Phase 1 — Participant gateway (makes a bank pilot possible). Core built.**
+**Phase 1 — Participant gateway (makes a bank pilot possible). Core built; operator self-service onboarding, encrypted secrets, a certification tool and one-command deployment added (see `docs/IAPAY-deployment.md`).**
 Done: signed `pacs.008`/`pacs.002` endpoints, idempotent retry, status query, key registration, outbound `HttpBankAdapter` and a `MockBankAdapter`, integration tests against real PostgreSQL, operator reconciliation of unresolved payments. Still to do: mTLS and detached/rotating message keys; a name-verification ("confirmation of payee") call before release; `pacs.004` returns over the gateway; a self-service certification suite and sandbox portal a bank can run without the operator; load testing.
 
 **Phase 2 — Risk and liquidity.**

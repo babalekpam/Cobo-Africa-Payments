@@ -653,6 +653,90 @@ test("review #10: the operator's own code can never act as an external sender", 
   }
 });
 
+// ---------- portable KYC storage (works on any host) ----------
+test("local KYC storage: signed single-use uploads, content checks, authenticated download, no traversal", { skip }, async () => {
+  const fsp = await import("node:fs/promises");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "iapay-kyc-"));
+  process.env.OBJECT_STORAGE = "local";
+  process.env.LOCAL_STORAGE_DIR = dir;
+  try {
+    const user = await tokenFor(w.bob.id, "bob@example.com", "user");
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64, 7)]);
+    const requestUrl = async (contentType: string) => adminApi("/api/kyc/upload-url", { method: "POST", token: user, body: { contentType } });
+    const put = (url: string, body: Buffer, type: string) => fetch(baseUrl + url, { method: "PUT", headers: { "content-type": type }, body });
+
+    assert.equal((await adminApi("/api/kyc/upload-url", { method: "POST", body: { contentType: "image/png" } })).status, 401, "login required to obtain an upload URL");
+    assert.equal((await requestUrl("text/html")).status, 400, "only JPEG/PNG/WebP/PDF");
+    assert.equal((await requestUrl("application/x-msdownload")).status, 400);
+
+    const ticket = await requestUrl("image/png");
+    assert.equal(ticket.status, 200);
+    const { uploadURL, objectPath } = ticket.json as { uploadURL: string; objectPath: string };
+    assert.ok(objectPath.startsWith("/objects/uploads/"));
+    assert.equal((await put(uploadURL, png, "image/png")).status, 200);
+    assert.equal((await put(uploadURL, png, "image/png")).status, 409, "an upload URL works once and never overwrites");
+
+    const id = objectPath.split("/").pop()!;
+    const dl = await fetch(`${baseUrl}/api/storage/objects/uploads/${id}`, { headers: { authorization: `Bearer ${user}` } });
+    assert.equal(dl.status, 200);
+    assert.equal(dl.headers.get("content-type"), "image/png");
+    assert.equal(dl.headers.get("x-content-type-options"), "nosniff");
+    assert.ok(Buffer.from(await dl.arrayBuffer()).equals(png), "bytes round-trip exactly");
+    assert.equal((await fetch(`${baseUrl}/api/storage/objects/uploads/${id}`)).status, 401, "download requires login");
+
+    // content checks (each needs a fresh ticket)
+    const t2 = (await requestUrl("image/png")).json as { uploadURL: string };
+    assert.equal((await put(t2.uploadURL, png, "application/pdf")).status, 415, "declared type must match the ticket");
+    assert.equal((await put(t2.uploadURL, Buffer.from("<script>alert(1)</script>"), "image/png")).status, 415, "magic bytes must match the type");
+    assert.equal((await put(t2.uploadURL, Buffer.alloc(0), "image/png")).status, 413, "empty file refused");
+    const tampered = t2.uploadURL.slice(0, -2) + (t2.uploadURL.endsWith("AA") ? "BB" : "AA");
+    assert.equal((await put(tampered, png, "image/png")).status, 403, "tampered token refused");
+    assert.equal((await put("/api/storage/local-upload/not-a-token", png, "image/png")).status, 403);
+    assert.equal((await put(t2.uploadURL, Buffer.concat([png, Buffer.alloc(10 * 1024 * 1024)]), "image/png")).status, 413, "over 10 MB refused");
+
+    // traversal / probing
+    for (const p of ["uploads/..%2f..%2fetc%2fpasswd", `uploads/${id}.type`, "uploads/not-a-uuid", "../../etc/passwd"]) {
+      const r = await fetch(`${baseUrl}/api/storage/objects/${p}`, { headers: { authorization: `Bearer ${user}` } });
+      assert.equal(r.status, 404, p);
+    }
+
+    // the stored object can be attached to a KYC submission
+    const submit = await adminApi("/api/kyc/submit", { method: "POST", token: user, body: { document_type: "national_id", document_number: "12345678", file_path: objectPath } });
+    assert.equal(submit.status, 200);
+  } finally {
+    delete process.env.OBJECT_STORAGE;
+    delete process.env.LOCAL_STORAGE_DIR;
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});
+
+// ---------- first-run bootstrap ----------
+test("bootstrap: creates the client's own admin once, never alters an existing one, never promotes anyone", { skip }, async () => {
+  const { bootstrapOperator } = await import("../lib/bootstrapOperator.js");
+  const email = "Ops@Client.Example";
+  const first = await bootstrapOperator({ email, password: "Cl1ent-Str0ng#Passphrase", name: "Ada Client" });
+  assert.equal(first.adminCreated, true);
+  const [admin] = await m.db.db.select().from(m.db.usersTable).where(m.drizzle.eq(m.db.usersTable.email, "ops@client.example"));
+  assert.equal(admin.role, "admin");
+  assert.equal(admin.firstName, "Ada");
+  assert.equal(admin.lastName, "Client");
+  assert.notEqual(admin.passwordHash, "Cl1ent-Str0ng#Passphrase");
+  assert.ok((await m.db.db.select().from(m.db.walletsTable).where(m.drizzle.eq(m.db.walletsTable.userId, admin.id))).length >= 1);
+
+  const again = await bootstrapOperator({ email, password: "Another-Str0ng#Passphrase" });
+  assert.equal(again.adminCreated, false, "idempotent");
+  const [unchanged] = await m.db.db.select().from(m.db.usersTable).where(m.drizzle.eq(m.db.usersTable.id, admin.id));
+  assert.equal(unchanged.passwordHash, admin.passwordHash, "an existing admin's password is never overwritten");
+
+  await assert.rejects(bootstrapOperator({ email: "new@client.example", password: "password" }), /rejected/);
+  await assert.rejects(bootstrapOperator({ email: "not-an-email", password: "Cl1ent-Str0ng#Passphrase" }), /valid email/);
+  await assert.rejects(bootstrapOperator({ email: "alice@example.com", password: "Cl1ent-Str0ng#Passphrase" }), /non-admin/);
+  const [alice] = await m.db.db.select().from(m.db.usersTable).where(m.drizzle.eq(m.db.usersTable.email, "alice@example.com"));
+  assert.equal(alice.role, "user", "an ordinary account is never promoted");
+});
+
 // ---------- operator self-service onboarding ----------
 async function adminApi(path: string, init: { method?: string; body?: unknown; token?: string } = {}): Promise<{ status: number; json: Record<string, any>; raw: string }> {
   const res = await fetch(baseUrl + path, {

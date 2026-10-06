@@ -165,6 +165,7 @@ Backend code: `api-server/src/services/scheme/` (directory.ts, switchEngine.ts, 
 Frontend: `/iapay` page (⚡ nav item) with tabs: Pay a key, My keys, Receive (IAPAY QR), Network.
 
 Bank-readiness strategy, gap assessment and roadmap: `docs/IAPAY-bank-strategy.md`.
+Participant gateway: `docs/IAPAY-participant-integration.md`. Deployment on any host (Docker Compose, operator onboarding API, certification tool): `docs/IAPAY-deployment.md`.
 
 ## Checkout API (Stripe-like)
 

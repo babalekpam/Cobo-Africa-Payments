@@ -104,10 +104,12 @@ Echo the original `EndToEndId` in `OrgnlEndToEndId`; a reply for a different id 
 
 **Onboard a bank**
 
-1. Insert/activate the participant in `scheme_participants` (`code` matches `[A-Z0-9]{3,20}`, `status = active`, `api_url` = its HTTPS receive endpoint).
-2. Set its **net-debit cap**: `UPDATE scheme_participants SET net_debit_cap_usd = <amount> WHERE code = '<CODE>'`. Until set, the bank cannot originate any payment (default cap 0). Size the cap to the settlement collateral or prefunding the bank has posted.
-3. Add its shared secret to `GATEWAY_PARTICIPANT_SECRETS` (JSON map of code → secret) and restart. A participant with no secret can neither call nor be called.
-4. Run the bank's certification: register a key, send to a test key, replay a message, send a payment that is rejected, and exercise the timeout path (answer after 10 s) and confirm they poll status instead of retrying a new payment.
+All of this is done through the operator (admin) API — no SQL, no environment edit, no restart. See `docs/IAPAY-deployment.md` section 2 for the exact commands.
+
+1. `POST /api/scheme/participants` with the bank's `code` (`[A-Z0-9]{3,20}`), name, type, country, currency, its HTTPS receive endpoint (`api_url`) and its **net-debit cap**. The response contains the bank's **gateway secret exactly once** (stored AES-256-GCM encrypted; never shown again). Until a cap is set the bank cannot originate any payment (default cap 0). Size the cap to the settlement collateral or prefunding the bank has posted.
+2. Hand the secret to the bank over a secure channel. Adjust later with `PUT /api/scheme/participants/{code}` (cap, endpoint, `status: suspended|active`) and `POST .../rotate-secret` (the old secret stops working immediately).
+3. Run the bank's certification: `node tools/iapay-certify.mjs certify ...` (signatures, payment, replay, status, rejections, key registration). Separately exercise the timeout path (answer after 10 s) and confirm the bank polls status instead of retrying a new payment. `tools/iapay-certify.mjs mock-bank` provides a stand-in endpoint to test the switch-to-bank direction.
+4. (Optional, legacy) secrets can still be supplied through `GATEWAY_PARTICIPANT_SECRETS`; a secret stored by the API takes precedence.
 
 **Reconcile unresolved payments.** A payment whose bank outcome is unknown stays `unresolved` with the sender's money held. It is never refunded automatically (the bank may have credited).
 
