@@ -4,11 +4,10 @@ Nothing in the platform is tied to a country, bank or currency. A client install
 their banks through the operator API. No code changes.
 
 > **Read first — what has and has not been verified.** The install steps below were rehearsed step by step on a clean machine
-> (empty database → schema → build → first-run bootstrap → production API → bank onboarding → certification) and the money path
-> is covered by automated tests against real PostgreSQL. The **Docker packaging itself has not been built** in the environment
-> where this was prepared (no Docker daemon available) — run `docker compose build` once and fix anything it reports before
-> relying on it. The platform has **not** had an independent penetration test, certification or regulator approval; see
-> "Before real money" at the end.
+> (empty database → schema → build → first-run bootstrap → production API → bank onboarding → certification), the Docker images
+> (`api` and `web`) were built successfully, and the money paths are covered by automated
+> tests against real PostgreSQL. The platform has **not** had an independent penetration test, certification or regulator
+> approval; see "Before real money" at the end.
 
 ## 1. Install (about 15 minutes)
 
@@ -101,9 +100,9 @@ of images · an on-call process for unresolved payments.
 ## 6. Known limits (be honest with your client)
 
 * Rate limits, sign-in/PIN/OTP lockouts and Idempotency-Key records are stored in Postgres, so several API instances can run behind a load balancer. The settlement scheduler and reconciliation sweeper run in every instance; they are idempotent, but for clarity run them in one.
-* Settlement computes who owes whom each cycle but does **not** move money between bank settlement accounts; a bank's exposure is released when a batch is marked settled. Tie this to your real settlement process.
-* Bank authentication is a per-bank shared secret (HMAC). mTLS/asymmetric signatures and HSM/KMS key custody are not built in.
-* Sanctions screening is a stopgap matcher with a short built-in list; use a licensed provider for production.
+* Settlement computes who owes whom each cycle but does **not** itself move money between bank settlement accounts. On a live installation a closed batch waits (`awaiting_settlement`, exposure still counted) until you record the settlement-bank/RTGS reference with `POST /api/scheme/settlement/batches/{id}/confirm`.
+* Bank authentication: per-bank shared secret (HMAC) or, recommended, Ed25519 public-key signatures in both directions (the bank's key can stay in its HSM). The scheme's own keys are environment variables — HSM/KMS custody and mTLS at the edge are still yours to add.
+* Sanctions screening: set `SANCTIONS_API_KEY` for consolidated-list screening (fail closed if the provider is down). Without it only a short built-in list is checked — not acceptable for live use.
 * The wallet rails outside the IAPAY scheme (P2P, FX swap, bank and mobile-money payouts, deposits, checkout, USSD) now move money only through atomic, exactly-once ledger operations with regression tests for races, replays and double approvals — but, like the rest of the platform, they have not been independently audited.
 * Mobile app identifiers (`com.cobo.africa`) and some package/folder names still use the old name; renaming them is a separate release.
 
