@@ -7,6 +7,7 @@ import { generateRef } from "../lib/refgen.js";
 import { processInstantPayment } from "../services/scheme/switchEngine.js";
 import { resolveAlias, listUserAliases } from "../services/scheme/directory.js";
 import { isProduction, safeEqual } from "../lib/security.js";
+import { parseAmount } from "../lib/ledger.js";
 import { isLockedOut, recordFailedAttempt, clearAttempts } from "../lib/lockout.js";
 import { logger } from "../lib/logger.js";
 
@@ -73,7 +74,7 @@ router.post("/ussd", async (req, res): Promise<void> => {
       const user = await findUserByPhone(phoneNumber || "");
       if (!user) {
         response = "END Account not found.";
-      } else if (isNaN(amount) || amount <= 0) {
+      } else if (!parseAmount(amount)) {
         response = "END Invalid amount.";
       } else {
         const pinKey = `ussd-pin:${phoneNumber}`;
@@ -211,7 +212,7 @@ Enter amount:`;
         const user = await findUserByPhone(phoneNumber || "");
         if (!user) {
           response = "END Account not found.";
-        } else if (isNaN(amount) || amount <= 0) {
+        } else if (!parseAmount(amount)) {
           response = "END Invalid amount.";
         } else {
           const pinKey = `ussd-pin:${phoneNumber}`;

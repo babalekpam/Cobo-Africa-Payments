@@ -45,7 +45,8 @@ export default function Checkout() {
     try {
       const res = await fetch(`/api/pay/${sessionId}/complete`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        // Signed in to IAPAY? Pay from your wallet. (Without a sign-in only a sandbox accepts a simulated payment.)
+        headers: { "Content-Type": "application/json", ...(localStorage.getItem("iapay_token") ? { Authorization: `Bearer ${localStorage.getItem("iapay_token")}` } : {}) },
         body: JSON.stringify({ email, name, payment_method: "card" }),
       });
       const data = await res.json();

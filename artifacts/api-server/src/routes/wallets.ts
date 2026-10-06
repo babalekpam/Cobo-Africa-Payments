@@ -2,6 +2,8 @@ import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, walletsTable, transactionsTable } from "@workspace/db";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
+import { parseAmount, credit } from "../lib/ledger.js";
+import { isSandbox } from "../lib/environment.js";
 
 const router: IRouter = Router();
 
@@ -41,28 +43,36 @@ router.put("/wallets/:id/default", requireAuth, async (req: AuthenticatedRequest
   res.json({ success: true, message: "Default wallet updated" });
 });
 
+// Self-service TEST money. Sandbox installations only: on a live installation money enters a wallet
+// only through a verified deposit, an incoming payment or a provider — never by asking for it.
 router.post("/wallets/fund", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
-  const { currency, amount } = req.body;
-  if (!currency || !amount || amount <= 0 || amount > 100000) {
-    res.status(400).json({ success: false, message: "Invalid funding. Max 100,000 in sandbox." });
+  if (!isSandbox()) {
+    res.status(403).json({ success: false, message: "Test funding is only available on a sandbox installation. Use a deposit instead." });
     return;
   }
-  const cur = currency.toUpperCase();
+  const { currency } = req.body;
+  const amount = parseAmount(req.body.amount);
+  if (!currency || !amount || Number(amount) > 100000) {
+    res.status(400).json({ success: false, message: "Invalid funding: 0.01 to 100,000 with at most 2 decimal places (sandbox)." });
+    return;
+  }
+  const cur = String(currency).toUpperCase();
   const [wallet] = await db.select().from(walletsTable).where(and(eq(walletsTable.userId, req.user!.id), eq(walletsTable.currency, cur)));
   if (!wallet) {
     res.status(404).json({ success: false, message: "Wallet not found" });
     return;
   }
-  const newBalance = Number(wallet.balance) + Number(amount);
-  await db.update(walletsTable).set({ balance: String(newBalance) }).where(eq(walletsTable.id, wallet.id));
   const ref = "IAPAY-FUND-" + Date.now();
-  await db.insert(transactionsTable).values({
-    reference: ref, amount: String(amount), currency: cur, status: "completed",
-    type: "deposit", customerId: req.user!.id, description: "Sandbox wallet funding",
-    paymentMethod: "sandbox",
+  await db.transaction(async (tx) => {
+    await credit(tx, wallet.id, amount);
+    await tx.insert(transactionsTable).values({
+      reference: ref, amount, currency: cur, status: "completed",
+      type: "deposit", customerId: req.user!.id, description: "Sandbox test funding (not real money)",
+      paymentMethod: "sandbox",
+    });
   });
   const [updated] = await db.select().from(walletsTable).where(eq(walletsTable.id, wallet.id));
-  res.json({ success: true, message: `${cur} ${amount} added (sandbox)`, wallet: { ...updated, balance: Number(updated.balance), lockedBalance: Number(updated.lockedBalance) } });
+  res.json({ success: true, message: `${cur} ${amount} added (sandbox test money)`, wallet: { ...updated, balance: Number(updated.balance), lockedBalance: Number(updated.lockedBalance) } });
 });
 
 export default router;

@@ -1,3 +1,4 @@
+import { isSandbox } from "../lib/environment.js";
 import { chargeMobileMoney as flutterwaveCharge } from "./flutterwave.js";
 import { initiateSTKPush, formatPhone } from "./mpesa.js";
 import { requestToPay as mtnRequestToPay } from "./mtnMomo.js";
@@ -51,7 +52,18 @@ export async function initiateTransfer(params: {
   const provider = selectProvider({ currency: params.currency, country: params.country, provider: params.providerName });
 
   if (provider === "mock") {
-    console.warn("[paymentGateway] No payment gateway keys configured — using mock mode");
+    // A simulated payout is only acceptable in a sandbox. In LIVE, money must never be reported as
+    // sent when no provider actually sent it.
+    if (!isSandbox()) {
+      return {
+        success: false,
+        provider: "mock",
+        providerReference: "",
+        status: "failed",
+        message: "Mobile-money payouts are not configured on this installation",
+      };
+    }
+    console.warn("[paymentGateway] No payment gateway keys configured — sandbox simulated payout");
     return {
       success: true,
       provider: "mock",

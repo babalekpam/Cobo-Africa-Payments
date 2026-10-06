@@ -1,7 +1,9 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { eq, and, desc } from "drizzle-orm";
 import { db, apiKeysTable, checkoutSessionsTable, webhookEventsTable, usersTable, walletsTable, transactionsTable } from "@workspace/db";
-import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
+import { requireAuth, resolveSession, type AuthenticatedRequest } from "../middlewares/requireAuth";
+import { parseAmount, debit, credit, walletFor, InsufficientFunds } from "../lib/ledger.js";
+import { isSandbox } from "../lib/environment.js";
 import crypto from "crypto";
 import { isSafeOutboundUrl } from "../lib/urlSafety";
 import { accountIsActive } from "../lib/accounts";
@@ -184,8 +186,8 @@ router.post("/checkout/sessions", requireApiKey as any, async (req: Request, res
   const r = req as ApiKeyAuthRequest;
   const { amount, currency, description, reference, customer_email, success_url, cancel_url, webhook_url, metadata } = req.body;
 
-  if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
-    res.status(400).json({ error: { type: "invalid_request", message: "amount is required and must be > 0" } });
+  if (!parseAmount(amount)) {
+    res.status(400).json({ error: { type: "invalid_request", message: "amount is required: at least 0.01 with at most 2 decimal places" } });
     return;
   }
 
@@ -196,7 +198,7 @@ router.post("/checkout/sessions", requireApiKey as any, async (req: Request, res
     sessionId,
     merchantUserId: r.merchantUser!.id,
     apiKeyId: r.merchantUser!.apiKeyId,
-    amount: String(amount),
+    amount: parseAmount(amount)!,
     currency: (currency || "USD").toUpperCase(),
     description: description || null,
     reference: reference || null,
@@ -305,8 +307,8 @@ router.get("/pay/:sessionId/info", async (req, res): Promise<void> => {
 });
 
 router.post("/pay/:sessionId/complete", async (req, res): Promise<void> => {
-  const { sessionId } = req.params;
-  const { email, name, payment_method } = req.body;
+  const sessionId = String(req.params.sessionId);
+  const { email, payment_method } = req.body;
 
   const [session] = await db.select().from(checkoutSessionsTable).where(eq(checkoutSessionsTable.sessionId, sessionId));
   if (!session) { res.status(404).json({ error: "Session not found" }); return; }
@@ -319,48 +321,58 @@ router.post("/pay/:sessionId/complete", async (req, res): Promise<void> => {
     return;
   }
   if (new Date(session.expiresAt) < new Date()) {
-    await db.update(checkoutSessionsTable).set({ status: "expired" }).where(eq(checkoutSessionsTable.id, session.id));
+    await db.update(checkoutSessionsTable).set({ status: "expired" }).where(and(eq(checkoutSessionsTable.id, session.id), eq(checkoutSessionsTable.status, "pending")));
     res.status(400).json({ error: "Session has expired" });
     return;
   }
 
-  const updated = await db.update(checkoutSessionsTable)
-    .set({ status: "paid", paidAt: new Date(), customerEmail: email || session.customerEmail })
-    .where(and(eq(checkoutSessionsTable.id, session.id), eq(checkoutSessionsTable.status, "pending")))
-    .returning();
+  // Who pays? A signed-in IAPAY customer pays from their wallet (debit and merchant credit commit
+  // together). Without a payer, money would be credited to the merchant from nowhere — allowed only
+  // as a SIMULATED payment on a sandbox installation.
+  const authHeader = req.headers.authorization;
+  const payer = authHeader?.startsWith("Bearer ") ? await resolveSession(authHeader.slice(7)) : null;
+  if (authHeader && !payer) { res.status(401).json({ error: "Your session has expired. Please sign in again." }); return; }
+  if (!payer && !isSandbox()) { res.status(401).json({ error: "Sign in to your IAPAY account to pay from your wallet" }); return; }
+  if (payer && payer.id === session.merchantUserId) { res.status(400).json({ error: "You cannot pay your own checkout" }); return; }
+  const amount = parseAmount(String(session.amount));
+  if (!amount) { res.status(400).json({ error: "Session amount is invalid" }); return; }
 
-  if (updated.length === 0) {
+  const ref = "CHK-" + session.sessionId.slice(3, 11).toUpperCase();
+  let completed: boolean;
+  try {
+    completed = await db.transaction(async (tx) => {
+      const updated = await tx.update(checkoutSessionsTable)
+        .set({ status: "paid", paidAt: new Date(), customerEmail: payer?.email || email || session.customerEmail })
+        .where(and(eq(checkoutSessionsTable.id, session.id), eq(checkoutSessionsTable.status, "pending")))
+        .returning();
+      if (updated.length === 0) return false; // someone else completed it first
+
+      if (payer) {
+        const [payerWallet] = await tx.select().from(walletsTable).where(and(eq(walletsTable.userId, payer.id), eq(walletsTable.currency, session.currency)));
+        if (!payerWallet || !(await debit(tx, payerWallet.id, amount))) throw new InsufficientFunds();
+        await tx.insert(transactionsTable).values({
+          customerId: payer.id, type: "send", status: "completed", amount, currency: session.currency,
+          description: `Checkout payment: ${session.description || ref}`, reference: ref + "-P", paymentMethod: "wallet",
+          merchantId: null,
+        });
+      }
+      const merchantWallet = await walletFor(tx, session.merchantUserId, session.currency);
+      await credit(tx, merchantWallet.id, amount);
+      await tx.insert(transactionsTable).values({
+        customerId: session.merchantUserId, type: "receive", status: "completed", amount, currency: session.currency,
+        description: `Checkout payment: ${session.description || ref}${payer ? "" : " (sandbox: simulated payment)"}`,
+        reference: ref, paymentMethod: payer ? "wallet" : `sandbox_${payment_method || "card"}`,
+      });
+      return true;
+    });
+  } catch (err) {
+    if (err instanceof InsufficientFunds) { res.status(400).json({ error: "Insufficient funds in your IAPAY wallet" }); return; }
+    throw err;
+  }
+  if (!completed) {
     res.json({ success: true, message: "Payment already completed", redirect_url: session.successUrl || null });
     return;
   }
-
-  const [merchantWallet] = await db.select().from(walletsTable).where(
-    and(eq(walletsTable.userId, session.merchantUserId), eq(walletsTable.currency, session.currency))
-  );
-
-  if (merchantWallet) {
-    await db.update(walletsTable).set({
-      balance: String(Number(merchantWallet.balance) + Number(session.amount)),
-    }).where(eq(walletsTable.id, merchantWallet.id));
-  } else {
-    await db.insert(walletsTable).values({
-      userId: session.merchantUserId,
-      currency: session.currency,
-      balance: String(session.amount),
-    });
-  }
-
-  const ref = "CHK-" + session.sessionId.slice(3, 11).toUpperCase();
-  await db.insert(transactionsTable).values({
-    customerId: session.merchantUserId,
-    type: "receive",
-    status: "completed",
-    amount: String(session.amount),
-    currency: session.currency,
-    description: `Checkout payment: ${session.description || ref}`,
-    reference: ref,
-    paymentMethod: payment_method || "checkout",
-  });
 
   if (session.webhookUrl) {
     deliverWebhook(session.id, session.merchantUserId, "checkout.session.paid", session.webhookUrl, {
