@@ -14,17 +14,24 @@ import {
   notificationsTable,
   auditLogsTable,
   schemeTransfersTable,
-  settlementBatchesTable,
   type SchemeTransfer,
 } from "@workspace/db";
-import { getRate } from "../fxRates.js";
-import { screenAgainstOFAC } from "../../lib/ofac.js";
+import { getRate, getAllRates } from "../fxRates.js";
 import { checkAndCreateCTR } from "../../lib/ctr.js";
 import { generateRef } from "../../lib/refgen.js";
 import { checkDailyLimit, getKycLevel } from "../../lib/limits.js";
 import { emitPaymentUpdate } from "../socketio.js";
 import { emailService } from "../email.js";
-import { resolveAlias, getHomeParticipant, type ResolvedAlias } from "./directory.js";
+import { resolveAlias, getHomeParticipant, HOME_PARTICIPANT_CODE, type ResolvedAlias } from "./directory.js";
+import { currentOpenBatch } from "./batches.js";
+import {
+  adapterFor,
+  createPendingTransfer,
+  dispatchAndFinalize,
+  sanctionsHit,
+  toIso,
+  InsufficientFundsError,
+} from "./externalSwitch.js";
 
 // Scheme pricing: free for individuals (like Pix), small merchant discount rate applied upstream
 const SCHEME_FEE = 0;
@@ -37,16 +44,6 @@ export function generateSchemeRef(): string {
 export function generateEndToEndId(participantCode: string): string {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   return `E${participantCode}${date}${randomUUID().replace(/-/g, "").slice(0, 11).toUpperCase()}`;
-}
-
-async function currentOpenBatch(): Promise<number> {
-  const [open] = await db.select().from(settlementBatchesTable).where(eq(settlementBatchesTable.status, "open"));
-  if (open) return open.id;
-  const [batch] = await db
-    .insert(settlementBatchesTable)
-    .values({ batchRef: generateRef("STL") })
-    .returning();
-  return batch.id;
 }
 
 export interface InstantPaymentInput {
@@ -111,9 +108,15 @@ export async function processInstantPayment(input: InstantPaymentInput): Promise
     return { ok: false, status: 403, message: limitCheck.message || "Daily limit exceeded", code: limitCheck.code };
   }
 
-  // 3b. Sanctions screening at the switch — every payment, every time
-  const ofac = screenAgainstOFAC(resolved.holderName);
-  if (!ofac.clear && ofac.riskScore >= 80) {
+  // 3b. Sanctions screening at the switch — every payment, every time. Screens the real
+  // (unmasked) names of both parties; the masked display name can never match a list.
+  const [screenedSender] = await db.select().from(usersTable).where(eq(usersTable.id, input.senderUserId));
+  const senderScreenNames = screenedSender
+    ? [screenedSender.businessName, [screenedSender.firstName, screenedSender.lastName].filter(Boolean).join(" "), screenedSender.name].filter(
+        (n): n is string => !!n
+      )
+    : [];
+  if (sanctionsHit([...resolved.holderScreenNames, ...senderScreenNames])) {
     return { ok: false, status: 403, message: "Payment flagged for compliance review. Contact support.", code: "SANCTIONS_FLAG" };
   }
 
@@ -130,6 +133,95 @@ export async function processInstantPayment(input: InstantPaymentInput): Promise
   }
 
   const home = await getHomeParticipant();
+
+  // 4b. Recipient held at an external institution (a bank): route through its adapter.
+  // Participants with no reachable adapter keep the legacy wallet-credit behaviour only
+  // when the key belongs to a platform user (demo members); a bank-held key we cannot
+  // reach is refused rather than guessed at.
+  const externalAdapter = resolved.participant.code !== HOME_PARTICIPANT_CODE ? adapterFor(resolved.participant) : null;
+  if (resolved.holderUserId === null || externalAdapter) {
+    if (!externalAdapter || !home) {
+      return { ok: false, status: 503, message: "The recipient's institution is not reachable right now. Nothing was charged.", code: "PARTICIPANT_UNAVAILABLE" };
+    }
+    const roundedRecipientAmount = Math.round(recipientAmount * 100) / 100;
+    const extRef = generateSchemeRef();
+    let pending: SchemeTransfer;
+    try {
+      pending = await createPendingTransfer({
+        reference: extRef,
+        endToEndId: generateEndToEndId(home.code),
+        amount,
+        currency: senderWallet.currency,
+        recipientAmount: roundedRecipientAmount,
+        recipientCurrency,
+        fxRate,
+        fee: SCHEME_FEE,
+        senderParticipant: home,
+        recipient: resolved,
+        description: input.description,
+        qrRef: input.qrRef,
+        senderUserId: input.senderUserId,
+        debitWalletId: senderWallet.id,
+        rates: await getAllRates(),
+      });
+    } catch (err) {
+      if (err instanceof InsufficientFundsError) return { ok: false, status: 400, message: "Insufficient funds" };
+      throw err;
+    }
+
+    const senderName = screenedSender
+      ? screenedSender.businessName || [screenedSender.firstName, screenedSender.lastName].filter(Boolean).join(" ") || screenedSender.name
+      : "IAPAY customer";
+    const outcome = await dispatchAndFinalize(
+      pending,
+      toIso(pending, { name: senderName, participant: home }, { name: resolved.holderName, participant: resolved.participant }, input.description),
+      externalAdapter
+    );
+
+    if (outcome.kind === "rejected") {
+      return {
+        ok: false,
+        status: 422,
+        message: "The recipient's institution declined the payment. You have not been charged.",
+        code: "PARTICIPANT_REJECTED",
+        transfer: outcome.transfer,
+      };
+    }
+    if (outcome.kind === "unresolved") {
+      return {
+        ok: false,
+        status: 202,
+        message: "Your payment is being confirmed with the recipient's institution. The funds are held and will be released or refunded once it is confirmed.",
+        code: "PAYMENT_PENDING",
+        transfer: outcome.transfer,
+      };
+    }
+
+    await checkAndCreateCTR(input.senderUserId, extRef, amount, senderWallet.currency, "iapay");
+    await db.insert(auditLogsTable).values({
+      userId: input.senderUserId,
+      action: "iapay_instant_payment",
+      ip: "scheme-switch",
+      meta: { ref: extRef, endToEndId: pending.endToEndId, amount, currency: senderWallet.currency, recipientCurrency, fxRate, recipientAmount: roundedRecipientAmount, participant: resolved.participant.code },
+    });
+    if (screenedSender) {
+      emailService
+        .sendTransferSentEmail(screenedSender, { amount, currency: senderWallet.currency, recipient: resolved.holderName, reference: extRef, fee: SCHEME_FEE })
+        .catch(() => {});
+    }
+    return {
+      ok: true,
+      status: 200,
+      message: "Payment cleared instantly",
+      transfer: outcome.transfer,
+      recipientName: resolved.holderName,
+      fxRate,
+      recipientAmount: roundedRecipientAmount,
+      recipientCurrency,
+    };
+  }
+  const recipientUserId: number = resolved.holderUserId;
+
   const senderParticipantId = home?.id ?? resolved.participant.id;
   const ref = generateSchemeRef();
   const endToEndId = generateEndToEndId(home?.code || "IAPAYPAN");
@@ -160,12 +252,12 @@ export async function processInstantPayment(input: InstantPaymentInput): Promise
       let [recipientWallet] = await tx
         .select()
         .from(walletsTable)
-        .where(and(eq(walletsTable.userId, resolved.holderUserId), eq(walletsTable.currency, recipientCurrency)))
+        .where(and(eq(walletsTable.userId, recipientUserId), eq(walletsTable.currency, recipientCurrency)))
         .for("update");
       if (!recipientWallet) {
         [recipientWallet] = await tx
           .insert(walletsTable)
-          .values({ userId: resolved.holderUserId, currency: recipientCurrency })
+          .values({ userId: recipientUserId, currency: recipientCurrency })
           .returning();
       }
       await tx
@@ -181,7 +273,7 @@ export async function processInstantPayment(input: InstantPaymentInput): Promise
           senderUserId: input.senderUserId,
           senderParticipantId,
           recipientAlias: resolved.alias.aliasValue,
-          recipientUserId: resolved.holderUserId,
+          recipientUserId: recipientUserId,
           recipientParticipantId: resolved.participant.id,
           amount: String(amount),
           currency: senderWallet.currency,
@@ -214,7 +306,7 @@ export async function processInstantPayment(input: InstantPaymentInput): Promise
         currency: recipientCurrency,
         status: "completed",
         type: "deposit",
-        customerId: resolved.holderUserId,
+        customerId: recipientUserId,
         description: `IAPAY instant payment received (key: ${resolved.alias.aliasType})`,
         paymentMethod: "iapay",
       });
@@ -231,7 +323,7 @@ export async function processInstantPayment(input: InstantPaymentInput): Promise
   await checkAndCreateCTR(input.senderUserId, ref, amount, senderWallet.currency, "iapay");
 
   await db.insert(notificationsTable).values({
-    userId: resolved.holderUserId,
+    userId: recipientUserId,
     title: "IAPAY Payment Received!",
     message: `${recipientCurrency} ${recipientAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })} received instantly via IAPAY`,
     type: "success",
@@ -243,7 +335,7 @@ export async function processInstantPayment(input: InstantPaymentInput): Promise
     meta: { ref, endToEndId, amount, currency: senderWallet.currency, recipientCurrency, fxRate, recipientAmount, alias: resolved.alias.aliasValue },
   });
 
-  emitPaymentUpdate(resolved.holderUserId, {
+  emitPaymentUpdate(recipientUserId, {
     reference: ref,
     status: "completed",
     amount: recipientAmount,
@@ -253,7 +345,7 @@ export async function processInstantPayment(input: InstantPaymentInput): Promise
   });
 
   const [senderUser] = await db.select().from(usersTable).where(eq(usersTable.id, input.senderUserId));
-  const [recipientUser] = await db.select().from(usersTable).where(eq(usersTable.id, resolved.holderUserId));
+  const [recipientUser] = await db.select().from(usersTable).where(eq(usersTable.id, recipientUserId));
   if (senderUser) {
     emailService.sendTransferSentEmail(senderUser, { amount, currency: senderWallet.currency, recipient: resolved.holderName, reference: ref, fee: SCHEME_FEE }).catch(() => {});
   }

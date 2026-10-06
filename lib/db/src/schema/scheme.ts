@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, numeric, integer, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, numeric, integer, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -14,6 +14,9 @@ export const schemeParticipantsTable = pgTable("scheme_participants", {
   apiUrl: text("api_url"),
   status: text("status").notNull().default("active"), // active | suspended | pending
   settlementBalance: numeric("settlement_balance", { precision: 18, scale: 2 }).notNull().default("0"),
+  // Maximum unsettled net debit (USD) this participant may run before the switch
+  // rejects further payments it originates. NULL = fall back to the deployment default.
+  netDebitCapUsd: numeric("net_debit_cap_usd", { precision: 18, scale: 2 }),
   joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -22,7 +25,11 @@ export const paymentAliasesTable = pgTable("payment_aliases", {
   id: serial("id").primaryKey(),
   aliasType: text("alias_type").notNull(), // phone | email | national_id | merchant_id | random
   aliasValue: text("alias_value").notNull().unique(),
-  userId: integer("user_id").notNull(),
+  // Platform user who owns the key. NULL for keys held by an external participant
+  // (a bank registers these for its own customers via the gateway).
+  userId: integer("user_id"),
+  // Display name supplied by the owning participant for external keys (masked on lookup).
+  holderName: text("holder_name"),
   participantId: integer("participant_id").notNull(),
   accountRef: text("account_ref").notNull(), // wallet/account identifier at the participant
   currency: text("currency").notNull().default("USD"), // preferred receive currency
@@ -98,6 +105,26 @@ export const schemeDisputesTable = pgTable("scheme_disputes", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   resolvedAt: timestamp("resolved_at", { withTimezone: true }),
 });
+
+// Every signed message accepted from a participant, keyed by (participant, message id).
+// This is the replay/idempotency ledger: a re-sent message is answered from the stored
+// response and can never move money twice.
+export const gatewayMessagesTable = pgTable(
+  "gateway_messages",
+  {
+    id: serial("id").primaryKey(),
+    participantCode: text("participant_code").notNull(),
+    msgId: text("msg_id").notNull(),
+    endToEndId: text("end_to_end_id"),
+    status: text("status").notNull().default("received"), // received | credited | forwarded | rejected | pending
+    responseStatus: integer("response_status"),
+    responseXml: text("response_xml"),
+    transferReference: text("transfer_reference"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("gateway_messages_participant_msg_uniq").on(t.participantCode, t.msgId)]
+);
+export type GatewayMessage = typeof gatewayMessagesTable.$inferSelect;
 
 export const insertSchemeParticipantSchema = createInsertSchema(schemeParticipantsTable).omit({ id: true, joinedAt: true });
 export type InsertSchemeParticipant = z.infer<typeof insertSchemeParticipantSchema>;

@@ -6,7 +6,8 @@ export const generalRateLimit = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: "Too many requests, please slow down." },
-  skip: (req) => req.path === "/healthz",
+  // The participant gateway has its own limiter (routes/gateway.ts) sized for bank traffic.
+  skip: (req) => req.path === "/healthz" || req.path.startsWith("/api/gateway/"),
 });
 
 export const authRateLimit = rateLimit({

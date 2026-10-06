@@ -9,6 +9,7 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "seed": "pnpm run build && node --enable-source-maps ./dist/seed.mjs",
     "test": "node ./run-tests.mjs",
+    "test:integration": "node ./run-tests.mjs --integration",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

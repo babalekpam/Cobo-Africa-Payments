@@ -34,6 +34,7 @@ import { returnSchemeTransfer } from "../services/scheme/returns.js";
 import { closeSettlementCycle, getBatchPositions } from "../services/scheme/settlement.js";
 import { encodeIapayQr, decodeIapayQr } from "../services/scheme/qrStandard.js";
 import { buildPacs008, buildPacs002 } from "../services/scheme/iso20022.js";
+import { resolveUnresolvedTransfer } from "../services/scheme/externalSwitch.js";
 
 const router: IRouter = Router();
 
@@ -143,7 +144,16 @@ router.post("/scheme/pay", transferRateLimit, requireAuth, scopeIdempotencyKey, 
   });
 
   if (!result.ok) {
-    res.status(result.status).json({ success: false, message: result.message, code: result.code });
+    // A payment that reached an external bank but is not final (pending/declined) still has a
+    // transfer record: return its reference so the customer can track it.
+    res.status(result.status).json({
+      success: false,
+      message: result.message,
+      code: result.code,
+      ...(result.transfer
+        ? { reference: result.transfer.reference, end_to_end_id: result.transfer.endToEndId, status: result.transfer.status }
+        : {}),
+    });
     return;
   }
 
@@ -186,6 +196,39 @@ router.get("/scheme/transfers/:reference", requireAuth, async (req: Authenticate
     return;
   }
   res.json({ success: true, transfer });
+});
+
+// ---------- Operator reconciliation of unresolved bank payments ----------
+// A payment whose bank outcome is unknown (timeout, outage, interrupted process) keeps the
+// sender's money held. An operator confirms with the bank what actually happened and
+// settles it exactly once: "credited" clears it, "not_credited" refunds the sender.
+
+router.get("/scheme/unresolved", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+  if (!(await requireAdmin(req))) {
+    res.status(403).json({ success: false, message: "Admin access required" });
+    return;
+  }
+  const transfers = await db
+    .select()
+    .from(schemeTransfersTable)
+    .where(eq(schemeTransfersTable.status, "unresolved"))
+    .orderBy(desc(schemeTransfersTable.initiatedAt))
+    .limit(200);
+  res.json({ success: true, transfers });
+});
+
+router.post("/scheme/transfers/:reference/resolve", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+  if (!(await requireAdmin(req))) {
+    res.status(403).json({ success: false, message: "Admin access required" });
+    return;
+  }
+  const { outcome, note } = (req.body ?? {}) as { outcome?: string; note?: string };
+  if ((outcome !== "credited" && outcome !== "not_credited") || typeof note !== "string" || note.trim().length < 5) {
+    res.status(400).json({ success: false, message: 'Provide outcome ("credited" | "not_credited") and a note (min 5 chars) recording the bank confirmation' });
+    return;
+  }
+  const result = await resolveUnresolvedTransfer(String(req.params.reference), outcome, req.user!.id, note.trim());
+  res.status(result.status).json({ success: result.ok, message: result.message, status: result.transfer?.status });
 });
 
 // ISO 20022 view of a transfer (pacs.008 credit transfer / pacs.002 status report) —
@@ -233,8 +276,9 @@ router.get("/scheme/transfers/:reference/iso20022", requireAuth, async (req: Aut
     initiatedAt: transfer.initiatedAt,
     clearedAt: transfer.clearedAt,
     description,
-    debtor: { name: fullName(sender), participantCode: debtorAgent.code, country: debtorAgent.country },
-    creditor: { name: fullName(recipient), participantCode: creditorAgent.code, country: creditorAgent.country },
+    creditorAlias: transfer.recipientAlias,
+    debtor: { name: fullName(sender), agentName: debtorAgent.name, participantCode: debtorAgent.code, country: debtorAgent.country },
+    creditor: { name: fullName(recipient), agentName: creditorAgent.name, participantCode: creditorAgent.code, country: creditorAgent.country },
   };
 
   const xml =

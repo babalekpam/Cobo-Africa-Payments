@@ -200,7 +200,10 @@ export interface ResolvedAlias {
   alias: PaymentAlias;
   participant: SchemeParticipant;
   holderName: string;
-  holderUserId: number;
+  /** Unmasked names for sanctions screening ONLY (each screened separately) — never include in any API response. */
+  holderScreenNames: string[];
+  /** Platform user who owns the key; null when the key is held by an external participant. */
+  holderUserId: number | null;
 }
 
 export async function resolveAlias(rawValue: string): Promise<ResolvedAlias | null> {
@@ -230,6 +233,18 @@ export async function resolveAlias(rawValue: string): Promise<ResolvedAlias | nu
     .where(eq(schemeParticipantsTable.id, alias.participantId));
   if (!participant || participant.status !== "active") return null;
 
+  // External participant key: no platform user, the participant supplied the holder name.
+  if (alias.userId === null) {
+    const parts = (alias.holderName || "").trim().split(/\s+/).filter(Boolean);
+    return {
+      alias,
+      participant,
+      holderName: maskName(parts[0], parts.length > 1 ? parts[parts.length - 1] : null),
+      holderScreenNames: parts.length ? [parts.join(" ")] : [],
+      holderUserId: null,
+    };
+  }
+
   const [holder] = await db.select().from(usersTable).where(eq(usersTable.id, alias.userId));
   if (!holder) return null;
 
@@ -237,6 +252,9 @@ export async function resolveAlias(rawValue: string): Promise<ResolvedAlias | nu
     alias,
     participant,
     holderName: maskName(holder.firstName, holder.lastName),
+    holderScreenNames: [holder.businessName, [holder.firstName, holder.lastName].filter(Boolean).join(" "), holder.name].filter(
+      (n, i, all): n is string => !!n && all.indexOf(n) === i
+    ),
     holderUserId: holder.id,
   };
 }

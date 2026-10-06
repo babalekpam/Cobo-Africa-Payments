@@ -4,7 +4,8 @@
 // card schemes like UnionPay and by PAPSS for cross-border netting), then marks
 // the batch and its transfers settled.
 
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
+import { currentOpenBatch } from "./batches.js";
 import {
   db,
   schemeTransfersTable,
@@ -88,10 +89,38 @@ export async function closeSettlementCycle(): Promise<SettlementSummary | null> 
   }
 
   const now = new Date();
+  // Settle exactly the transfers that were netted above — never "everything cleared in this
+  // batch", which would also mark a payment that cleared after the snapshot as settled without
+  // it ever being netted.
   await db
     .update(schemeTransfersTable)
     .set({ status: "settled", settledAt: now })
+    .where(
+      and(
+        inArray(
+          schemeTransfersTable.id,
+          transfers.map((t) => t.id)
+        ),
+        eq(schemeTransfersTable.status, "cleared")
+      )
+    );
+  // Any straggler that cleared into this batch after the snapshot moves to the next open batch.
+  const stragglers = await db
+    .select({ id: schemeTransfersTable.id })
+    .from(schemeTransfersTable)
     .where(and(eq(schemeTransfersTable.settlementBatchId, batch.id), eq(schemeTransfersTable.status, "cleared")));
+  if (stragglers.length > 0) {
+    const nextBatchId = await currentOpenBatch();
+    await db
+      .update(schemeTransfersTable)
+      .set({ settlementBatchId: nextBatchId })
+      .where(
+        inArray(
+          schemeTransfersTable.id,
+          stragglers.map((s) => s.id)
+        )
+      );
+  }
 
   const [settled] = await db
     .update(settlementBatchesTable)

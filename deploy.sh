@@ -98,6 +98,22 @@ if [ "$DEPLOY_API" = true ]; then
     );
     ALTER TABLE payment_aliases ADD COLUMN IF NOT EXISTS verification_code TEXT;
     ALTER TABLE payment_aliases ADD COLUMN IF NOT EXISTS verification_expires TIMESTAMPTZ;
+    -- Participant gateway: keys can be held by an external bank (no platform user)
+    ALTER TABLE payment_aliases ALTER COLUMN user_id DROP NOT NULL;
+    ALTER TABLE payment_aliases ADD COLUMN IF NOT EXISTS holder_name TEXT;
+    ALTER TABLE scheme_participants ADD COLUMN IF NOT EXISTS net_debit_cap_usd NUMERIC(18, 2);
+    CREATE TABLE IF NOT EXISTS gateway_messages (
+      id SERIAL PRIMARY KEY,
+      participant_code TEXT NOT NULL,
+      msg_id TEXT NOT NULL,
+      end_to_end_id TEXT,
+      status TEXT NOT NULL DEFAULT 'received',
+      response_status INTEGER,
+      response_xml TEXT,
+      transfer_reference TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS gateway_messages_participant_msg_uniq ON gateway_messages(participant_code, msg_id);
     CREATE INDEX IF NOT EXISTS payment_aliases_user_id_idx ON payment_aliases(user_id);
     CREATE TABLE IF NOT EXISTS scheme_transfers (
       id SERIAL PRIMARY KEY,

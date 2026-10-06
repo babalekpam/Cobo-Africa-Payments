@@ -12,8 +12,10 @@ export const SIGNATURE_HEADERS = {
   signature: "x-iapay-signature",
 } as const;
 
-export function signMessage(secret: string, timestampSec: number, body: string): string {
-  return createHmac("sha256", secret).update(`${timestampSec}.${body}`).digest("hex");
+// The HMAC covers the exact bytes on the wire: pass the raw Buffer when verifying
+// inbound requests so no decode/re-encode step can alter what was signed.
+export function signMessage(secret: string, timestampSec: number, body: string | Buffer): string {
+  return createHmac("sha256", secret).update(`${timestampSec}.`).update(body).digest("hex");
 }
 
 export type VerifyFailure = "missing_fields" | "bad_timestamp" | "stale" | "bad_signature";
@@ -22,7 +24,7 @@ export function verifySignature(opts: {
   secret: string;
   timestamp: string | undefined;
   signature: string | undefined;
-  body: string;
+  body: string | Buffer;
   nowSec?: number;
   maxSkewSec?: number;
 }): { ok: true } | { ok: false; reason: VerifyFailure } {

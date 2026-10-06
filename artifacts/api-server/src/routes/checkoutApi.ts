@@ -3,6 +3,7 @@ import { eq, and, desc } from "drizzle-orm";
 import { db, apiKeysTable, checkoutSessionsTable, webhookEventsTable, usersTable, walletsTable, transactionsTable } from "@workspace/db";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
 import crypto from "crypto";
+import { isSafeOutboundUrl } from "../lib/urlSafety";
 
 const router: IRouter = Router();
 
@@ -46,24 +47,7 @@ async function requireApiKey(req: ApiKeyAuthRequest, res: Response, next: NextFu
   next();
 }
 
-function isValidWebhookUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
-    const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-    if (host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host === "::1" || host === "::") return false;
-    if (host.startsWith("127.") || host.startsWith("10.") || host.startsWith("192.168.") || host.startsWith("169.254.")) return false;
-    if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return false;
-    // IPv6 loopback/link-local/unique-local
-    if (host.startsWith("fe80:") || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("::ffff:")) return false;
-    // Reject non-dotted numeric encodings of IPs (e.g. http://2130706433/, 0x7f000001)
-    if (/^\d+$/.test(host) || /^0x[0-9a-f]+$/.test(host) || /^0\d+/.test(host)) return false;
-    if (host.endsWith(".internal") || host.endsWith(".local")) return false;
-    return true;
-  } catch {
-    return false;
-  }
-}
+const isValidWebhookUrl = (url: string): boolean => isSafeOutboundUrl(url);
 
 const WEBHOOK_SECRET = process.env.WEBHOOK_SIGNING_SECRET || crypto.randomBytes(32).toString("hex");
 

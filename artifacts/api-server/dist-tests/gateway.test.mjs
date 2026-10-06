@@ -1,4 +1,9 @@
-import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);
+import { createRequire as __bannerCrReq } from 'node:module';
+import __bannerPath from 'node:path';
+import __bannerUrl from 'node:url';
+globalThis.require = __bannerCrReq(import.meta.url);
+globalThis.__filename = __bannerUrl.fileURLToPath(import.meta.url);
+globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
 
 // src/tests/gateway.test.ts
 import { test } from "node:test";
@@ -20,7 +25,9 @@ function loadSchemeConfig(env = process.env) {
     homeCurrency: /^[A-Z]{3}$/.test(currency) ? currency : "USD",
     seedDemoParticipants: (env.SCHEME_SEED_DEMO_PARTICIPANTS ?? "true").trim().toLowerCase() !== "false",
     gatewayTimeoutMs: positiveInt(env.GATEWAY_TIMEOUT_MS, 8e3),
-    gatewayMaxClockSkewSec: positiveInt(env.GATEWAY_MAX_CLOCK_SKEW_SEC, 300)
+    gatewayMaxClockSkewSec: positiveInt(env.GATEWAY_MAX_CLOCK_SKEW_SEC, 300),
+    gatewayMaxSingleAmountUsd: positiveInt(env.GATEWAY_MAX_SINGLE_AMOUNT_USD, 1e4),
+    defaultNetDebitCapUsd: Math.max(0, Number(env.GATEWAY_DEFAULT_NET_DEBIT_CAP_USD) || 0)
   };
 }
 function loadParticipantSecrets(env = process.env) {
@@ -47,7 +54,7 @@ var SIGNATURE_HEADERS = {
   signature: "x-iapay-signature"
 };
 function signMessage(secret, timestampSec, body) {
-  return createHmac("sha256", secret).update(`${timestampSec}.${body}`).digest("hex");
+  return createHmac("sha256", secret).update(`${timestampSec}.`).update(body).digest("hex");
 }
 function verifySignature(opts) {
   const { secret, timestamp, signature, body } = opts;
@@ -4279,7 +4286,7 @@ function text(value, max) {
   return xmlEscape(value.replace(/[\r\n\t]+/g, " ").trim().slice(0, max));
 }
 function agent(tag, party) {
-  return `<${tag}><FinInstnId><ClrSysMmbId><ClrSysId><Prtry>${SCHEME_CLEARING_SYSTEM}</Prtry></ClrSysId><MmbId>${xmlEscape(party.participantCode)}</MmbId></ClrSysMmbId><Nm>${text(party.name, 140)}</Nm><PstlAdr><Ctry>${xmlEscape(party.country)}</Ctry></PstlAdr></FinInstnId></${tag}>`;
+  return `<${tag}><FinInstnId><ClrSysMmbId><ClrSysId><Prtry>${SCHEME_CLEARING_SYSTEM}</Prtry></ClrSysId><MmbId>${xmlEscape(party.participantCode)}</MmbId></ClrSysMmbId><Nm>${text(party.agentName ?? party.name, 140)}</Nm><PstlAdr><Ctry>${xmlEscape(party.country)}</Ctry></PstlAdr></FinInstnId></${tag}>`;
 }
 function document(ns, root, body) {
   return `<?xml version="1.0" encoding="UTF-8"?>

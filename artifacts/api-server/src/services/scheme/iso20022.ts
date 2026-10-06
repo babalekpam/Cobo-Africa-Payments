@@ -8,7 +8,10 @@
 // participant-side gateway. Outbound generation only; inbound parsing is not yet implemented.
 
 export interface Iso20022Party {
+  /** The customer (debtor/creditor) name. */
   name: string;
+  /** The institution's own name for the agent block; falls back to `name` if omitted. */
+  agentName?: string;
   /** Scheme participant code, used as the clearing-system member id. */
   participantCode: string;
   country: string;
@@ -68,7 +71,7 @@ function agent(tag: "DbtrAgt" | "CdtrAgt" | "InstgAgt" | "InstdAgt", party: Iso2
   return (
     `<${tag}><FinInstnId><ClrSysMmbId><ClrSysId><Prtry>${SCHEME_CLEARING_SYSTEM}</Prtry></ClrSysId>` +
     `<MmbId>${xmlEscape(party.participantCode)}</MmbId></ClrSysMmbId>` +
-    `<Nm>${text(party.name, 140)}</Nm><PstlAdr><Ctry>${xmlEscape(party.country)}</Ctry></PstlAdr></FinInstnId></${tag}>`
+    `<Nm>${text(party.agentName ?? party.name, 140)}</Nm><PstlAdr><Ctry>${xmlEscape(party.country)}</Ctry></PstlAdr></FinInstnId></${tag}>`
   );
 }
 
@@ -104,7 +107,8 @@ export function buildPacs008(t: Iso20022Transfer): string {
   return document(NS.pacs008, "FIToFICstmrCdtTrf", grpHdr + tx);
 }
 
-export type Pacs002Status = "ACSC" | "RJCT"; // AcceptedSettlementCompleted | Rejected
+// AcceptedSettlementCompleted | Rejected | Pending (outcome not yet known — never final)
+export type Pacs002Status = "ACSC" | "RJCT" | "PDNG";
 
 export function buildPacs002(
   t: Pick<Iso20022Transfer, "reference" | "endToEndId" | "clearedAt" | "initiatedAt">,

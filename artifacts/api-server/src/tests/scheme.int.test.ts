@@ -1,0 +1,556 @@
+// Money-path integration tests. Run with a DISPOSABLE Postgres:
+//   DATABASE_URL=postgres://... pnpm --filter @workspace/api-server run test:integration
+// Tables are TRUNCATEd between tests. These tests drive the real Express app over HTTP with
+// signed gateway messages and the real switch engine, and try to break the invariants:
+// money is credited/refunded at most once, banks cannot exceed caps, unknown outcomes are
+// never assumed, and replays/parallel duplicates cannot double-spend.
+
+import { test, before, after, beforeEach } from "node:test";
+import assert from "node:assert/strict";
+import type { Server } from "node:http";
+import type { AddressInfo } from "node:net";
+
+process.env.NODE_ENV = "test";
+process.env.LOG_LEVEL = process.env.LOG_LEVEL || "silent";
+process.env.JWT_SECRET = process.env.JWT_SECRET || "integration-test-jwt-secret-0123456789";
+process.env.SCHEME_SEED_DEMO_PARTICIPANTS = "false";
+const SECRET_A = "bank-a-shared-secret-0123456789";
+const SECRET_B = "bank-b-shared-secret-0123456789";
+process.env.GATEWAY_PARTICIPANT_SECRETS = JSON.stringify({ BANKAKEN: SECRET_A, BANKBGHA: SECRET_B });
+
+const skip = !process.env.DATABASE_URL;
+
+// Dynamic imports: @workspace/db throws at import without DATABASE_URL.
+type Mods = {
+  db: typeof import("@workspace/db");
+  drizzle: typeof import("drizzle-orm");
+  signing: typeof import("../services/scheme/gateway/signing.js");
+  iso: typeof import("../services/scheme/iso20022.js");
+  ext: typeof import("../services/scheme/externalSwitch.js");
+  engine: typeof import("../services/scheme/switchEngine.js");
+  settlement: typeof import("../services/scheme/settlement.js");
+  adapters: typeof import("../services/scheme/adapters.js");
+  participants: typeof import("../services/scheme/participants.js");
+};
+let m: Mods;
+let server: Server;
+let baseUrl = "";
+
+before(async () => {
+  if (skip) return;
+  m = {
+    db: await import("@workspace/db"),
+    drizzle: await import("drizzle-orm"),
+    signing: await import("../services/scheme/gateway/signing.js"),
+    iso: await import("../services/scheme/iso20022.js"),
+    ext: await import("../services/scheme/externalSwitch.js"),
+    engine: await import("../services/scheme/switchEngine.js"),
+    settlement: await import("../services/scheme/settlement.js"),
+    adapters: await import("../services/scheme/adapters.js"),
+    participants: await import("../services/scheme/participants.js"),
+  };
+  const { default: app } = await import("../app.js");
+  server = app.listen(0);
+  await new Promise((r) => server.once("listening", r));
+  baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+});
+
+after(async () => {
+  if (skip) return;
+  m.ext.setAdapterOverrideForTests(null);
+  server?.close();
+  await m.db.pool.end();
+});
+
+// ---------- fixtures ----------
+interface World {
+  home: { id: number; code: string };
+  bankA: { id: number };
+  bankB: { id: number };
+  alice: { id: number; walletId: number };
+  bob: { id: number; walletId: number };
+}
+let w: World;
+
+async function reset(): Promise<World> {
+  const { db } = m.db;
+  await db.execute(
+    m.drizzle.sql`TRUNCATE users, wallets, transactions, notifications, audit_logs, scheme_participants, payment_aliases, scheme_transfers, settlement_batches, settlement_positions, gateway_messages, ctr_reports RESTART IDENTITY CASCADE`
+  );
+  m.ext.setAdapterOverrideForTests(null);
+  await m.participants.ensureSchemeParticipants(); // operator only (demo seeding off)
+  const [home] = await db.select().from(m.db.schemeParticipantsTable);
+  const [bankA] = await db
+    .insert(m.db.schemeParticipantsTable)
+    .values({ code: "BANKAKEN", name: "Bank A Kenya", type: "bank", country: "KE", currency: "USD", netDebitCapUsd: "1000" })
+    .returning();
+  const [bankB] = await db
+    .insert(m.db.schemeParticipantsTable)
+    .values({ code: "BANKBGHA", name: "Bank B Ghana", type: "bank", country: "GH", currency: "USD" }) // no cap => fail closed (0)
+    .returning();
+
+  const mkUser = async (email: string, first: string, last: string, balance: string) => {
+    const [u] = await db
+      .insert(m.db.usersTable)
+      .values({ email, name: `${first} ${last}`, firstName: first, lastName: last, passwordHash: "x", kycLevel: "2", kycStatus: "verified" })
+      .returning();
+    const [wallet] = await db.insert(m.db.walletsTable).values({ userId: u.id, currency: "USD", balance }).returning();
+    return { id: u.id, walletId: wallet.id };
+  };
+  const alice = await mkUser("alice@example.com", "Alice", "Wanjiru", "1000.00");
+  const bob = await mkUser("bob@example.com", "Bob", "Mensah", "500.00");
+  await db.insert(m.db.paymentAliasesTable).values([
+    { aliasType: "phone", aliasValue: "+254700000001", userId: alice.id, participantId: home.id, accountRef: "w-alice", currency: "USD", status: "active" },
+    { aliasType: "email", aliasValue: "bob@example.com", userId: bob.id, participantId: home.id, accountRef: "w-bob", currency: "USD", status: "active" },
+  ]);
+  return { home, bankA, bankB, alice, bob };
+}
+
+beforeEach(async () => {
+  if (skip) return;
+  w = await reset();
+});
+
+async function balance(walletId: number): Promise<number> {
+  const [row] = await m.db.db.select().from(m.db.walletsTable).where(m.drizzle.eq(m.db.walletsTable.id, walletId));
+  return Number(row.balance);
+}
+async function transfers() {
+  return m.db.db.select().from(m.db.schemeTransfersTable);
+}
+
+// ---------- gateway client ----------
+function pacs008(o: { e2e: string; alias: string; amount?: number; currency?: string; debtorCode?: string; creditorCode?: string; debtorName?: string }): string {
+  const amount = o.amount ?? 100;
+  const currency = o.currency ?? "USD";
+  return m.iso.buildPacs008({
+    reference: `I${o.e2e}`.slice(0, 35),
+    endToEndId: o.e2e,
+    amount,
+    currency,
+    recipientAmount: amount,
+    recipientCurrency: currency,
+    fxRate: 1,
+    initiatedAt: new Date(),
+    clearedAt: new Date(),
+    creditorAlias: o.alias,
+    description: "test payment",
+    debtor: { name: o.debtorName ?? "Test Payer", agentName: "Bank", participantCode: o.debtorCode ?? "BANKAKEN", country: "KE" },
+    creditor: { name: "Payee", agentName: "Operator", participantCode: o.creditorCode ?? "IAPAYPAN", country: "KE" },
+  });
+}
+
+async function send(
+  path: string,
+  body: string,
+  opts: { code?: string; secret?: string; ts?: number; sig?: string; contentType?: string; method?: string } = {}
+): Promise<{ status: number; text: string }> {
+  const code = opts.code ?? "BANKAKEN";
+  const secret = opts.secret ?? SECRET_A;
+  const ts = opts.ts ?? Math.floor(Date.now() / 1000);
+  const res = await fetch(baseUrl + path, {
+    method: opts.method ?? "POST",
+    headers: {
+      "content-type": opts.contentType ?? "application/xml",
+      "x-iapay-participant": code,
+      "x-iapay-timestamp": String(ts),
+      "x-iapay-signature": opts.sig ?? m.signing.signMessage(secret, ts, body),
+    },
+    body: opts.method === "GET" ? undefined : body,
+  });
+  return { status: res.status, text: await res.text() };
+}
+const credit = (xml: string, o?: Parameters<typeof send>[2]) => send("/api/gateway/v1/credit-transfer", xml, o);
+const txStatus = (xml: string) => /<TxSts>(\w+)<\/TxSts>/.exec(xml)?.[1];
+const reason = (xml: string) => /<Prtry>(\w+)<\/Prtry>/.exec(xml)?.[1];
+
+// ---------- authentication ----------
+test("gateway rejects unauthenticated, forged, stale and unknown-participant requests identically", { skip }, async () => {
+  const xml = pacs008({ e2e: "EAUTH000000000000001", alias: "+254700000001" });
+  const cases = [
+    await credit(xml, { sig: "00".repeat(32) }), // forged signature
+    await credit(xml, { secret: "wrong-secret-wrong-secret-12345" }), // wrong secret
+    await credit(xml, { ts: Math.floor(Date.now() / 1000) - 3600 }), // stale
+    await credit(xml, { code: "NOSUCHBANK", secret: SECRET_A }), // unknown participant
+    await credit(xml, { code: "bad code!" }), // malformed header
+  ];
+  for (const r of cases) {
+    assert.equal(r.status, 401);
+    assert.deepEqual(JSON.parse(r.text), { success: false, message: "Unauthorized" });
+  }
+  const noHeaders = await fetch(`${baseUrl}/api/gateway/v1/credit-transfer`, { method: "POST", headers: { "content-type": "application/xml" }, body: xml });
+  assert.equal(noHeaders.status, 401);
+  assert.equal(await balance(w.alice.walletId), 1000, "no money moved by unauthenticated requests");
+  assert.equal((await transfers()).length, 0);
+});
+
+test("a body tampered after signing is rejected", { skip }, async () => {
+  const xml = pacs008({ e2e: "ETAMP00000000000001", alias: "+254700000001", amount: 10 });
+  const ts = Math.floor(Date.now() / 1000);
+  const sig = m.signing.signMessage(SECRET_A, ts, xml);
+  const r = await credit(xml.replace(">10.00<", ">900.00<"), { ts, sig });
+  assert.equal(r.status, 401);
+  assert.equal(await balance(w.alice.walletId), 1000);
+});
+
+// ---------- inbound credit (bank → operator-held key) ----------
+test("bank credits an operator-held key: wallet +amount once, transfer cleared in the open batch, ledger recorded", { skip }, async () => {
+  const r = await credit(pacs008({ e2e: "ECR000000000000000001", alias: "+254700000001", amount: 100 }));
+  assert.equal(r.status, 200);
+  assert.equal(txStatus(r.text), "ACSC");
+  assert.equal(await balance(w.alice.walletId), 1100);
+  const [t] = await transfers();
+  assert.equal(t.status, "cleared");
+  assert.equal(t.senderUserId, null);
+  assert.equal(t.senderParticipantId, w.bankA.id);
+  assert.equal(t.recipientUserId, w.alice.id);
+  assert.ok(t.settlementBatchId);
+  const ledger = await m.db.db.select().from(m.db.gatewayMessagesTable);
+  assert.equal(ledger.length, 1);
+  assert.equal(ledger[0].status, "credited");
+});
+
+test("replaying the same signed message returns the same reply and never credits twice", { skip }, async () => {
+  const xml = pacs008({ e2e: "ERP000000000000000001", alias: "+254700000001", amount: 100 });
+  const first = await credit(xml);
+  const again = await credit(xml);
+  const third = await credit(xml);
+  assert.equal(first.status, 200);
+  assert.equal(again.status, 200);
+  assert.equal(txStatus(again.text), "ACSC");
+  assert.equal(third.status, 200);
+  assert.equal(await balance(w.alice.walletId), 1100, "credited exactly once");
+  assert.equal((await transfers()).length, 1);
+});
+
+test("parallel duplicate deliveries credit exactly once", { skip }, async () => {
+  const xml = pacs008({ e2e: "EPAR00000000000000001", alias: "+254700000001", amount: 50 });
+  const results = await Promise.all(Array.from({ length: 8 }, () => credit(xml)));
+  assert.ok(results.some((r) => r.status === 200), "one delivery succeeds");
+  for (const r of results) assert.ok([200, 409].includes(r.status), `unexpected status ${r.status}`);
+  assert.equal(await balance(w.alice.walletId), 1050, "credited exactly once under concurrency");
+  assert.equal((await transfers()).length, 1);
+});
+
+test("re-using a message id for a different payment is refused (DUPL) and moves nothing", { skip }, async () => {
+  await credit(pacs008({ e2e: "EMSG0000000000000001", alias: "+254700000001", amount: 10 }));
+  const other = pacs008({ e2e: "EMSG0000000000000002", alias: "+254700000001", amount: 10 }).replace(/<MsgId>[^<]+<\/MsgId>/, "<MsgId>MEMSG0000000000000001</MsgId>");
+  const r = await credit(other);
+  assert.equal(r.status, 422);
+  assert.equal(reason(r.text), "DUPL");
+  assert.equal(await balance(w.alice.walletId), 1010);
+});
+
+test("an end-to-end id already used in the network cannot be credited again under a new message id", { skip }, async () => {
+  await credit(pacs008({ e2e: "EE2E000000000000000001", alias: "+254700000001", amount: 10 }));
+  const dup = pacs008({ e2e: "EE2E000000000000000001", alias: "+254700000001", amount: 10 }).replace(/<MsgId>[^<]+<\/MsgId>/, "<MsgId>NEWMSG000000000000001</MsgId>");
+  const r = await credit(dup);
+  assert.equal(r.status, 422);
+  assert.equal(reason(r.text), "DUPL");
+  assert.equal(await balance(w.alice.walletId), 1010);
+});
+
+test("business rules reject without moving money: unknown key, wrong agent, currency, cents, ceiling, spoofed debtor agent", { skip }, async () => {
+  const cases: Array<[string, string, string]> = [
+    ["unknown key", pacs008({ e2e: "ER1000000000000000001", alias: "+254799999999" }), "AC03"],
+    ["wrong creditor agent", pacs008({ e2e: "ER2000000000000000001", alias: "+254700000001", creditorCode: "BANKBGHA" }), "RC01"],
+    ["currency mismatch", pacs008({ e2e: "ER3000000000000000001", alias: "+254700000001", currency: "KES" }), "AM03"],
+    ["fractional cents", pacs008({ e2e: "ER4000000000000000001", alias: "+254700000001", amount: 10 }).replace(">10.00<", ">10.005<"), "AM02"],
+    ["above single-payment ceiling", pacs008({ e2e: "ER5000000000000000001", alias: "+254700000001", amount: 20000 }), "AM02"],
+    ["debtor agent spoofing another bank", pacs008({ e2e: "ER6000000000000000001", alias: "+254700000001", debtorCode: "BANKBGHA" }), "RC01"],
+  ];
+  for (const [label, xml, expected] of cases) {
+    const r = await credit(xml);
+    assert.equal(r.status, 422, label);
+    assert.equal(reason(r.text), expected, label);
+  }
+  assert.equal(await balance(w.alice.walletId), 1000);
+  assert.equal((await transfers()).length, 0);
+});
+
+test("net-debit cap: a bank cannot originate beyond its cap; a bank with no cap cannot originate at all", { skip }, async () => {
+  const ok = await credit(pacs008({ e2e: "ECAP00000000000000001", alias: "+254700000001", amount: 600 }));
+  assert.equal(ok.status, 200);
+  const over = await credit(pacs008({ e2e: "ECAP00000000000000002", alias: "+254700000001", amount: 600 })); // 1200 > 1000
+  assert.equal(over.status, 422);
+  assert.equal(reason(over.text), "AM23");
+  assert.equal(await balance(w.alice.walletId), 1600, "only the first payment credited");
+
+  const uncapped = await credit(pacs008({ e2e: "ECAP00000000000000003", alias: "+254700000001", amount: 1, debtorCode: "BANKBGHA" }), {
+    code: "BANKBGHA",
+    secret: SECRET_B,
+  });
+  assert.equal(reason(uncapped.text), "AM23", "default cap is 0 (fail closed)");
+  assert.equal(await balance(w.alice.walletId), 1600);
+});
+
+test("parallel payments from one bank cannot jointly exceed its cap", { skip }, async () => {
+  // cap 1000: ten parallel 300 payments → at most three can be admitted
+  const results = await Promise.all(
+    Array.from({ length: 10 }, (_, i) => credit(pacs008({ e2e: `EPC${String(i).padStart(18, "0")}`, alias: "+254700000001", amount: 300 })))
+  );
+  const accepted = results.filter((r) => r.status === 200).length;
+  assert.ok(accepted <= 3, `accepted ${accepted} payments of 300 under a 1000 cap`);
+  assert.equal(await balance(w.alice.walletId), 1000 + accepted * 300);
+});
+
+test("sanctioned debtor is refused; ordinary names that merely resemble listed ones are not", { skip }, async () => {
+  const hit = await credit(pacs008({ e2e: "ESAN00000000000000001", alias: "+254700000001", debtorName: "Ahmed Diriye" }));
+  assert.equal(reason(hit.text), "RR04");
+  assert.equal(await balance(w.alice.walletId), 1000);
+  const fine = await credit(pacs008({ e2e: "ESAN00000000000000002", alias: "+254700000001", debtorName: "Ibrahim Musa", amount: 10 }));
+  assert.equal(fine.status, 200, "no false positive on a common name");
+});
+
+// ---------- key registration ----------
+const aliasBody = (o: Record<string, unknown>) =>
+  JSON.stringify({ message_id: "REG-1", action: "register", key_type: "phone", key_value: "+233200000001", holder_name: "Kofi Mensah", currency: "USD", account_ref: "acct-001", ...o });
+const aliasCall = (body: string, o?: Parameters<typeof send>[2]) => send("/api/gateway/v1/aliases", body, { contentType: "application/json", ...o });
+
+test("a bank registers keys only for itself; duplicates conflict; replays are idempotent; deletes are scoped", { skip }, async () => {
+  const b = aliasBody({});
+  const reg = await aliasCall(b, { code: "BANKBGHA", secret: SECRET_B });
+  assert.equal(reg.status, 201);
+  const replay = await aliasCall(b, { code: "BANKBGHA", secret: SECRET_B });
+  assert.equal(replay.status, 201, "same message id replays the stored answer");
+  const [row] = await m.db.db.select().from(m.db.paymentAliasesTable).where(m.drizzle.eq(m.db.paymentAliasesTable.aliasValue, "+233200000001"));
+  assert.equal(row.participantId, w.bankB.id);
+  assert.equal(row.userId, null);
+
+  const dup = await aliasCall(aliasBody({ message_id: "REG-2" }), { code: "BANKAKEN" });
+  assert.equal(dup.status, 409, "another bank cannot take an existing key");
+  const stealDelete = await aliasCall(aliasBody({ message_id: "DEL-1", action: "delete" }), { code: "BANKAKEN" });
+  assert.equal(stealDelete.status, 404, "a bank cannot delete another bank's key");
+  const clash = await aliasCall(aliasBody({ message_id: "REG-3", key_value: "+254700000001" }), { code: "BANKBGHA", secret: SECRET_B });
+  assert.equal(clash.status, 409, "cannot shadow an operator-held key");
+  const del = await aliasCall(aliasBody({ message_id: "DEL-2", action: "delete" }), { code: "BANKBGHA", secret: SECRET_B });
+  assert.equal(del.status, 200);
+  const bad = await aliasCall(aliasBody({ message_id: "REG-4", currency: "ZZZ" }), { code: "BANKBGHA", secret: SECRET_B });
+  assert.equal(bad.status, 400);
+  const badType = await aliasCall(aliasBody({ message_id: "REG-5", key_type: "random" }), { code: "BANKBGHA", secret: SECRET_B });
+  assert.equal(badType.status, 400);
+});
+
+// ---------- forwarding (bank → another bank's key) ----------
+let keySeq = 0;
+async function registerBankBKey(): Promise<void> {
+  const r = await aliasCall(aliasBody({ message_id: `REG-AUTO-${++keySeq}` }), { code: "BANKBGHA", secret: SECRET_B });
+  assert.equal(r.status, 201);
+}
+type MockRules = ConstructorParameters<typeof import("../services/scheme/adapters.js").MockBankAdapter>[1];
+const bankBOverride = (rules: MockRules) => {
+  const mock = new m.adapters.MockBankAdapter("BANKBGHA", rules);
+  m.ext.setAdapterOverrideForTests((p) => (p.code === "BANKBGHA" ? mock : null));
+  return mock;
+};
+
+test("forwarding: bank A pays a key at bank B — switch relays pacs.008, clears, replies ACSC, replay is stable", { skip }, async () => {
+  await registerBankBKey();
+  const mock = bankBOverride({});
+  const xml = pacs008({ e2e: "EFWD00000000000000001", alias: "+233200000001", creditorCode: "BANKBGHA", amount: 200 });
+  const r = await credit(xml);
+  assert.equal(r.status, 200);
+  assert.equal(txStatus(r.text), "ACSC");
+  assert.equal(mock.calls.length, 1);
+  assert.equal(mock.calls[0].creditorAlias, "+233200000001");
+  assert.equal(mock.calls[0].creditor.participantCode, "BANKBGHA");
+  const [t] = await transfers();
+  assert.equal(t.status, "cleared");
+  assert.equal(t.senderParticipantId, w.bankA.id);
+  assert.equal(t.recipientParticipantId, w.bankB.id);
+
+  const again = await credit(xml);
+  assert.equal(again.status, 200);
+  assert.equal(mock.calls.length, 1, "replay must not be forwarded twice");
+});
+
+test("forwarding: bank B declines → RJCT to A, transfer rejected, no exposure left behind", { skip }, async () => {
+  await registerBankBKey();
+  bankBOverride({ maxAmount: 100 });
+  const r = await credit(pacs008({ e2e: "EFWD00000000000000002", alias: "+233200000001", creditorCode: "BANKBGHA", amount: 600 }));
+  assert.equal(r.status, 422);
+  assert.equal(reason(r.text), "AM02");
+  const [t] = await transfers();
+  assert.equal(t.status, "rejected");
+  // exposure must be released: a full-cap payment still fits afterwards
+  bankBOverride({});
+  const next = await credit(pacs008({ e2e: "EFWD00000000000000003", alias: "+233200000001", creditorCode: "BANKBGHA", amount: 1000 }));
+  assert.equal(next.status, 200);
+});
+
+test("forwarding: unknown outcome → 202 PDNG, held as unresolved, still counted against the cap, status query agrees", { skip }, async () => {
+  await registerBankBKey();
+  bankBOverride({ unknownAliasPrefix: "+2332" });
+  const xml = pacs008({ e2e: "EFWD00000000000000004", alias: "+233200000001", creditorCode: "BANKBGHA", amount: 700 });
+  const r = await credit(xml);
+  assert.equal(r.status, 202);
+  assert.equal(txStatus(r.text), "PDNG");
+  const [t] = await transfers();
+  assert.equal(t.status, "unresolved");
+
+  const replay = await credit(xml);
+  assert.equal(replay.status, 202, "replay reflects live status, not a fresh attempt");
+
+  // unresolved credit still counts: 700 + 700 > 1000 cap
+  const blocked = await credit(pacs008({ e2e: "EFWD00000000000000005", alias: "+254700000001", amount: 700 }));
+  assert.equal(reason(blocked.text), "AM23");
+
+  const q = await send("/api/gateway/v1/status/EFWD00000000000000004", "EFWD00000000000000004", { method: "GET" });
+  assert.equal(q.status, 200);
+  assert.equal(txStatus(q.text), "PDNG");
+  const other = await send("/api/gateway/v1/status/EFWD00000000000000004", "EFWD00000000000000004", { method: "GET", code: "BANKBGHA", secret: SECRET_B });
+  assert.equal(other.status, 200, "the receiving bank may also query it");
+  const missing = await send("/api/gateway/v1/status/NOPE0000000000000000", "NOPE0000000000000000", { method: "GET" });
+  assert.equal(missing.status, 404);
+});
+
+test("forwarding: unreachable recipient bank → rejected before anything is reserved", { skip }, async () => {
+  await registerBankBKey(); // no adapter configured for BANKBGHA
+  const r = await credit(pacs008({ e2e: "EFWD00000000000000006", alias: "+233200000001", creditorCode: "BANKBGHA" }));
+  assert.equal(r.status, 422);
+  assert.equal(reason(r.text), "AC13");
+  assert.equal((await transfers()).length, 0);
+});
+
+// ---------- outbound (operator user → bank-held key) ----------
+type PayInput = Parameters<typeof import("../services/scheme/switchEngine.js").processInstantPayment>[0];
+const pay = (over: Partial<PayInput> = {}) =>
+  m.engine.processInstantPayment({ senderUserId: w.alice.id, senderEmail: "alice@example.com", alias: "+233200000001", amount: 100, walletId: w.alice.walletId, ...over });
+
+async function makeAdmin(): Promise<number> {
+  const [admin] = await m.db.db.insert(m.db.usersTable).values({ email: "admin@example.com", name: "Admin", passwordHash: "x", role: "admin" }).returning();
+  return admin.id;
+}
+
+test("outbound: accepted by the bank → sender debited once, transfer cleared", { skip }, async () => {
+  await registerBankBKey();
+  const mock = bankBOverride({});
+  const r = await pay();
+  assert.equal(r.ok, true);
+  assert.equal(r.transfer?.status, "cleared");
+  assert.equal(await balance(w.alice.walletId), 900);
+  assert.equal(mock.calls.length, 1);
+  assert.equal(mock.calls[0].debtor.participantCode, "IAPAYPAN");
+  assert.equal(mock.calls[0].creditorAlias, "+233200000001");
+});
+
+test("outbound: declined by the bank → sender refunded exactly once, transfer rejected", { skip }, async () => {
+  await registerBankBKey();
+  bankBOverride({ rejectAliasPrefix: "+2332" });
+  const r = await pay();
+  assert.equal(r.ok, false);
+  assert.equal(r.code, "PARTICIPANT_REJECTED");
+  assert.equal(await balance(w.alice.walletId), 1000, "full refund");
+  const [t] = await transfers();
+  assert.equal(t.status, "rejected");
+  const [tx] = await m.db.db.select().from(m.db.transactionsTable).where(m.drizzle.eq(m.db.transactionsTable.reference, t.reference));
+  assert.equal(tx.status, "failed");
+});
+
+test("outbound: unknown outcome → funds held, never auto-refunded; operator resolves exactly once", { skip }, async () => {
+  await registerBankBKey();
+  bankBOverride({ unknownAliasPrefix: "+2332" });
+  const r = await pay();
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 202);
+  assert.equal(r.code, "PAYMENT_PENDING");
+  assert.equal(await balance(w.alice.walletId), 900, "held, not refunded");
+  const [t] = await transfers();
+  assert.equal(t.status, "unresolved");
+
+  assert.equal(await m.ext.sweepStalePending(0), 0, "the sweeper leaves unresolved rows alone");
+
+  const adminId = await makeAdmin();
+  const refund = await m.ext.resolveUnresolvedTransfer(t.reference, "not_credited", adminId, "bank confirmed not credited");
+  assert.equal(refund.ok, true);
+  assert.equal(await balance(w.alice.walletId), 1000, "refunded");
+  const again = await m.ext.resolveUnresolvedTransfer(t.reference, "not_credited", adminId, "double click");
+  assert.equal(again.ok, false);
+  assert.equal(again.status, 409);
+  const flip = await m.ext.resolveUnresolvedTransfer(t.reference, "credited", adminId, "changed mind");
+  assert.equal(flip.status, 409, "a resolved transfer cannot be flipped");
+  assert.equal(await balance(w.alice.walletId), 1000, "refunded once only");
+
+  const audit = await m.db.db.select().from(m.db.auditLogsTable).where(m.drizzle.eq(m.db.auditLogsTable.action, "iapay_resolve_unresolved_transfer"));
+  assert.equal(audit.length, 1, "only the successful resolution is audited");
+});
+
+test("outbound: unknown outcome later confirmed credited → transfer clears, money stays debited", { skip }, async () => {
+  await registerBankBKey();
+  bankBOverride({ unknownAliasPrefix: "+2332" });
+  await pay();
+  const [t] = await transfers();
+  const adminId = await makeAdmin();
+  const ok = await m.ext.resolveUnresolvedTransfer(t.reference, "credited", adminId, "bank confirmed credited");
+  assert.equal(ok.ok, true);
+  assert.equal((await transfers())[0].status, "cleared");
+  assert.equal(await balance(w.alice.walletId), 900);
+  const back = await m.ext.resolveUnresolvedTransfer(t.reference, "not_credited", adminId, "oops");
+  assert.equal(back.status, 409);
+  assert.equal(await balance(w.alice.walletId), 900, "no refund after clearing");
+});
+
+test("outbound: concurrent payments cannot overspend the wallet", { skip }, async () => {
+  await registerBankBKey();
+  bankBOverride({});
+  await m.db.db.update(m.db.walletsTable).set({ balance: "100.00" }).where(m.drizzle.eq(m.db.walletsTable.id, w.alice.walletId));
+  const results = await Promise.all(Array.from({ length: 6 }, () => pay({ amount: 60 })));
+  const okCount = results.filter((r) => r.ok).length;
+  assert.equal(okCount, 1, "only one 60 payment fits in 100");
+  assert.equal(await balance(w.alice.walletId), 40);
+  assert.equal((await transfers()).filter((t) => t.status === "cleared").length, 1);
+});
+
+test("outbound: bank-held key with no reachable adapter is refused and charges nothing", { skip }, async () => {
+  await registerBankBKey(); // no adapter
+  const r = await pay();
+  assert.equal(r.ok, false);
+  assert.equal(r.code, "PARTICIPANT_UNAVAILABLE");
+  assert.equal(await balance(w.alice.walletId), 1000);
+  assert.equal((await transfers()).length, 0);
+});
+
+test("outbound: insufficient funds is refused before any bank call", { skip }, async () => {
+  await registerBankBKey();
+  const mock = bankBOverride({});
+  const r = await pay({ amount: 5000 });
+  assert.equal(r.ok, false);
+  assert.equal(mock.calls.length, 0);
+  assert.equal(await balance(w.alice.walletId), 1000);
+});
+
+test("sweeper parks stale pending transfers as unresolved and leaves fresh ones alone", { skip }, async () => {
+  const row = { senderParticipantId: w.home.id, recipientParticipantId: w.bankB.id, recipientAlias: "+233200000001", amount: "10", currency: "USD", recipientAmount: "10", recipientCurrency: "USD", status: "pending" };
+  await m.db.db.insert(m.db.schemeTransfersTable).values([
+    { ...row, reference: "OLD1", endToEndId: "EOLD1", initiatedAt: new Date(Date.now() - 3600_000) },
+    { ...row, reference: "NEW1", endToEndId: "ENEW1" },
+  ]);
+  assert.equal(await m.ext.sweepStalePending(10 * 60_000), 1);
+  const rows = Object.fromEntries((await transfers()).map((t) => [t.reference, t.status]));
+  assert.deepEqual(rows, { OLD1: "unresolved", NEW1: "pending" });
+});
+
+// ---------- regression: legacy home → home path and settlement ----------
+test("regression: home → home instant payment still works and moves money atomically", { skip }, async () => {
+  const r = await pay({ alias: "bob@example.com", amount: 50 });
+  assert.equal(r.ok, true);
+  assert.equal(await balance(w.alice.walletId), 950);
+  assert.equal(await balance(w.bob.walletId), 550);
+  assert.equal(r.transfer?.status, "cleared");
+});
+
+test("settlement nets only cleared transfers; pending and unresolved are untouched", { skip }, async () => {
+  await credit(pacs008({ e2e: "ESET00000000000000001", alias: "+254700000001", amount: 300 })); // bank A → home (cleared)
+  await registerBankBKey();
+  bankBOverride({ unknownAliasPrefix: "+2332" });
+  await pay({ amount: 100 }); // home → bank B (unresolved)
+
+  const summary = await m.settlement.closeSettlementCycle();
+  assert.ok(summary);
+  assert.equal(summary!.transferCount, 1);
+  const statuses = new Set((await transfers()).map((t) => t.status));
+  assert.deepEqual([...statuses].sort(), ["settled", "unresolved"]);
+  const net = (id: number) => Number(summary!.positions.find((p) => p.participantId === id)?.netPosition);
+  assert.equal(net(w.bankA.id), -300);
+  assert.equal(net(w.home.id), 300);
+});

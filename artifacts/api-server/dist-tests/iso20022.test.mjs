@@ -1,4 +1,9 @@
-import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);
+import { createRequire as __bannerCrReq } from 'node:module';
+import __bannerPath from 'node:path';
+import __bannerUrl from 'node:url';
+globalThis.require = __bannerCrReq(import.meta.url);
+globalThis.__filename = __bannerUrl.fileURLToPath(import.meta.url);
+globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
 
 // src/tests/iso20022.test.ts
 import { test } from "node:test";
@@ -24,7 +29,7 @@ function text(value, max) {
   return xmlEscape(value.replace(/[\r\n\t]+/g, " ").trim().slice(0, max));
 }
 function agent(tag, party) {
-  return `<${tag}><FinInstnId><ClrSysMmbId><ClrSysId><Prtry>${SCHEME_CLEARING_SYSTEM}</Prtry></ClrSysId><MmbId>${xmlEscape(party.participantCode)}</MmbId></ClrSysMmbId><Nm>${text(party.name, 140)}</Nm><PstlAdr><Ctry>${xmlEscape(party.country)}</Ctry></PstlAdr></FinInstnId></${tag}>`;
+  return `<${tag}><FinInstnId><ClrSysMmbId><ClrSysId><Prtry>${SCHEME_CLEARING_SYSTEM}</Prtry></ClrSysId><MmbId>${xmlEscape(party.participantCode)}</MmbId></ClrSysMmbId><Nm>${text(party.agentName ?? party.name, 140)}</Nm><PstlAdr><Ctry>${xmlEscape(party.country)}</Ctry></PstlAdr></FinInstnId></${tag}>`;
 }
 function document(ns, root, body) {
   return `<?xml version="1.0" encoding="UTF-8"?>

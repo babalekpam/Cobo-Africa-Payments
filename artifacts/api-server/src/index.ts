@@ -3,7 +3,7 @@ import app from "./app.js";
 import { logger } from "./lib/logger.js";
 import { initSocketIO } from "./services/socketio.js";
 import { ensureSchemeParticipants } from "./services/scheme/participants.js";
-import { startSettlementScheduler } from "./services/scheme/scheduler.js";
+import { startSettlementScheduler, startReconciliationSweeper } from "./services/scheme/scheduler.js";
 import { securityConfigWarnings } from "./lib/security.js";
 
 const rawPort = process.env["PORT"];
@@ -27,5 +27,6 @@ httpServer.listen(port, () => {
   logger.info({ port }, "Server listening with WebSocket support");
   void ensureSchemeParticipants();
   startSettlementScheduler();
+  startReconciliationSweeper();
   for (const warning of securityConfigWarnings()) logger.warn(warning);
 });

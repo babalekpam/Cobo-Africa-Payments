@@ -21,12 +21,14 @@ import webhookRouter from "./webhooks.js";
 import ussdRouter from "./ussd.js";
 import qrRouter from "./qr.js";
 import schemeRouter from "./scheme.js";
+import gatewayRouter from "./gateway.js";
 
 const router: IRouter = Router();
 
 // Public endpoints — no auth required
 router.use(webhookRouter);
 router.use(ussdRouter);
+router.use(gatewayRouter); // participant API: authenticated by signed messages, not user sessions
 
 router.use(healthRouter);
 router.use(storageRouter);
