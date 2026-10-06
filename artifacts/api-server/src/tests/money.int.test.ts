@@ -290,3 +290,10 @@ test("the daily KYC limit holds under simultaneous transfers", { skip }, async (
   assert.ok(results.filter((r) => r.status === 403).every((r) => r.json.code === "LIMIT_EXCEEDED"));
   assert.equal((await wallet(bob.walletId)).balance, 90);
 });
+
+test("P2P finds a recipient whose email was registered with capital letters", { skip }, async () => {
+  await m.db.db.update(m.db.usersTable).set({ email: "Bob.Mensah@Example.com" }).where(m.drizzle.eq(m.db.usersTable.id, bob.id));
+  const r = await api("/transfers/internal", { method: "POST", token: alice.token, body: { recipient_email: "bob.mensah@example.com", amount: "5", currency: "USD" } });
+  assert.equal(r.status, 200);
+  assert.equal((await wallet(bob.walletId)).balance, 5);
+});

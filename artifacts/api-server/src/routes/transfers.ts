@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { db, walletsTable, transactionsTable, usersTable, notificationsTable, auditLogsTable, paymentIntentsTable } from "@workspace/db";
 import { requireAuth, requireAdmin, type AuthenticatedRequest } from "../middlewares/requireAuth.js";
 import { emailService } from "../services/email.js";
@@ -290,10 +290,15 @@ router.post("/transfers/mobile", requireAuth, async (req: AuthenticatedRequest, 
 
 router.post("/transfers/internal", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
   const { wallet_id, recipient_email, email, currency, note, description } = req.body as Record<string, string>;
-  const recipientEmail = String(recipient_email || email || "").trim().toLowerCase();
+  const typedEmail = String(recipient_email || email || "").trim();
+  const recipientEmail = typedEmail.toLowerCase();
   const amount = parseAmount(req.body.amount);
   if (!recipientEmail || !amount) { res.status(400).json({ success: false, message: "A recipient and an amount of at least 0.01 with at most 2 decimal places are required" }); return; }
-  const [recipient] = await db.select().from(usersTable).where(eq(usersTable.email, recipientEmail));
+  // Emails are stored as typed at registration, so match case-insensitively; an exact match wins,
+  // and two accounts differing only in letter case are never guessed between.
+  const candidates = await db.select().from(usersTable).where(sql`lower(${usersTable.email}) = ${recipientEmail}`);
+  const recipient = candidates.find((u) => u.email === typedEmail) ?? (candidates.length === 1 ? candidates[0] : undefined);
+  if (!recipient && candidates.length > 1) { res.status(409).json({ success: false, message: "Several accounts match that email; type it exactly as registered" }); return; }
   if (!recipient) { res.status(404).json({ success: false, message: "Recipient not found on IAPAY" }); return; }
   if (recipient.id === req.user!.id) { res.status(400).json({ success: false, message: "Cannot send to yourself" }); return; }
 
