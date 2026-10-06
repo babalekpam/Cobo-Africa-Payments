@@ -20,9 +20,9 @@
 
 **What a bank would find missing, in priority order:**
 
-1. **Custodial ledger instead of bank accounts.** `switchEngine.ts` debits and credits rows in IAPAY's own `wallets` table. The 15 "participants" are seeded records (`participants.ts`), not integrated institutions, and none has signed anything. For a bank, the switch must send a `pacs.008` to the participant's core banking and act on the `pacs.002` reply. This is the single biggest architectural change.
-2. **No inbound participant API.** Messages are generated but there is no authenticated participant gateway (mTLS, message signing, SLA timeouts, retries, duplicate detection) and no inbound parser.
-3. **No settlement risk controls.** Netting computes positions but there are no per-participant net-debit caps, pre-funded settlement accounts or collateral. Banks will not join without these. Settlement is bookkeeping, not tied to a real settlement account.
+1. ~~Custodial ledger instead of bank accounts.~~ **Now supported.** Keys can be held by an external bank; the switch sends it a signed `pacs.008` and acts on the `pacs.002` (see `docs/IAPAY-participant-integration.md`). Wallet-to-wallet remains for operator-held accounts. What is still true: the 14 demo members in `participants.ts` are fictional (turn them off with `SCHEME_SEED_DEMO_PARTICIPANTS=false`), and **no real institution is connected or has signed anything**.
+2. ~~No inbound participant API.~~ **Built:** HMAC-signed gateway (`/api/gateway/v1/*`) with replay ledger, status query and key registration. Still open: mTLS, per-participant secret rotation, HSM/KMS key custody.
+3. **Settlement risk controls — partly built.** Per-participant **net-debit caps** (fail-closed default 0), a single-payment ceiling, and exposure that counts unsettled and unresolved payments are implemented. Still open: pre-funded settlement accounts / collateral management, and a real settlement leg (the switch still only computes net positions; no money moves between banks' settlement accounts).
 4. **Single-instance state.** Idempotency cache and OTP/PIN lockout counters are in memory (noted in `replit.md`). Needs Redis or equivalent and a horizontally scalable, highly available deployment with disaster recovery.
 5. **No fraud engine.** Only KYC limits and OFAC. Banks expect velocity checks, mule-account detection, device signals and name-check ("confirmation of payee") before the payment is released.
 6. **No governance artefacts.** No scheme rulebook, participation agreement, fee schedule, liability rules or SLA definitions.
@@ -33,11 +33,11 @@
 
 **Phase 0 — done in this change:** rebrand to IAPAY / Intra-African Payments; ISO 20022 outbound messages with tests.
 
-**Phase 1 — Participant gateway (makes a bank pilot possible).**
-Inbound/outbound `pacs.008`/`pacs.002`/`pacs.004` endpoints with mTLS and detached message signatures; configurable timeout and idempotent retry; account/name verification call before release; a reference **bank adapter** (mock core-banking) and a certification test suite a bank can run itself; a sandbox portal with credentials and test participants. Keep today's wallet mode as the "fintech participant" adapter so nothing existing breaks.
+**Phase 1 — Participant gateway (makes a bank pilot possible). Core built.**
+Done: signed `pacs.008`/`pacs.002` endpoints, idempotent retry, status query, key registration, outbound `HttpBankAdapter` and a `MockBankAdapter`, integration tests against real PostgreSQL, operator reconciliation of unresolved payments. Still to do: mTLS and detached/rotating message keys; a name-verification ("confirmation of payee") call before release; `pacs.004` returns over the gateway; a self-service certification suite and sandbox portal a bank can run without the operator; load testing.
 
 **Phase 2 — Risk and liquidity.**
-Net-debit caps and pre-funding per participant, enforced *before* clearing; real-time position dashboard; fraud scoring and a shared mule-account list across participants (a genuine network-effect advantage); request-to-pay (`pain.013/014`).
+Done: net-debit caps enforced before clearing. Still to do: pre-funding/collateral per participant; real-time position dashboard and alerts as a bank nears its cap; fraud scoring and a shared mule-account list across participants (a genuine network-effect advantage); request-to-pay (`pain.013/014`).
 
 **Phase 3 — Settlement.**
 Settlement via pre-funded accounts first, then PAPSS or national RTGS integration per corridor. FX at published scheme rates with participant-visible margins.
