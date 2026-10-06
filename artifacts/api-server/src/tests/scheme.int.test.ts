@@ -557,6 +557,38 @@ test("settlement nets only cleared transfers; pending and unresolved are untouch
   assert.equal(net(w.home.id), 300);
 });
 
+test("live settlement is two-phase: exposure stays until the payment of net positions is confirmed, once", { skip }, async () => {
+  process.env.IAPAY_ENVIRONMENT = "live";
+  try {
+    const { exposureUsd } = await import("../services/scheme/exposure.js");
+    const exposureOf = async (id: number) =>
+      exposureUsd(id, (await transfers()).map((t) => ({ ...t, amount: Number(t.amount), recipientAmount: Number(t.recipientAmount) })), { USD: 1, KES: 129, GHS: 15.5, NGN: 1600, EUR: 0.92 });
+    await credit(pacs008({ e2e: "ETWO00000000000000001", alias: "+254700000001", amount: 300 })); // bank A → home (cleared)
+    const before = await exposureOf(w.bankA.id);
+    assert.ok(before > 0, "bank A owes the scheme");
+
+    const summary = await m.settlement.closeSettlementCycle();
+    assert.equal(summary!.batch.status, "awaiting_settlement");
+    assert.deepEqual([...new Set((await transfers()).map((t) => t.status))], ["cleared"], "nothing is settled at close");
+    assert.equal(await exposureOf(w.bankA.id), before, "exposure is NOT released until the money moved");
+    const [a0] = await m.db.db.select().from(m.db.schemeParticipantsTable).where(m.drizzle.eq(m.db.schemeParticipantsTable.id, w.bankA.id));
+    assert.equal(Number(a0.settlementBalance), 0, "balances are applied only on confirmation");
+
+    const confirms = await Promise.all([
+      m.settlement.confirmSettlement(summary!.batch.id, { reference: "RTGS-0001", confirmedBy: null }),
+      m.settlement.confirmSettlement(summary!.batch.id, { reference: "RTGS-0001", confirmedBy: null }),
+    ]);
+    assert.equal(confirms.filter(Boolean).length, 1, "confirmed exactly once");
+    assert.equal(confirms.find(Boolean)!.settlementReference, "RTGS-0001");
+    assert.deepEqual([...new Set((await transfers()).map((t) => t.status))], ["settled"]);
+    assert.equal(await exposureOf(w.bankA.id), 0, "exposure released after confirmation");
+    const [a1] = await m.db.db.select().from(m.db.schemeParticipantsTable).where(m.drizzle.eq(m.db.schemeParticipantsTable.id, w.bankA.id));
+    assert.equal(Number(a1.settlementBalance), -300, "applied once");
+  } finally {
+    delete process.env.IAPAY_ENVIRONMENT;
+  }
+});
+
 // ---------- regressions for the independent security review ----------
 test("review #1: sub-cent / fractional-cent / non-positive amounts are refused — no money from nothing", { skip }, async () => {
   for (const amount of [0.004, 0.001, 10.005, 0, -5, Number.NaN, Number.POSITIVE_INFINITY]) {

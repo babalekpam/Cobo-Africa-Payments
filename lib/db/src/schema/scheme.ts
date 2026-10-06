@@ -77,12 +77,15 @@ export const schemeTransfersTable = pgTable("scheme_transfers", {
 export const settlementBatchesTable = pgTable("settlement_batches", {
   id: serial("id").primaryKey(),
   batchRef: text("batch_ref").notNull().unique(),
-  status: text("status").notNull().default("open"), // open | netting | settled
+  status: text("status").notNull().default("open"), // open | netting | awaiting_settlement | settled
   transferCount: integer("transfer_count").notNull().default(0),
   totalGrossUsd: numeric("total_gross_usd", { precision: 18, scale: 2 }).notNull().default("0"),
   openedAt: timestamp("opened_at", { withTimezone: true }).notNull().defaultNow(),
   closedAt: timestamp("closed_at", { withTimezone: true }),
   settledAt: timestamp("settled_at", { withTimezone: true }),
+  // Proof the net positions were actually paid (e.g. the RTGS / settlement-bank reference) and who confirmed it.
+  settlementReference: text("settlement_reference"),
+  settledBy: integer("settled_by"),
 });
 
 // Multilateral net position of each participant within a settlement batch

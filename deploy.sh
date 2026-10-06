@@ -112,6 +112,9 @@ if [ "$DEPLOY_API" = true ]; then
       owner_user_id INTEGER NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    -- Two-phase settlement: proof that net positions were paid before exposure is released
+    ALTER TABLE settlement_batches ADD COLUMN IF NOT EXISTS settlement_reference TEXT;
+    ALTER TABLE settlement_batches ADD COLUMN IF NOT EXISTS settled_by INTEGER;
     -- Security state shared by every API instance (rate limits, lockouts, idempotency)
     CREATE TABLE IF NOT EXISTS rate_limit_counters (
       key TEXT PRIMARY KEY,

@@ -2,9 +2,17 @@
 // Cleared transfers accumulate in an open batch; closing the cycle nets every
 // participant's payables against receivables per currency (the model used by
 // card schemes like UnionPay and by PAPSS for cross-border netting), then marks
-// the batch and its transfers settled.
+// waits for the money to actually move.
+//
+// Two phases on a LIVE installation (SETTLEMENT_REQUIRES_CONFIRMATION, default on unless sandbox):
+//   1. close   — net positions are computed and frozen; the batch is "awaiting_settlement" and every
+//                netted transfer still counts toward its bank's exposure (nothing is released yet);
+//   2. confirm — an operator records the settlement-bank / RTGS reference proving the positions were
+//                paid; only then are the transfers "settled", exposure released and balances applied.
+// A sandbox (or SETTLEMENT_REQUIRES_CONFIRMATION=false) settles at close, in one step.
 
-import { eq, and, inArray, sql } from "drizzle-orm";
+import { eq, and, inArray, notInArray, sql } from "drizzle-orm";
+import { isSandbox } from "../../lib/environment.js";
 import { currentOpenBatch } from "./batches.js";
 import {
   db,
@@ -17,6 +25,13 @@ import {
 } from "@workspace/db";
 import { getRate } from "../fxRates.js";
 import { computeNetPositions } from "./netting.js";
+
+export function settlementRequiresConfirmation(): boolean {
+  const v = (process.env.SETTLEMENT_REQUIRES_CONFIRMATION || "").toLowerCase();
+  if (v === "true") return true;
+  if (v === "false") return false;
+  return !isSandbox();
+}
 
 export interface SettlementSummary {
   batch: SettlementBatch;
@@ -69,7 +84,6 @@ export async function closeSettlementCycle(): Promise<SettlementSummary | null> 
 
   const saved: SettlementPosition[] = [];
   for (const pos of positions) {
-    const net = pos.net;
     const [row] = await db
       .insert(settlementPositionsTable)
       .values({
@@ -78,68 +92,80 @@ export async function closeSettlementCycle(): Promise<SettlementSummary | null> 
         currency: pos.currency,
         totalDebit: pos.debit.toFixed(2),
         totalCredit: pos.credit.toFixed(2),
-        netPosition: net.toFixed(2),
+        netPosition: pos.net.toFixed(2),
       })
       .returning();
     saved.push(row);
-
-    // Reflect the net movement on each participant's settlement account (in USD terms)
-    const usdRate = pos.currency === "USD" ? 1 : await getRate(pos.currency, "USD");
-    if (usdRate) {
-      // Single-statement arithmetic in SQL: no read-modify-write window for a lost update.
-      await db
-        .update(schemeParticipantsTable)
-        .set({ settlementBalance: sql`${schemeParticipantsTable.settlementBalance} + ${(net * usdRate).toFixed(2)}::numeric` })
-        .where(eq(schemeParticipantsTable.id, pos.participantId));
-    }
   }
 
-  const now = new Date();
-  // Settle exactly the transfers that were netted above — never "everything cleared in this
-  // batch", which would also mark a payment that cleared after the snapshot as settled without
-  // it ever being netted.
-  await db
-    .update(schemeTransfersTable)
-    .set({ status: "settled", settledAt: now })
-    .where(
-      and(
-        inArray(
-          schemeTransfersTable.id,
-          transfers.map((t) => t.id)
-        ),
-        eq(schemeTransfersTable.status, "cleared")
-      )
-    );
-  // Any straggler that cleared into this batch after the snapshot moves to the next open batch.
+  // The batch must contain exactly the transfers that were netted: anything that cleared into it
+  // after the snapshot moves to the next open batch (it was not netted here).
+  const nettedIds = transfers.map((t) => t.id);
   const stragglers = await db
     .select({ id: schemeTransfersTable.id })
     .from(schemeTransfersTable)
-    .where(and(eq(schemeTransfersTable.settlementBatchId, batch.id), eq(schemeTransfersTable.status, "cleared")));
+    .where(and(
+      eq(schemeTransfersTable.settlementBatchId, batch.id),
+      eq(schemeTransfersTable.status, "cleared"),
+      notInArray(schemeTransfersTable.id, nettedIds),
+    ));
   if (stragglers.length > 0) {
     const nextBatchId = await currentOpenBatch();
     await db
       .update(schemeTransfersTable)
       .set({ settlementBatchId: nextBatchId })
-      .where(
-        inArray(
-          schemeTransfersTable.id,
-          stragglers.map((s) => s.id)
-        )
-      );
+      .where(inArray(schemeTransfersTable.id, stragglers.map((s) => s.id)));
   }
 
-  const [settled] = await db
+  const [closed] = await db
     .update(settlementBatchesTable)
-    .set({
-      status: "settled",
-      settledAt: now,
-      transferCount: transfers.length,
-      totalGrossUsd: totalGrossUsd.toFixed(2),
-    })
+    .set({ status: "awaiting_settlement", transferCount: transfers.length, totalGrossUsd: totalGrossUsd.toFixed(2) })
     .where(eq(settlementBatchesTable.id, batch.id))
     .returning();
 
-  return { batch: settled, positions: saved, transferCount: transfers.length };
+  if (settlementRequiresConfirmation()) {
+    return { batch: closed, positions: saved, transferCount: transfers.length };
+  }
+  const settled = await confirmSettlement(batch.id, { reference: null, confirmedBy: null });
+  return { batch: settled ?? closed, positions: saved, transferCount: transfers.length };
+}
+
+/**
+ * Phase 2: the net positions of a closed batch were paid. Exactly once (a conditional status change
+ * inside one transaction): applies each participant's settlement balance, marks the netted transfers
+ * settled (releasing their exposure) and records the proof. Returns null if the batch is not
+ * awaiting settlement (unknown, still open, or already settled).
+ */
+export async function confirmSettlement(
+  batchId: number,
+  proof: { reference: string | null; confirmedBy: number | null },
+): Promise<SettlementBatch | null> {
+  return db.transaction(async (tx) => {
+    const now = new Date();
+    const [batch] = await tx
+      .update(settlementBatchesTable)
+      .set({ status: "settled", settledAt: now, settlementReference: proof.reference, settledBy: proof.confirmedBy })
+      .where(and(eq(settlementBatchesTable.id, batchId), eq(settlementBatchesTable.status, "awaiting_settlement")))
+      .returning();
+    if (!batch) return null;
+
+    const positions = await tx.select().from(settlementPositionsTable).where(eq(settlementPositionsTable.batchId, batchId));
+    for (const pos of positions) {
+      // Reflect the net movement on each participant's settlement account (in USD terms).
+      const usdRate = pos.currency === "USD" ? 1 : await getRate(pos.currency, "USD");
+      if (usdRate) {
+        await tx
+          .update(schemeParticipantsTable)
+          .set({ settlementBalance: sql`${schemeParticipantsTable.settlementBalance} + ${(Number(pos.netPosition) * usdRate).toFixed(2)}::numeric` })
+          .where(eq(schemeParticipantsTable.id, pos.participantId));
+      }
+    }
+    await tx
+      .update(schemeTransfersTable)
+      .set({ status: "settled", settledAt: now })
+      .where(and(eq(schemeTransfersTable.settlementBatchId, batchId), eq(schemeTransfersTable.status, "cleared")));
+    return batch;
+  });
 }
 
 export async function getBatchPositions(batchId: number): Promise<SettlementPosition[]> {

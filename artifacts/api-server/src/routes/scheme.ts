@@ -36,7 +36,7 @@ import { sendSms } from "../services/sms.js";
 import { emailService } from "../services/email.js";
 import { processInstantPayment } from "../services/scheme/switchEngine.js";
 import { returnSchemeTransfer } from "../services/scheme/returns.js";
-import { closeSettlementCycle, getBatchPositions } from "../services/scheme/settlement.js";
+import { closeSettlementCycle, confirmSettlement, getBatchPositions, settlementRequiresConfirmation } from "../services/scheme/settlement.js";
 import { encodeIapayQr, decodeIapayQr } from "../services/scheme/qrStandard.js";
 import { buildPacs008, buildPacs002 } from "../services/scheme/iso20022.js";
 import { resolveUnresolvedTransfer } from "../services/scheme/externalSwitch.js";
@@ -635,7 +635,26 @@ router.post("/scheme/settlement/close", requireAuth, async (req: AuthenticatedRe
   if (!(await requireAdmin(req))) { res.status(403).json({ success: false, message: "Admin access required" }); return; }
   const summary = await closeSettlementCycle();
   if (!summary) { res.json({ success: true, message: "No open settlement cycle" }); return; }
-  res.json({ success: true, message: `Settlement cycle closed — ${summary.transferCount} transfers netted`, batch: summary.batch, positions: summary.positions });
+  res.json({
+    success: true,
+    message: summary.batch.status === "settled"
+      ? `Settlement cycle closed and settled — ${summary.transferCount} transfers netted`
+      : `Settlement cycle closed — ${summary.transferCount} transfers netted. Pay the net positions, then confirm with the settlement reference.`,
+    batch: summary.batch,
+    positions: summary.positions,
+  });
+});
+
+// Phase 2 (live installations): record that the net positions were actually paid. Only then are the
+// batch's transfers settled and each bank's exposure released. Exactly once.
+router.post("/scheme/settlement/batches/:id/confirm", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+  if (!(await requireAdmin(req))) { res.status(403).json({ success: false, message: "Admin access required" }); return; }
+  const reference = typeof req.body?.settlement_reference === "string" ? req.body.settlement_reference.trim().slice(0, 200) : "";
+  if (!reference) { res.status(400).json({ success: false, message: "settlement_reference (the settlement bank / RTGS reference) is required" }); return; }
+  const batch = await confirmSettlement(Number(req.params.id), { reference, confirmedBy: req.user!.id });
+  if (!batch) { res.status(409).json({ success: false, message: "Batch not found or not awaiting settlement" }); return; }
+  await adminAudit(req.user!.id, "iapay_settlement_confirmed", { batch_id: batch.id, batch_ref: batch.batchRef, settlement_reference: reference });
+  res.json({ success: true, message: "Settlement confirmed; exposure released", batch, requires_confirmation: settlementRequiresConfirmation() });
 });
 
 router.get("/scheme/settlement/batches", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {

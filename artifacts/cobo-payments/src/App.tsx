@@ -35,6 +35,7 @@ import Landing from "./pages/Landing";
 import Compliance from "./pages/Compliance";
 import AmlPolicy from "./pages/AmlPolicy";
 import NotFound from "./pages/not-found";
+import SandboxBanner from "./components/SandboxBanner";
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -120,6 +121,7 @@ function AppRouter() {
 export default function App() {
   return (
     <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+      <SandboxBanner />
       <AppRouter />
     </WouterRouter>
   );

@@ -72,6 +72,14 @@ unknown keys / fractional cents / spoofed debtor agent, and key registration/dup
 ## 4. Operations
 
 * **Health:** `GET /api/healthz` (used by the container health check).
+* **Sandbox or live:** `IAPAY_ENVIRONMENT=sandbox` gives a client a test installation: self-service test funding, simulated
+  payouts and checkout payments, and a "SANDBOX — test money only" banner on every page (`GET /api/environment`). `live` (the
+  default in production) refuses all of those: money enters only through approved deposits, incoming payments or a provider.
+  Never put real customers on a sandbox; never point a sandbox at real provider or bank credentials.
+* **Payout desk:** on a live installation a bank transfer holds the customer's funds until the payout is confirmed.
+  `GET /api/admin/payouts` lists pending payouts (bank payouts, and mobile-money payouts whose provider never answered);
+  after checking the bank or provider statement, resolve each one once with `POST /api/admin/payouts/{reference}/complete`
+  or `/fail` and a `note` (the statement reference). `fail` returns the held funds to the customer.
 * **Unresolved payments:** `GET /api/scheme/unresolved` (admin) — a payment whose bank outcome is unknown stays held until you
   confirm with the bank and resolve it once (`POST /api/scheme/transfers/{reference}/resolve`). Alert on any row here.
 * **Backups:** back up the `pgdata` volume with `pg_dump` on a schedule you can restore from (test a restore), the `objects` volume
@@ -92,12 +100,11 @@ of images · an on-call process for unresolved payments.
 
 ## 6. Known limits (be honest with your client)
 
-* Docker packaging unbuilt in the preparation environment (see the note at the top).
-* One API instance: rate-limit counters, OTP lockouts and `/api/scheme/pay` idempotency keys live in memory. Run one instance, or move them to Redis before scaling out.
+* Rate limits, sign-in/PIN/OTP lockouts and Idempotency-Key records are stored in Postgres, so several API instances can run behind a load balancer. The settlement scheduler and reconciliation sweeper run in every instance; they are idempotent, but for clarity run them in one.
 * Settlement computes who owes whom each cycle but does **not** move money between bank settlement accounts; a bank's exposure is released when a batch is marked settled. Tie this to your real settlement process.
 * Bank authentication is a per-bank shared secret (HMAC). mTLS/asymmetric signatures and HSM/KMS key custody are not built in.
 * Sanctions screening is a stopgap matcher with a short built-in list; use a licensed provider for production.
-* Payment rails other than the IAPAY scheme (bank/mobile-money transfer routes, USSD, checkout) were **not** security-audited in this work.
+* The wallet rails outside the IAPAY scheme (P2P, FX swap, bank and mobile-money payouts, deposits, checkout, USSD) now move money only through atomic, exactly-once ledger operations with regression tests for races, replays and double approvals — but, like the rest of the platform, they have not been independently audited.
 * Mobile app identifiers (`com.cobo.africa`) and some package/folder names still use the old name; renaming them is a separate release.
 
 ## 7. Before real money

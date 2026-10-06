@@ -41,6 +41,9 @@ export function getCallbackSecret(): string {
 export function securityConfigWarnings(): string[] {
   const warnings: string[] = [];
   if (!isProduction()) return warnings;
+  if ((process.env.IAPAY_ENVIRONMENT || "").toLowerCase() === "sandbox") {
+    warnings.push("IAPAY_ENVIRONMENT=sandbox — THIS INSTALLATION USES TEST MONEY: self-service funding and simulated payouts are ON. Never use it for real customers or real funds.");
+  }
   if (!process.env.WEBHOOK_CALLBACK_SECRET) warnings.push("WEBHOOK_CALLBACK_SECRET not set — provider callbacks use a per-boot secret and will break on restart");
   if (!process.env.FLUTTERWAVE_WEBHOOK_HASH) warnings.push("FLUTTERWAVE_WEBHOOK_HASH not set — Flutterwave webhooks will be rejected (fail closed)");
   if (!process.env.USSD_GATEWAY_SECRET) warnings.push("USSD_GATEWAY_SECRET not set — USSD requests will be rejected (fail closed)");
