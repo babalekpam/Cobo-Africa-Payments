@@ -40,6 +40,7 @@ import { closeSettlementCycle, confirmSettlement, getBatchPositions, settlementR
 import { encodeIapayQr, decodeIapayQr } from "../services/scheme/qrStandard.js";
 import { buildPacs008, buildPacs002 } from "../services/scheme/iso20022.js";
 import { resolveUnresolvedTransfer } from "../services/scheme/externalSwitch.js";
+import { parseEd25519PublicKey } from "../services/scheme/gateway/signing.js";
 
 const router: IRouter = Router();
 
@@ -502,6 +503,7 @@ function adminParticipantView(p: typeof schemeParticipantsTable.$inferSelect) {
     api_url: p.apiUrl,
     net_debit_cap_usd: p.netDebitCapUsd === null ? null : Number(p.netDebitCapUsd),
     has_gateway_secret: !!p.gatewaySecretEnc,
+    signature_method: p.gatewayPublicKey ? "ed25519" : "hmac-sha256",
     secret_rotated_at: p.secretRotatedAt,
     joined_at: p.joinedAt,
   };
@@ -605,9 +607,19 @@ router.put("/scheme/participants/:code", requireAuth, async (req: AuthenticatedR
     if (b.api_url !== null && !validApiUrl(b.api_url)) { res.status(400).json({ success: false, message: "api_url must be a public https URL or null" }); return; }
     patch.apiUrl = b.api_url as string | null;
   }
+  if (b.public_key_pem !== undefined) {
+    // Register the bank's Ed25519 public key: from then on it must sign with it (HMAC refused).
+    // null switches the participant back to its shared secret.
+    if (code === HOME_PARTICIPANT_CODE) { res.status(400).json({ success: false, message: "The operator signs with GATEWAY_SIGNING_PRIVATE_KEY" }); return; }
+    if (b.public_key_pem !== null && (typeof b.public_key_pem !== "string" || !parseEd25519PublicKey(b.public_key_pem))) {
+      res.status(400).json({ success: false, message: "public_key_pem must be an Ed25519 public key in PEM (SPKI) format, or null" });
+      return;
+    }
+    patch.gatewayPublicKey = b.public_key_pem as string | null;
+  }
   if (Object.keys(patch).length === 0) { res.status(400).json({ success: false, message: "Nothing to update" }); return; }
   const [updated] = await db.update(schemeParticipantsTable).set(patch).where(eq(schemeParticipantsTable.id, p.id)).returning();
-  await adminAudit(req.user!.id, "iapay_participant_updated", { code, changes: Object.keys(patch), cap: b.net_debit_cap_usd, status: b.status });
+  await adminAudit(req.user!.id, "iapay_participant_updated", { code, changes: Object.keys(patch), cap: b.net_debit_cap_usd, status: b.status, signature_method: patch.gatewayPublicKey === undefined ? undefined : patch.gatewayPublicKey ? "ed25519" : "hmac-sha256" });
   res.json({ success: true, participant: adminParticipantView(updated) });
 });
 

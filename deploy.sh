@@ -112,6 +112,8 @@ if [ "$DEPLOY_API" = true ]; then
       owner_user_id INTEGER NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    -- Ed25519 participant keys (asymmetric gateway signatures; HMAC refused once set)
+    ALTER TABLE scheme_participants ADD COLUMN IF NOT EXISTS gateway_public_key TEXT;
     -- Two-phase settlement: proof that net positions were paid before exposure is released
     ALTER TABLE settlement_batches ADD COLUMN IF NOT EXISTS settlement_reference TEXT;
     ALTER TABLE settlement_batches ADD COLUMN IF NOT EXISTS settled_by INTEGER;

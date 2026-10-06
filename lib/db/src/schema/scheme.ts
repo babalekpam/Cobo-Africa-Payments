@@ -20,6 +20,8 @@ export const schemeParticipantsTable = pgTable("scheme_participants", {
   // Gateway shared secret, AES-256-GCM encrypted (see lib/secretBox.ts); never returned by any API.
   gatewaySecretEnc: text("gateway_secret_enc"),
   secretRotatedAt: timestamp("secret_rotated_at", { withTimezone: true }),
+  // Ed25519 public key (PEM). When set, this participant must sign with it; HMAC is refused.
+  gatewayPublicKey: text("gateway_public_key"),
   joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

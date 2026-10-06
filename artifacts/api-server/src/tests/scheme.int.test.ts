@@ -927,3 +927,63 @@ test("review #6: a late bank ACSC after an operator refund is flagged for reconc
   const flagged = await m.db.db.select().from(m.db.auditLogsTable).where(m.drizzle.eq(m.db.auditLogsTable.action, "iapay_reconciliation_contradiction"));
   assert.equal(flagged.length, 1, "the contradiction is recorded for manual reconciliation");
 });
+
+// ---------- Ed25519 (asymmetric) participant signatures ----------
+test("ed25519: a bank with a registered public key must sign with it — HMAC is refused (no downgrade)", { skip }, async () => {
+  const { generateKeyPairSync } = await import("node:crypto");
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const pem = publicKey.export({ type: "spki", format: "pem" }).toString();
+  await m.db.db.update(m.db.schemeParticipantsTable).set({ gatewayPublicKey: pem }).where(m.drizzle.eq(m.db.schemeParticipantsTable.id, w.bankA.id));
+
+  const ts = Math.floor(Date.now() / 1000);
+  const xml = pacs008({ e2e: "EED25519000000000001", alias: "+254700000001", amount: 25 });
+  const hmac = await credit(xml);
+  assert.equal(hmac.status, 401, "the old shared secret no longer works for this bank");
+
+  const tampered = await credit(xml.replace("25.00", "2500.00"), { ts, sig: m.signing.signEd25519(privateKey, ts, xml) });
+  assert.equal(tampered.status, 401, "signature binds the exact bytes");
+
+  const ok = await credit(xml, { ts, sig: m.signing.signEd25519(privateKey, ts, xml) });
+  assert.equal(ok.status, 200);
+  assert.equal(txStatus(ok.text), "ACSC");
+  assert.equal(await balance(w.alice.walletId), 1025);
+});
+
+test("ed25519: the scheme signs outbound messages with its own key and publishes the public key", { skip }, async () => {
+  const { generateKeyPairSync, createPublicKey } = await import("node:crypto");
+  const { privateKey } = generateKeyPairSync("ed25519");
+  process.env.GATEWAY_SIGNING_PRIVATE_KEY = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+  try {
+    const published = (await fetch(baseUrl + "/api/gateway/v1/signing-key").then((r) => r.json())) as { algorithm: string; public_key_pem: string };
+    assert.equal(published.algorithm, "ed25519");
+    const schemePublic = createPublicKey(published.public_key_pem);
+
+    const sent: { headers: Record<string, string>; body: string }[] = [];
+    const { HttpBankAdapter } = await import("../services/scheme/adapters.js");
+    const adapter = new HttpBankAdapter({
+      operatorCode: "IAPAYHUB", participantCode: "BANKBGHA", url: "https://bank.example/iso", secret: "",
+      signer: (t, b) => m.signing.signEd25519(m.signing.schemeSigningKey()!, t, b),
+      timeoutMs: 1000,
+      fetchImpl: (async (_url: string, init: RequestInit) => {
+        sent.push({ headers: init.headers as Record<string, string>, body: String(init.body) });
+        return new Response("", { status: 503 });
+      }) as unknown as typeof fetch,
+    });
+    await adapter.sendCreditTransfer({
+      reference: "IAPAY-T-1", endToEndId: "E2E00000000000000001", amount: 10, currency: "USD", recipientAmount: 10, recipientCurrency: "USD",
+      fxRate: null, initiatedAt: new Date(), clearedAt: null,
+      debtor: { name: "Alice", participantCode: "IAPAYHUB", country: "KE" }, creditor: { name: "Kofi", participantCode: "BANKBGHA", country: "GH" }, creditorAlias: "+233200000001",
+    } as never);
+    assert.equal(sent.length, 1, "a message was sent");
+    const captured = sent[0];
+    const v = m.signing.verifyEd25519Signature({
+      publicKey: schemePublic,
+      timestamp: captured.headers["x-iapay-timestamp"],
+      signature: captured.headers["x-iapay-signature"],
+      body: captured.body,
+    });
+    assert.deepEqual(v, { ok: true }, "the bank can verify the scheme's signature with the published key");
+  } finally {
+    delete process.env.GATEWAY_SIGNING_PRIVATE_KEY;
+  }
+});

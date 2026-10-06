@@ -36,6 +36,7 @@ import {
 import { getAllRates } from "../fxRates.js";
 import { screenAgainstOFAC } from "../../lib/ofac.js";
 import { screenWithProvider } from "../../lib/sanctionsProvider.js";
+import { schemeSigningKey, signEd25519 } from "./gateway/signing.js";
 import { generateRef } from "../../lib/refgen.js";
 import { checkAndCreateCTR } from "../../lib/ctr.js";
 import { isSafeOutboundUrl } from "../../lib/urlSafety.js";
@@ -165,7 +166,11 @@ export function adapterFor(p: SchemeParticipant): ParticipantAdapter | null {
   }
   if (!p.apiUrl) return null;
   const secret = participantSecret(p);
-  if (!secret) return null;
+  // A participant on Ed25519 receives messages signed with the scheme's key; without that key the
+  // scheme cannot authenticate to it, so the participant is unreachable (never silently HMAC).
+  const schemeKey = p.gatewayPublicKey ? schemeSigningKey() : null;
+  if (p.gatewayPublicKey && !schemeKey) return null;
+  if (!secret && !schemeKey) return null;
   if (!isSafeOutboundUrl(p.apiUrl, { requireHttps: isProduction() })) {
     logger.warn({ participant: p.code }, "Participant apiUrl rejected by outbound URL policy");
     return null;
@@ -174,7 +179,8 @@ export function adapterFor(p: SchemeParticipant): ParticipantAdapter | null {
     operatorCode: HOME_PARTICIPANT_CODE,
     participantCode: p.code,
     url: p.apiUrl,
-    secret,
+    secret: secret ?? "",
+    signer: schemeKey ? (ts, body) => signEd25519(schemeKey, ts, body) : undefined,
     timeoutMs: loadSchemeConfig().gatewayTimeoutMs,
   });
 }

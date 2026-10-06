@@ -25,7 +25,7 @@ import { db, paymentAliasesTable, gatewayMessagesTable, type SchemeParticipant }
 import { logger } from "../lib/logger.js";
 import { getAllRates, ratesAreFresh } from "../services/fxRates.js";
 import { loadSchemeConfig } from "../services/scheme/config.js";
-import { SIGNATURE_HEADERS, verifySignature } from "../services/scheme/gateway/signing.js";
+import { SIGNATURE_HEADERS, verifySignature, verifyEd25519Signature, parseEd25519PublicKey, schemePublicKeyPem } from "../services/scheme/gateway/signing.js";
 import { parsePacs008, Iso20022ParseError } from "../services/scheme/iso20022Parse.js";
 import { ALIAS_TYPES, normalizeAlias } from "../services/scheme/directory.js";
 import { getParticipantByCode, handleInboundMessage, participantSecret, statusForParticipant } from "../services/scheme/externalSwitch.js";
@@ -84,15 +84,20 @@ function authenticate(signedBytes: (req: GatewayRequest) => Buffer) {
     // participant codes exist or have credentials. Failure reasons are checked afterwards.
     const participant = await getParticipantByCode(code);
     const secret = participant ? participantSecret(participant) : null;
-    const check = verifySignature({
-      secret: secret ?? DUMMY_SECRET,
+    const signed = {
       timestamp: req.headers[SIGNATURE_HEADERS.timestamp] as string | undefined,
       signature: req.headers[SIGNATURE_HEADERS.signature] as string | undefined,
       body: signedBytes(req),
       maxSkewSec: loadSchemeConfig().gatewayMaxClockSkewSec,
-    });
+    };
+    const hmacCheck = verifySignature({ secret: secret ?? DUMMY_SECRET, ...signed });
+    // A participant with a registered Ed25519 key must use it: an HMAC signature is refused (no downgrade).
+    const publicKey = participant?.gatewayPublicKey ? parseEd25519PublicKey(participant.gatewayPublicKey) : null;
+    const check = participant?.gatewayPublicKey
+      ? (publicKey ? verifyEd25519Signature({ publicKey, ...signed }) : ({ ok: false, reason: "bad_signature" } as const))
+      : hmacCheck;
     if (!participant) return fail("unknown_participant");
-    if (!secret) return fail("no_secret");
+    if (!participant.gatewayPublicKey && !secret) return fail("no_secret");
     if (!check.ok) return fail(check.reason);
     if (participant.status !== "active") return fail("participant_inactive");
     req.participant = participant;
@@ -237,5 +242,13 @@ router.post(
     return answer(201, { success: true, message: "Key registered" });
   }
 );
+
+// Public: the scheme's Ed25519 public key, so a participant can verify the messages the scheme sends
+// it. 404 when the operator has not configured GATEWAY_SIGNING_PRIVATE_KEY (HMAC only).
+router.get("/gateway/v1/signing-key", (_req, res: Response): void => {
+  const pem = schemePublicKeyPem();
+  if (!pem) { res.status(404).json({ success: false, message: "This scheme signs with per-participant shared secrets (HMAC) only" }); return; }
+  res.json({ algorithm: "ed25519", public_key_pem: pem, signature_header: SIGNATURE_HEADERS.signature, format: "ed25519=<base64 Ed25519(timestamp + '.' + body)>" });
+});
 
 export default router;

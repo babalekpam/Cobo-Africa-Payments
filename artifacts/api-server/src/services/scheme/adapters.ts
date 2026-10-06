@@ -53,6 +53,8 @@ export interface HttpBankAdapterOptions {
   participantCode: string;
   url: string;
   secret: string;
+  /** Overrides HMAC: signs with the scheme's Ed25519 key (participants that registered a public key). */
+  signer?: (timestampSec: number, body: string) => string;
   timeoutMs: number;
   fetchImpl?: typeof fetch;
   now?: () => number;
@@ -77,7 +79,7 @@ export class HttpBankAdapter implements ParticipantAdapter {
           "content-type": "application/xml",
           [SIGNATURE_HEADERS.participant]: this.opts.operatorCode,
           [SIGNATURE_HEADERS.timestamp]: String(ts),
-          [SIGNATURE_HEADERS.signature]: signMessage(this.opts.secret, ts, body),
+          [SIGNATURE_HEADERS.signature]: this.opts.signer ? this.opts.signer(ts, body) : signMessage(this.opts.secret, ts, body),
         },
         body,
         signal: AbortSignal.timeout(this.opts.timeoutMs),
