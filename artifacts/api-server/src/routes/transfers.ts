@@ -5,7 +5,8 @@ import { requireAuth, requireAdmin, type AuthenticatedRequest } from "../middlew
 import { emailService } from "../services/email.js";
 import { checkAndCreateCTR } from "../lib/ctr.js";
 import { generateBankRef, generateMobileRef, generateInternalRef } from "../lib/refgen.js";
-import { screenAgainstOFAC, assessCountryRisk as checkCountry } from "../lib/ofac.js";
+import { assessCountryRisk as checkCountry } from "../lib/ofac.js";
+import { screenNames } from "../services/scheme/externalSwitch.js";
 import { getRate } from "../services/fxRates.js";
 import { initiateTransfer } from "../services/paymentGateway.js";
 import { checkDailyLimit, sentTodayUSD, KYC_LIMITS } from "../lib/limits.js";
@@ -44,17 +45,21 @@ async function getWallet(userId: number, walletId?: number, currency?: string) {
   return null;
 }
 
-/** Sanctions and country screening of the beneficiary; returns a refusal or null. */
-function screenRecipient(name: string, country?: string): { status: number; body: Record<string, unknown> } | null {
-  const ofac = screenAgainstOFAC(name);
-  if (!ofac.clear && ofac.riskScore >= 80) {
-    return { status: 403, body: { success: false, message: "This transfer has been flagged for compliance review. Please contact support.", code: "SANCTIONS_FLAG" } };
-  }
+/** Sanctions and country screening of the beneficiary; returns a refusal or null. Uses the same
+ *  decision as the scheme switch (built-in rule + licensed provider, fail closed). */
+async function screenRecipient(name: string, country?: string): Promise<{ status: number; body: Record<string, unknown> } | null> {
   if (country) {
     const risk = checkCountry(country);
     if (risk.level === "high" || risk.level === "prohibited") {
       return { status: 403, body: { success: false, message: `Transfers to ${country} are blocked due to sanctions restrictions.`, code: "COUNTRY_BLOCKED" } };
     }
+  }
+  const screening = await screenNames([name]);
+  if (screening === "hit") {
+    return { status: 403, body: { success: false, message: "This transfer has been flagged for compliance review. Please contact support.", code: "SANCTIONS_FLAG" } };
+  }
+  if (screening === "unavailable") {
+    return { status: 503, body: { success: false, message: "Sanctions screening is temporarily unavailable. Please try again shortly.", code: "SCREENING_UNAVAILABLE" } };
   }
   return null;
 }
@@ -102,7 +107,7 @@ router.post("/transfers/bank", requireAuth, async (req: AuthenticatedRequest, re
   }
 
   const recipientName = account_name || bank_name || "recipient";
-  const refusal = screenRecipient(recipientName, recipient_country);
+  const refusal = await screenRecipient(recipientName, recipient_country);
   if (refusal) { res.status(refusal.status).json(refusal.body); return; }
 
   const ref = generateBankRef();
@@ -176,7 +181,7 @@ router.post("/transfers/mobile", requireAuth, async (req: AuthenticatedRequest, 
   }
 
   const recipName = recipient_name || phone || "recipient";
-  const refusal = screenRecipient(recipName, recipient_country);
+  const refusal = await screenRecipient(recipName, recipient_country);
   if (refusal) { res.status(refusal.status).json(refusal.body); return; }
 
   const ref = generateMobileRef();

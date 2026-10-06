@@ -35,6 +35,7 @@ import {
 } from "@workspace/db";
 import { getAllRates } from "../fxRates.js";
 import { screenAgainstOFAC } from "../../lib/ofac.js";
+import { screenWithProvider } from "../../lib/sanctionsProvider.js";
 import { generateRef } from "../../lib/refgen.js";
 import { checkAndCreateCTR } from "../../lib/ctr.js";
 import { isSafeOutboundUrl } from "../../lib/urlSafety.js";
@@ -92,6 +93,21 @@ export function sanctionsHit(names: string[]): boolean {
     }
   }
   return hit;
+}
+
+export type ScreenResult = "clear" | "hit" | "unavailable";
+
+/**
+ * Full screening decision: the built-in rule above (a floor that always runs) plus the licensed
+ * provider when configured (lib/sanctionsProvider.ts). "unavailable" means the provider could not
+ * answer — callers must treat it as NOT clear (fail closed).
+ */
+export async function screenNames(names: string[]): Promise<ScreenResult> {
+  if (sanctionsHit(names)) return "hit";
+  const verdict = await screenWithProvider(names);
+  if (verdict === "hit") return "hit";
+  if (verdict === "unavailable") return "unavailable";
+  return "clear";
 }
 
 function pgCode(err: unknown): string | undefined {
@@ -559,7 +575,7 @@ export async function handleInboundMessage(sender: SchemeParticipant, parsed: Pa
     }
     if (amountUsd > cfg.gatewayMaxSingleAmountUsd) return await reject("AM02");
 
-    if (sanctionsHit([parsed.debtorName])) return await reject("RR04"); // regulatory reason
+    if ((await screenNames([parsed.debtorName])) !== "clear") return await reject("RR04"); // regulatory reason (fail closed if screening is unavailable)
 
     // 3. Resolve the key
     // Exact match only: a bank must send the key exactly as registered. Fuzzy/normalising
@@ -568,7 +584,7 @@ export async function handleInboundMessage(sender: SchemeParticipant, parsed: Pa
     if (!resolved) return await reject("AC03"); // invalid creditor account
     if (parsed.creditorAgentCode !== resolved.participant.code) return await reject("RC01");
     if (resolved.alias.currency !== parsed.currency) return await reject("AM03"); // sending bank converts; we don't guess FX
-    if (sanctionsHit(resolved.holderScreenNames)) return await reject("RR04");
+    if ((await screenNames(resolved.holderScreenNames)) !== "clear") return await reject("RR04");
 
     const isHome = resolved.participant.code === HOME_PARTICIPANT_CODE && resolved.holderUserId !== null;
     return await (isHome ? creditHome(sender, parsed, resolved, rates) : forward(sender, parsed, resolved, rates, reject));

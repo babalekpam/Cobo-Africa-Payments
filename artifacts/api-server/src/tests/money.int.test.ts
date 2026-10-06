@@ -236,3 +236,45 @@ test("sandbox checkout accepts a simulated payment (labelled as such)", { skip }
   assert.equal((await api(`/pay/${sid}/complete`, { method: "POST", body: { email: "x@example.com" } })).status, 200);
   assert.equal((await wallet(bob.walletId)).balance, 12);
 });
+
+// ---------- licensed sanctions provider (fake provider on a local port) ----------
+test("sanctions provider: a match blocks, an outage fails closed, a clear result lets the payout through", { skip }, async () => {
+  const { createServer } = await import("node:http");
+  let mode: "match" | "clear" | "down" = "match";
+  let lastAuth = "";
+  const provider = createServer((req, res) => {
+    lastAuth = String(req.headers.authorization || "");
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      if (mode === "down") { res.writeHead(500).end(); return; }
+      const queries = Object.keys(JSON.parse(body).queries);
+      const responses = Object.fromEntries(queries.map((q) => [q, { results: mode === "match" ? [{ id: "NK-1", caption: "Listed Person", score: 0.97, match: true }] : [] }]));
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ responses }));
+    });
+  });
+  provider.listen(0);
+  await new Promise((r) => provider.once("listening", r));
+  process.env.SANCTIONS_API_KEY = "test-key";
+  process.env.SANCTIONS_API_URL = `http://127.0.0.1:${(provider.address() as AddressInfo).port}`;
+  const send = () => api("/transfers/bank", { method: "POST", token: alice.token, body: { currency: "USD", amount: 10, account_number: "0123456789", account_name: "Jane Doe" } });
+  try {
+    const blocked = await send();
+    assert.equal(blocked.status, 403);
+    assert.equal(blocked.json.code, "SANCTIONS_FLAG");
+    assert.equal(lastAuth, "ApiKey test-key");
+
+    mode = "down";
+    const held = await send();
+    assert.equal(held.status, 503, "provider outage: refused, never waved through");
+    assert.equal(held.json.code, "SCREENING_UNAVAILABLE");
+    assert.deepEqual(await wallet(alice.walletId), { balance: 100, locked: 0 }, "nothing moved");
+
+    mode = "clear";
+    assert.equal((await send()).status, 200);
+  } finally {
+    delete process.env.SANCTIONS_API_KEY;
+    delete process.env.SANCTIONS_API_URL;
+    provider.close();
+  }
+});

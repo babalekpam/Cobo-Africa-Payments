@@ -29,7 +29,7 @@ import {
   adapterFor,
   createPendingTransfer,
   dispatchAndFinalize,
-  sanctionsHit,
+  screenNames,
   toIso,
   InsufficientFundsError,
 } from "./externalSwitch.js";
@@ -121,8 +121,13 @@ export async function processInstantPayment(input: InstantPaymentInput): Promise
         (n): n is string => !!n
       )
     : [];
-  if (sanctionsHit([...resolved.holderScreenNames, ...senderScreenNames])) {
+  const screening = await screenNames([...resolved.holderScreenNames, ...senderScreenNames]);
+  if (screening === "hit") {
     return { ok: false, status: 403, message: "Payment flagged for compliance review. Contact support.", code: "SANCTIONS_FLAG" };
+  }
+  if (screening === "unavailable") {
+    // Fail closed: never send a payment that could not be screened.
+    return { ok: false, status: 503, message: "Sanctions screening is temporarily unavailable. Please try again shortly.", code: "SCREENING_UNAVAILABLE" };
   }
 
   // 4. Cross-currency conversion at scheme FX rates
