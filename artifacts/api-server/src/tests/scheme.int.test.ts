@@ -77,7 +77,7 @@ let w: World;
 async function reset(): Promise<World> {
   const { db } = m.db;
   await db.execute(
-    m.drizzle.sql`TRUNCATE users, wallets, transactions, notifications, audit_logs, scheme_participants, payment_aliases, scheme_transfers, settlement_batches, settlement_positions, gateway_messages, ctr_reports RESTART IDENTITY CASCADE`
+    m.drizzle.sql`TRUNCATE users, auth_lockouts, idempotency_records, rate_limit_counters, wallets, transactions, notifications, audit_logs, scheme_participants, payment_aliases, scheme_transfers, settlement_batches, settlement_positions, gateway_messages, ctr_reports RESTART IDENTITY CASCADE`
   );
   m.ext.setAdapterOverrideForTests(null);
   await m.participants.ensureSchemeParticipants(); // operator only (demo seeding off)

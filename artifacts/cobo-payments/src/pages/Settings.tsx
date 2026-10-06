@@ -32,8 +32,10 @@ export default function Settings() {
     if (pw.new_password !== pw.confirm) { setMsg("Passwords don't match"); return; }
     setSaving(true); setMsg("");
     try {
-      await api.post("/auth/change-password", { current_password: pw.current_password, new_password: pw.new_password });
-      setMsg("Password changed!");
+      const { data } = await api.post("/auth/change-password", { current_password: pw.current_password, new_password: pw.new_password });
+      // The server signs out every other device; keep this one signed in with the fresh token.
+      if (data?.token) localStorage.setItem("iapay_token", data.token);
+      setMsg("Password changed! Other devices have been signed out.");
       setPw({ current_password: "", new_password: "", confirm: "" });
     } catch (err: any) { setMsg(err.response?.data?.message || "Failed"); }
     setSaving(false);

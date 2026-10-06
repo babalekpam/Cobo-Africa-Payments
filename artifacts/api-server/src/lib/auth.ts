@@ -19,13 +19,18 @@ export function comparePassword(password: string, hash: string): boolean {
 // JWT_EXPIRES_IN (e.g. "7d") if product needs longer sessions.
 const JWT_EXPIRES_IN = (process.env.JWT_EXPIRES_IN || "24h") as jwt.SignOptions["expiresIn"];
 
-export function signToken(payload: { id: number; email: string; role: string }): string {
+export type TokenPayload = { id: number; email: string; role: string; sv?: number };
+
+// `sv` is the account's session version at issue time. A token is only honoured while it still
+// matches the account (see sessionIsCurrent), so changing the password revokes every older token.
+export function signToken(user: { id: number; email: string; role: string; sessionVersion?: number | null }): string {
+  const payload: TokenPayload = { id: user.id, email: user.email, role: user.role, sv: user.sessionVersion ?? 0 };
   return jwt.sign(payload, JWT_SECRET as string, { expiresIn: JWT_EXPIRES_IN });
 }
 
-export function verifyToken(token: string): { id: number; email: string; role: string } | null {
+export function verifyToken(token: string): TokenPayload | null {
   try {
-    return jwt.verify(token, JWT_SECRET as string) as { id: number; email: string; role: string };
+    return jwt.verify(token, JWT_SECRET as string) as TokenPayload;
   } catch {
     return null;
   }

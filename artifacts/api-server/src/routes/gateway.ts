@@ -19,6 +19,7 @@
 import { createHash } from "crypto";
 import express, { Router, type IRouter, type NextFunction, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
+import { rateLimitStore } from "../middlewares/rateLimitStore.js";
 import { and, eq } from "drizzle-orm";
 import { db, paymentAliasesTable, gatewayMessagesTable, type SchemeParticipant } from "@workspace/db";
 import { logger } from "../lib/logger.js";
@@ -42,6 +43,7 @@ const DUMMY_SECRET = "0".repeat(64);
 
 // Pre-auth: protect the endpoint itself, per client IP.
 const gatewayIpLimit = rateLimit({
+  store: rateLimitStore("gateway-ip"),
   windowMs: 60 * 1000,
   max: 600,
   standardHeaders: true,
@@ -50,6 +52,7 @@ const gatewayIpLimit = rateLimit({
 });
 // Post-auth: per participant, sized for real payment traffic.
 const gatewayParticipantLimit = rateLimit({
+  store: rateLimitStore("gateway-participant"),
   windowMs: 60 * 1000,
   max: 3000,
   standardHeaders: true,

@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { verifyToken } from "../lib/auth";
-import { accountIsActive } from "../lib/accounts";
+import { accountIsActive, sessionIsCurrent } from "../lib/accounts";
 
 export interface AuthenticatedRequest extends Request {
   user?: { id: number; email: string; role: string };
@@ -11,16 +11,17 @@ export interface AuthenticatedRequest extends Request {
 /**
  * A valid token is not enough: the account is re-read on EVERY request, so suspending, deactivating
  * or deleting an account, or changing its role, takes effect on the very next call. The role used for
- * authorization is the database's, never the one baked into the token when it was issued.
+ * authorization is the database's, never the one baked into the token when it was issued. A token
+ * issued before the account's last password change (or "log out everywhere") is refused.
  */
-async function resolveSession(token: string): Promise<{ id: number; email: string; role: string } | null> {
+export async function resolveSession(token: string): Promise<{ id: number; email: string; role: string } | null> {
   const payload = verifyToken(token);
   if (!payload) return null;
   const [user] = await db
-    .select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, status: usersTable.status, isActive: usersTable.isActive })
+    .select({ id: usersTable.id, email: usersTable.email, role: usersTable.role, status: usersTable.status, isActive: usersTable.isActive, sessionVersion: usersTable.sessionVersion })
     .from(usersTable)
     .where(eq(usersTable.id, payload.id));
-  if (!user || !accountIsActive(user)) return null;
+  if (!user || !accountIsActive(user) || !sessionIsCurrent(payload, user)) return null;
   return { id: user.id, email: user.email, role: user.role };
 }
 

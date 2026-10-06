@@ -1,10 +1,7 @@
 import { Server as SocketIOServer } from "socket.io";
 import type { Server as HTTPServer } from "http";
 import { logger } from "../lib/logger.js";
-import { verifyToken } from "../lib/auth.js";
-import { eq } from "drizzle-orm";
-import { db, usersTable } from "@workspace/db";
-import { accountIsActive } from "../lib/accounts.js";
+import { resolveSession } from "../middlewares/requireAuth.js";
 import { allowedOrigins } from "../lib/security.js";
 
 let io: SocketIOServer | null = null;
@@ -22,28 +19,19 @@ export function initSocketIO(httpServer: HTTPServer): SocketIOServer {
     const raw =
       (socket.handshake.auth?.token as string | undefined) ||
       (socket.handshake.headers.authorization || "").replace(/^Bearer\s+/i, "");
-    const payload = raw ? verifyToken(raw) : null;
-    if (!payload) {
-      next(new Error("Authentication required"));
-      return;
-    }
-    // Same rule as the HTTP API: the account must be active RIGHT NOW (a suspended or deleted
-    // account's old token cannot open a live payment feed).
+    // Same rule as the HTTP API (resolveSession): a valid signature is not enough — the account must
+    // be active RIGHT NOW and the token must not predate its last password change.
     try {
-      const [user] = await db
-        .select({ status: usersTable.status, isActive: usersTable.isActive })
-        .from(usersTable)
-        .where(eq(usersTable.id, payload.id));
-      if (!user || !accountIsActive(user)) {
+      const session = raw ? await resolveSession(raw) : null;
+      if (!session) {
         next(new Error("Authentication required"));
         return;
       }
+      socket.data.userId = session.id;
+      next();
     } catch {
       next(new Error("Authentication required"));
-      return;
     }
-    socket.data.userId = payload.id;
-    next();
   });
 
   io.on("connection", (socket) => {

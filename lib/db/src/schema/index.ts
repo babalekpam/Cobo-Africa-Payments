@@ -15,3 +15,4 @@ export * from "./ctr";
 export * from "./paymentIntents";
 export * from "./scheme";
 export * from "./storedObjects";
+export * from "./securityState";

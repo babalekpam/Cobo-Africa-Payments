@@ -7,6 +7,12 @@ export function accountIsActive(user: { status?: string | null; isActive?: strin
   return user.status === "active" && user.isActive !== "false";
 }
 
+/** A token is current only while its session version matches the account's (tokens from before
+ *  versioning carry none and count as version 0, which is also every account's starting value). */
+export function sessionIsCurrent(token: { sv?: number }, user: { sessionVersion?: number | null }): boolean {
+  return (token.sv ?? 0) === (user.sessionVersion ?? 0);
+}
+
 export function isAdminRole(user: { role?: string | null } | undefined): boolean {
   return user?.role === "admin";
 }

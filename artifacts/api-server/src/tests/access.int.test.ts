@@ -68,7 +68,7 @@ async function mkUser(email: string, role: string, extra: Record<string, unknown
 beforeEach(async () => {
   if (skip) return;
   await m.db.db.execute(
-    m.drizzle.sql`TRUNCATE users, wallets, transactions, merchants, kyc_documents, notifications, audit_logs, scheme_participants, payment_aliases, scheme_transfers, settlement_batches, gateway_messages RESTART IDENTITY CASCADE`
+    m.drizzle.sql`TRUNCATE users, auth_lockouts, idempotency_records, rate_limit_counters, wallets, transactions, merchants, kyc_documents, notifications, audit_logs, scheme_participants, payment_aliases, scheme_transfers, settlement_batches, gateway_messages RESTART IDENTITY CASCADE`
   );
   w = { admin: await mkUser("admin@example.com", "admin"), a: await mkUser("alice@example.com", "user"), b: await mkUser("bob@example.com", "user") };
 });
@@ -265,4 +265,24 @@ test("finding 15: network-wide payment volumes are visible to administrators onl
   const admin = await api("/scheme/stats", { token: w.admin.token });
   assert.equal(typeof admin.json.stats.total_volume, "number");
   assert.equal(typeof admin.json.stats.transfers, "number");
+});
+
+// ---------- sessions: a password change or "log out everywhere" revokes old tokens ----------
+test("changing the password revokes every older session; the changing device gets a fresh token", { skip }, async () => {
+  const stolen = w.a.token; // e.g. a token copied off a lost phone
+  assert.equal((await api("/wallets", { token: stolen })).status, 200);
+
+  const r = await api("/auth/change-password", { method: "POST", token: w.a.token, body: { current_password: "Correct-Horse-Battery-9", new_password: "Brand-New-Passphrase-42" } });
+  assert.equal(r.status, 200);
+  assert.ok(r.json.token, "the device that changed the password stays signed in");
+
+  assert.equal((await api("/wallets", { token: stolen })).status, 401, "old token must be dead");
+  assert.equal((await api("/wallets", { token: r.json.token })).status, 200);
+  assert.equal((await api("/wallets", { token: w.b.token })).status, 200, "other accounts unaffected");
+});
+
+test("log out everywhere revokes all of the account's tokens", { skip }, async () => {
+  assert.equal((await api("/auth/logout-all", { method: "POST", token: w.a.token })).status, 200);
+  assert.equal((await api("/wallets", { token: w.a.token })).status, 401);
+  assert.equal((await api("/auth/logout-all", { method: "POST" })).status, 401);
 });
