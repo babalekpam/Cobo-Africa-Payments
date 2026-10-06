@@ -5,7 +5,8 @@ their banks through the operator API. No code changes.
 
 > **Read first — what has and has not been verified.** The install steps below were rehearsed step by step on a clean machine
 > (empty database → schema → build → first-run bootstrap → production API → bank onboarding → certification), the Docker images
-> (`api` and `web`) were built successfully, and the money paths are covered by automated
+> were built and the full `docker compose` stack was started on an empty database and smoke-tested through nginx (schema,
+> first administrator, no sample data, registration, sandbox funding, P2P, limits), and the money paths are covered by automated
 > tests against real PostgreSQL. The platform has **not** had an independent penetration test, certification or regulator
 > approval; see "Before real money" at the end.
 
