@@ -27,6 +27,8 @@ export interface Iso20022Transfer {
   initiatedAt: Date;
   clearedAt: Date | null;
   description?: string | null;
+  /** IAPAY key (phone/email/ID/…) the creditor is addressed by; emitted as CdtrAcct. */
+  creditorAlias?: string | null;
   debtor: Iso20022Party;
   creditor: Iso20022Party;
 }
@@ -93,6 +95,9 @@ export function buildPacs008(t: Iso20022Transfer): string {
     `<ChrgBr>SLEV</ChrgBr>` +
     `<Dbtr><Nm>${text(t.debtor.name, 140)}</Nm></Dbtr>${agent("DbtrAgt", t.debtor)}` +
     `${agent("CdtrAgt", t.creditor)}<Cdtr><Nm>${text(t.creditor.name, 140)}</Nm></Cdtr>` +
+    (t.creditorAlias
+      ? `<CdtrAcct><Id><Othr><Id>${text(t.creditorAlias, 140)}</Id><SchmeNm><Prtry>IAPAY-KEY</Prtry></SchmeNm></Othr></Id></CdtrAcct>`
+      : "") +
     (t.description ? `<RmtInf><Ustrd>${text(t.description, 140)}</Ustrd></RmtInf>` : "") +
     `</CdtTrfTxInf>`;
 

@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 import { db, schemeParticipantsTable } from "@workspace/db";
 import { logger } from "../../lib/logger.js";
 import { HOME_PARTICIPANT_CODE } from "./directory.js";
+import { loadSchemeConfig } from "./config.js";
 
 const FOUNDING_PARTICIPANTS = [
   { code: HOME_PARTICIPANT_CODE, name: "IAPAY (Intra-African Payments)", type: "fintech", country: "KE", currency: "USD" },
@@ -28,7 +29,21 @@ const FOUNDING_PARTICIPANTS = [
 
 export async function ensureSchemeParticipants(): Promise<void> {
   try {
-    for (const p of FOUNDING_PARTICIPANTS) {
+    const cfg = loadSchemeConfig();
+    // The operator's own institution is always ensured, described by the deployment profile.
+    // The demo members are optional: real deployments set SCHEME_SEED_DEMO_PARTICIPANTS=false
+    // and onboard actual institutions instead of shipping fictional ones.
+    const operator = {
+      code: HOME_PARTICIPANT_CODE,
+      name: cfg.homeParticipantName,
+      type: "fintech",
+      country: cfg.homeCountry,
+      currency: cfg.homeCurrency,
+    };
+    const toSeed = cfg.seedDemoParticipants
+      ? FOUNDING_PARTICIPANTS.map((p) => (p.code === HOME_PARTICIPANT_CODE ? operator : p))
+      : [operator];
+    for (const p of toSeed) {
       const [existing] = await db.select().from(schemeParticipantsTable).where(eq(schemeParticipantsTable.code, p.code));
       if (!existing) {
         await db.insert(schemeParticipantsTable).values({ ...p });
