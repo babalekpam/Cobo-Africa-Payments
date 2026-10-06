@@ -98,6 +98,61 @@ if [ "$DEPLOY_API" = true ]; then
     );
     ALTER TABLE payment_aliases ADD COLUMN IF NOT EXISTS verification_code TEXT;
     ALTER TABLE payment_aliases ADD COLUMN IF NOT EXISTS verification_expires TIMESTAMPTZ;
+    -- Participant gateway: keys can be held by an external bank (no platform user)
+    ALTER TABLE payment_aliases ALTER COLUMN user_id DROP NOT NULL;
+    ALTER TABLE payment_aliases ADD COLUMN IF NOT EXISTS holder_name TEXT;
+    ALTER TABLE scheme_participants ADD COLUMN IF NOT EXISTS net_debit_cap_usd NUMERIC(18, 2);
+    -- Access control: session revocation, merchant ownership and private-file ownership
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE merchants ADD COLUMN IF NOT EXISTS owner_user_id INTEGER;
+    CREATE INDEX IF NOT EXISTS merchants_owner_idx ON merchants(owner_user_id);
+    CREATE TABLE IF NOT EXISTS stored_objects (
+      id SERIAL PRIMARY KEY,
+      object_path TEXT NOT NULL UNIQUE,
+      owner_user_id INTEGER NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    -- Ed25519 participant keys (asymmetric gateway signatures; HMAC refused once set)
+    ALTER TABLE scheme_participants ADD COLUMN IF NOT EXISTS gateway_public_key TEXT;
+    -- Two-phase settlement: proof that net positions were paid before exposure is released
+    ALTER TABLE settlement_batches ADD COLUMN IF NOT EXISTS settlement_reference TEXT;
+    ALTER TABLE settlement_batches ADD COLUMN IF NOT EXISTS settled_by INTEGER;
+    -- Security state shared by every API instance (rate limits, lockouts, idempotency)
+    CREATE TABLE IF NOT EXISTS rate_limit_counters (
+      key TEXT PRIMARY KEY,
+      hits INTEGER NOT NULL DEFAULT 0,
+      reset_at TIMESTAMPTZ NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS auth_lockouts (
+      key TEXT PRIMARY KEY,
+      failures INTEGER NOT NULL DEFAULT 0,
+      locked_until TIMESTAMPTZ,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS idempotency_records (
+      key TEXT PRIMARY KEY,
+      body_hash TEXT NOT NULL,
+      state TEXT NOT NULL,
+      status_code INTEGER,
+      response JSONB,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    ALTER TABLE scheme_participants ADD COLUMN IF NOT EXISTS gateway_secret_enc TEXT;
+    ALTER TABLE scheme_participants ADD COLUMN IF NOT EXISTS secret_rotated_at TIMESTAMPTZ;
+    CREATE TABLE IF NOT EXISTS gateway_messages (
+      id SERIAL PRIMARY KEY,
+      participant_code TEXT NOT NULL,
+      msg_id TEXT NOT NULL,
+      end_to_end_id TEXT,
+      status TEXT NOT NULL DEFAULT 'received',
+      response_status INTEGER,
+      response_xml TEXT,
+      transfer_reference TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS gateway_messages_participant_msg_uniq ON gateway_messages(participant_code, msg_id);
+    CREATE INDEX IF NOT EXISTS scheme_transfers_sender_participant_status_idx ON scheme_transfers(sender_participant_id, status);
+    CREATE INDEX IF NOT EXISTS scheme_transfers_recipient_participant_status_idx ON scheme_transfers(recipient_participant_id, status);
     CREATE INDEX IF NOT EXISTS payment_aliases_user_id_idx ON payment_aliases(user_id);
     CREATE TABLE IF NOT EXISTS scheme_transfers (
       id SERIAL PRIMARY KEY,

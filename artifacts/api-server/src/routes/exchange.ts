@@ -5,6 +5,7 @@ import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAu
 import { checkAndCreateCTR } from "../lib/ctr.js";
 import { generateFxRef } from "../lib/refgen.js";
 import { getRate, getAllRates } from "../services/fxRates.js";
+import { parseAmount, toCents, debit, credit, walletFor, InsufficientFunds } from "../lib/ledger.js";
 
 const router: IRouter = Router();
 
@@ -28,8 +29,9 @@ router.post("/exchange/convert", requireAuth, async (req: AuthenticatedRequest, 
 });
 
 router.post("/exchange/swap", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
-  const { from, to, amount } = req.body as { from: string; to: string; amount: number };
-  if (!from || !to || !amount || amount <= 0 || from === to) { res.status(400).json({ success: false, message: "Invalid swap" }); return; }
+  const { from, to } = req.body as { from: string; to: string };
+  const amount = parseAmount(req.body.amount);
+  if (!from || !to || !amount || from === to) { res.status(400).json({ success: false, message: "Invalid swap: amount must be at least 0.01 with at most 2 decimal places" }); return; }
   const rate = await getRate(from, to);
   if (!rate) { res.status(400).json({ success: false, message: "Rate not available" }); return; }
 
@@ -50,20 +52,26 @@ router.post("/exchange/swap", requireAuth, async (req: AuthenticatedRequest, res
   }
 
   const [fromWallet] = await db.select().from(walletsTable).where(and(eq(walletsTable.userId, req.user!.id), eq(walletsTable.currency, from)));
-  if (!fromWallet || Number(fromWallet.balance) < Number(amount)) { res.status(400).json({ success: false, message: "Insufficient funds" }); return; }
-  let [toWallet] = await db.select().from(walletsTable).where(and(eq(walletsTable.userId, req.user!.id), eq(walletsTable.currency, to)));
-  if (!toWallet) {
-    [toWallet] = await db.insert(walletsTable).values({ userId: req.user!.id, currency: to }).returning();
-  }
+  if (!fromWallet) { res.status(400).json({ success: false, message: "Insufficient funds" }); return; }
   const feePercent = 0.0035;
-  const converted = Number(amount) * rate;
-  const netAmount = converted * (1 - feePercent);
-  await db.update(walletsTable).set({ balance: String(Number(fromWallet.balance) - Number(amount)) }).where(eq(walletsTable.id, fromWallet.id));
-  await db.update(walletsTable).set({ balance: String(Number(toWallet.balance) + netAmount) }).where(eq(walletsTable.id, toWallet.id));
+  // Rounded to cents once; a conversion that rounds to nothing is refused (it would destroy money).
+  const netAmount = toCents(Number(amount) * rate * (1 - feePercent));
+  if (Number(netAmount) < 0.01) { res.status(400).json({ success: false, message: "Amount is too small to convert" }); return; }
+
   const ref = generateFxRef();
-  await db.insert(transactionsTable).values({ reference: ref, amount: String(amount), currency: from, status: "completed", type: "exchange", customerId: req.user!.id, description: `Swapped ${from} → ${to} at ${rate.toFixed(4)}`, paymentMethod: "fx" });
+  try {
+    await db.transaction(async (tx) => {
+      if (!(await debit(tx, fromWallet.id, amount))) throw new InsufficientFunds();
+      const toWallet = await walletFor(tx, req.user!.id, to);
+      await credit(tx, toWallet.id, netAmount);
+      await tx.insert(transactionsTable).values({ reference: ref, amount, currency: from, status: "completed", type: "exchange", customerId: req.user!.id, description: `Swapped ${from} → ${to} at ${rate.toFixed(4)}`, paymentMethod: "fx" });
+    });
+  } catch (err) {
+    if (err instanceof InsufficientFunds) { res.status(400).json({ success: false, message: "Insufficient funds" }); return; }
+    throw err;
+  }
   await checkAndCreateCTR(req.user!.id, ref, Number(amount), from, "fx_exchange");
-  res.json({ success: true, message: `Swapped ${amount} ${from} → ${netAmount.toFixed(2)} ${to}`, reference: ref, rate, fee_percent: feePercent * 100, net_amount: netAmount });
+  res.json({ success: true, message: `Swapped ${amount} ${from} → ${netAmount} ${to}`, reference: ref, rate, fee_percent: feePercent * 100, net_amount: Number(netAmount) });
 });
 
 export default router;

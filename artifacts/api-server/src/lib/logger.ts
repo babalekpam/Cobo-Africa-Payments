@@ -9,7 +9,9 @@ export const logger = pino({
     "req.headers.cookie",
     "res.headers['set-cookie']",
   ],
-  ...(isProduction
+  // No pretty-print worker thread in production (plain JSON) or under test (the worker
+  // cannot be resolved from the bundled test files and would die mid-run).
+  ...(isProduction || process.env.NODE_ENV === "test"
     ? {}
     : {
         transport: {

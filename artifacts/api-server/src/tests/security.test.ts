@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { safeEqual, validatePassword, isLockedOut, recordFailedAttempt, clearAttempts } from "../lib/security.js";
+import { safeEqual, validatePassword } from "../lib/security.js";
 
 test("safeEqual matches equal strings and rejects different ones", () => {
   assert.equal(safeEqual("secret-token", "secret-token"), true);
@@ -19,17 +19,4 @@ test("password policy enforces length and blocks common passwords", () => {
   assert.notEqual(validatePassword("x".repeat(200)), null); // absurd length
 });
 
-test("failed-attempt tracker locks after 5 tries and clears on success", () => {
-  const key = "test:lockout";
-  clearAttempts(key);
-  assert.equal(isLockedOut(key), false);
-  for (let i = 0; i < 4; i++) {
-    const r = recordFailedAttempt(key);
-    assert.equal(r.locked, false);
-  }
-  const fifth = recordFailedAttempt(key);
-  assert.equal(fifth.locked, true);
-  assert.equal(isLockedOut(key), true);
-  clearAttempts(key);
-  assert.equal(isLockedOut(key), false);
-});
+// The failed-attempt lockout is now database-backed: see tests/durableState.int.test.ts.

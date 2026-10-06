@@ -83,7 +83,7 @@ export default function TheProblem() {
           textTransform: "uppercase",
         }}
       >
-        <span>IAPAY — Inter-Africa Pay</span>
+        <span>IAPAY — Intra-African Payments</span>
         <span>02</span>
       </div>
     </div>

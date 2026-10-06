@@ -6,7 +6,9 @@ import { checkDailyLimit } from "../lib/limits.js";
 import { generateRef } from "../lib/refgen.js";
 import { processInstantPayment } from "../services/scheme/switchEngine.js";
 import { resolveAlias, listUserAliases } from "../services/scheme/directory.js";
-import { isProduction, safeEqual, isLockedOut, recordFailedAttempt, clearAttempts } from "../lib/security.js";
+import { isProduction, safeEqual } from "../lib/security.js";
+import { parseAmount } from "../lib/ledger.js";
+import { isLockedOut, recordFailedAttempt, clearAttempts } from "../lib/lockout.js";
 import { logger } from "../lib/logger.js";
 
 const router = Router();
@@ -72,16 +74,17 @@ router.post("/ussd", async (req, res): Promise<void> => {
       const user = await findUserByPhone(phoneNumber || "");
       if (!user) {
         response = "END Account not found.";
-      } else if (isNaN(amount) || amount <= 0) {
+      } else if (!parseAmount(amount)) {
         response = "END Invalid amount.";
       } else {
         const pinKey = `ussd-pin:${phoneNumber}`;
-        const validPin = !isLockedOut(pinKey) && user.passwordHash ? await bcrypt.compare(pin, user.passwordHash) : false;
-        if (validPin) clearAttempts(pinKey);
-        if (isLockedOut(pinKey)) {
+        const locked = await isLockedOut(pinKey);
+        const validPin = !locked && user.passwordHash ? await bcrypt.compare(pin, user.passwordHash) : false;
+        if (validPin) await clearAttempts(pinKey);
+        if (locked) {
           response = "END Too many wrong PINs. Try again in 15 minutes.";
         } else if (!validPin) {
-          recordFailedAttempt(pinKey);
+          await recordFailedAttempt(pinKey);
           response = "END Invalid PIN. Transaction cancelled.";
         } else {
           const [wallet] = await db.select().from(walletsTable).where(
@@ -209,16 +212,17 @@ Enter amount:`;
         const user = await findUserByPhone(phoneNumber || "");
         if (!user) {
           response = "END Account not found.";
-        } else if (isNaN(amount) || amount <= 0) {
+        } else if (!parseAmount(amount)) {
           response = "END Invalid amount.";
         } else {
           const pinKey = `ussd-pin:${phoneNumber}`;
-          const validPin = !isLockedOut(pinKey) && user.passwordHash ? await bcrypt.compare(pin, user.passwordHash) : false;
-          if (validPin) clearAttempts(pinKey);
-          if (isLockedOut(pinKey)) {
+          const locked = await isLockedOut(pinKey);
+          const validPin = !locked && user.passwordHash ? await bcrypt.compare(pin, user.passwordHash) : false;
+          if (validPin) await clearAttempts(pinKey);
+          if (locked) {
             response = "END Too many wrong PINs. Try again in 15 minutes.";
           } else if (!validPin) {
-            recordFailedAttempt(pinKey);
+            await recordFailedAttempt(pinKey);
             response = "END Invalid PIN. Transaction cancelled.";
           } else {
             const [defaultWallet] = await db.select().from(walletsTable).where(

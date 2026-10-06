@@ -47,7 +47,16 @@ app.use(
 );
 
 app.use(cors({ origin: allowedOrigins() }));
-app.use(express.json({ limit: "200kb" }));
+// Keep the exact request bytes: gateway HMAC signatures cover the raw body, so verifying
+// against a re-serialised object would be both wrong and unsafe.
+app.use(
+  express.json({
+    limit: "200kb",
+    verify: (req, _res, buf) => {
+      (req as { rawBody?: Buffer }).rawBody = buf;
+    },
+  }),
+);
 app.use(express.urlencoded({ extended: true, limit: "200kb" }));
 
 app.use(generalRateLimit);

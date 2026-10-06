@@ -86,7 +86,7 @@ export default function NetworkTraction() {
           textTransform: "uppercase",
         }}
       >
-        <span>IAPAY — Inter-Africa Pay</span>
+        <span>IAPAY — Intra-African Payments</span>
         <span>07</span>
       </div>
     </div>

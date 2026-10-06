@@ -181,7 +181,7 @@ export default function Developer() {
     "customer_email": "customer@example.com",
     "success_url": "https://yoursite.com/success",
     "cancel_url": "https://yoursite.com/cancel",
-    "webhook_url": "https://yoursite.com/webhooks/cobo"
+    "webhook_url": "https://yoursite.com/webhooks/iapay"
   }'`} />
               <CodeBlock title="Response" code={`{
   "id": "cs_a1b2c3d4e5f6...",

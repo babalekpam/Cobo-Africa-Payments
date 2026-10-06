@@ -13,6 +13,19 @@ import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAu
 
 const router: IRouter = Router();
 
+// Ownership boundary: every merchant belongs to a user (owner_user_id) or to the platform (NULL).
+// Ordinary users can see and manage ONLY merchants they own; administrators can manage all. A merchant
+// that belongs to someone else is indistinguishable from one that doesn't exist (404).
+
+const isAdmin = (req: AuthenticatedRequest): boolean => req.user!.role === "admin";
+
+async function loadAccessibleMerchant(req: AuthenticatedRequest, id: number) {
+  const [merchant] = await db.select().from(merchantsTable).where(eq(merchantsTable.id, id));
+  if (!merchant) return null;
+  if (!isAdmin(req) && merchant.ownerUserId !== req.user!.id) return null;
+  return merchant;
+}
+
 async function getMerchantWithStats(merchantId: number) {
   const [merchant] = await db.select().from(merchantsTable).where(eq(merchantsTable.id, merchantId));
   if (!merchant) return null;
@@ -43,6 +56,7 @@ router.get("/merchants", requireAuth, async (req: AuthenticatedRequest, res): Pr
   const offset = (page - 1) * limit;
 
   const conditions: SQL[] = [];
+  if (!isAdmin(req)) conditions.push(eq(merchantsTable.ownerUserId, req.user!.id));
   if (search) conditions.push(ilike(merchantsTable.name, `%${search}%`));
   if (status) conditions.push(eq(merchantsTable.status, status));
   if (country) conditions.push(eq(merchantsTable.country, country));
@@ -97,7 +111,18 @@ router.post("/merchants", requireAuth, async (req: AuthenticatedRequest, res): P
     return;
   }
 
-  const [merchant] = await db.insert(merchantsTable).values(parsed.data).returning();
+  // A user creates merchants for themselves and cannot choose their own approval status (the default
+  // applies). An administrator may create a platform-owned merchant or assign an owner.
+  let ownerUserId: number | null = req.user!.id;
+  const data = { ...parsed.data } as typeof parsed.data & { status?: string };
+  if (isAdmin(req)) {
+    const requested = Number((req.body as Record<string, unknown>)?.owner_user_id);
+    ownerUserId = Number.isInteger(requested) && requested > 0 ? requested : null;
+  } else {
+    delete data.status;
+  }
+
+  const [merchant] = await db.insert(merchantsTable).values({ ...data, ownerUserId }).returning();
   res.status(201).json({ ...merchant, totalVolume: 0, transactionCount: 0 });
 });
 
@@ -108,13 +133,11 @@ router.get("/merchants/:id", requireAuth, async (req: AuthenticatedRequest, res)
     return;
   }
 
-  const merchant = await getMerchantWithStats(params.data.id);
-  if (!merchant) {
+  if (!(await loadAccessibleMerchant(req, params.data.id))) {
     res.status(404).json({ error: "Not found", message: "Merchant not found" });
     return;
   }
-
-  res.json(merchant);
+  res.json(await getMerchantWithStats(params.data.id));
 });
 
 router.put("/merchants/:id", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
@@ -130,16 +153,22 @@ router.put("/merchants/:id", requireAuth, async (req: AuthenticatedRequest, res)
     return;
   }
 
+  if (!(await loadAccessibleMerchant(req, params.data.id))) {
+    res.status(404).json({ error: "Not found", message: "Merchant not found" });
+    return;
+  }
+
+  // Approval/suspension is the platform's decision: an owner cannot lift a suspension on themselves.
+  if (!isAdmin(req) && parsed.data.status !== undefined) {
+    res.status(403).json({ error: "Forbidden", message: "Only an administrator can change a merchant's status" });
+    return;
+  }
+
   const [updated] = await db
     .update(merchantsTable)
     .set(parsed.data)
     .where(eq(merchantsTable.id, params.data.id))
     .returning();
-
-  if (!updated) {
-    res.status(404).json({ error: "Not found", message: "Merchant not found" });
-    return;
-  }
 
   const merchant = await getMerchantWithStats(updated.id);
   res.json(merchant);
@@ -152,12 +181,12 @@ router.delete("/merchants/:id", requireAuth, async (req: AuthenticatedRequest, r
     return;
   }
 
-  const [merchant] = await db.delete(merchantsTable).where(eq(merchantsTable.id, params.data.id)).returning();
-  if (!merchant) {
+  if (!(await loadAccessibleMerchant(req, params.data.id))) {
     res.status(404).json({ error: "Not found", message: "Merchant not found" });
     return;
   }
 
+  await db.delete(merchantsTable).where(eq(merchantsTable.id, params.data.id));
   res.json({ success: true, message: "Merchant deleted" });
 });
 

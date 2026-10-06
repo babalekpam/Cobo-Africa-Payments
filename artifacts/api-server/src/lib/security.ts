@@ -41,6 +41,9 @@ export function getCallbackSecret(): string {
 export function securityConfigWarnings(): string[] {
   const warnings: string[] = [];
   if (!isProduction()) return warnings;
+  if ((process.env.IAPAY_ENVIRONMENT || "").toLowerCase() === "sandbox") {
+    warnings.push("IAPAY_ENVIRONMENT=sandbox — THIS INSTALLATION USES TEST MONEY: self-service funding and simulated payouts are ON. Never use it for real customers or real funds.");
+  }
   if (!process.env.WEBHOOK_CALLBACK_SECRET) warnings.push("WEBHOOK_CALLBACK_SECRET not set — provider callbacks use a per-boot secret and will break on restart");
   if (!process.env.FLUTTERWAVE_WEBHOOK_HASH) warnings.push("FLUTTERWAVE_WEBHOOK_HASH not set — Flutterwave webhooks will be rejected (fail closed)");
   if (!process.env.USSD_GATEWAY_SECRET) warnings.push("USSD_GATEWAY_SECRET not set — USSD requests will be rejected (fail closed)");
@@ -51,37 +54,6 @@ export function securityConfigWarnings(): string[] {
 
 export function verifyCallbackSecret(provided: unknown): boolean {
   return typeof provided === "string" && provided.length > 0 && safeEqual(provided, callbackSecret);
-}
-
-// Simple in-memory failed-attempt tracker with lockout (per key: phone, alias id…).
-// Single-instance deployment; swap for Redis when horizontally scaled.
-const attempts = new Map<string, { count: number; lockedUntil: number }>();
-const MAX_ATTEMPTS = 5;
-const LOCKOUT_MS = 15 * 60 * 1000;
-
-export function isLockedOut(key: string): boolean {
-  const entry = attempts.get(key);
-  if (!entry) return false;
-  if (entry.lockedUntil && Date.now() < entry.lockedUntil) return true;
-  if (entry.lockedUntil && Date.now() >= entry.lockedUntil) attempts.delete(key);
-  return false;
-}
-
-export function recordFailedAttempt(key: string): { locked: boolean; remaining: number } {
-  const entry = attempts.get(key) || { count: 0, lockedUntil: 0 };
-  entry.count += 1;
-  if (entry.count >= MAX_ATTEMPTS) {
-    entry.lockedUntil = Date.now() + LOCKOUT_MS;
-    entry.count = 0;
-    attempts.set(key, entry);
-    return { locked: true, remaining: 0 };
-  }
-  attempts.set(key, entry);
-  return { locked: false, remaining: MAX_ATTEMPTS - entry.count };
-}
-
-export function clearAttempts(key: string): void {
-  attempts.delete(key);
 }
 
 // Password policy: length is what actually matters; block the trivially common.

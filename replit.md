@@ -1,8 +1,10 @@
-# IAPAY (Inter-Africa Pay) Platform
+# IAPAY (Intra-African Payments) Platform
 
 ## Overview
 
-IAPAY (Inter-Africa Pay) — full-stack pan-African payment platform for managing payments, wallets, FX exchange, and transfers across Africa. Built as a pnpm monorepo with Express API + React frontend. Features a cream/warm white theme with gold accents, dark sidebar, and Plus Jakarta Sans/DM Sans fonts.
+IAPAY (Intra-African Payments) — full-stack pan-African payment platform for managing payments, wallets, FX exchange, and transfers across Africa.
+
+**Agreed product direction:** customers use their existing bank or mobile-money app and account; IAPAY connects institutions (bank-to-bank, bank-to-wallet, wallet-to-bank, wallet-to-wallet) through the participant gateway, alias directory, switch and settlement. No separate IAPAY customer account or wallet is required in the target model; the consumer wallet app here is optional/demo (sandbox). Live institution integrations are not yet complete. See `docs/IAPAY-bank-strategy.md` section 0. Built as a pnpm monorepo with Express API + React frontend. Features a cream/warm white theme with gold accents, dark sidebar, and Plus Jakarta Sans/DM Sans fonts.
 
 ## Admin Credentials
 - Email: `abel@argilette.com`
@@ -137,7 +139,7 @@ All prefixed with `/api`:
 
 ## IAPAY — Pan-African Instant Payment Scheme
 
-The platform operates the **IAPAY scheme** (Inter-Africa Pay), a Pix/UnionPay-style payment rail for Africa:
+The platform operates the **IAPAY scheme** (Intra-African Payments), a Pix/UnionPay-style payment rail for Africa:
 
 - **IAPAY Keys** (like Pix keys): users register up to 5 aliases — phone, email, national ID, merchant ID, or random UUID — in a network-wide directory. A key resolves to the holder's institution + account; lookups return masked holder names for privacy. **Ownership is verified**: phone/email keys require a 6-digit OTP delivered to the claimed phone/email (SHA-256-hashed, 15-min expiry; `POST /api/scheme/aliases/:id/verify`; sandbox returns `dev_code` outside production); national ID keys require verified KYC; only `active` keys resolve or generate QRs. SMS goes via `services/sms.ts` (Africa's Talking `AT_API_KEY`/`AT_USERNAME` or Twilio `TWILIO_*` env vars; console no-op otherwise).
 - **Instant switch**: `POST /api/scheme/pay` clears payments 24/7 with zero fees, cross-currency FX at scheme rates, OFAC screening at the switch, ISO 20022-style end-to-end IDs (`E<participant><date><uuid>`), WebSocket + email notifications. **Hardened**: KYC daily limits enforced in USD terms (shared `lib/limits.ts`, same tiers as all other rails); clearing runs in a single DB transaction with `SELECT ... FOR UPDATE` on the sender wallet + set-based balance increments (no double-spend, no half-cleared payments); `Idempotency-Key` header support (scoped per user) so client retries never clear twice; `transferRateLimit` on pay and `directoryLookupRateLimit` (15/min) on `/api/scheme/resolve` to prevent directory scraping.
@@ -155,6 +157,7 @@ Scheme routes (all under `/api`):
 - `GET /api/scheme/resolve?key=` — directory lookup (masked)
 - `POST /api/scheme/pay` — instant payment by key
 - `GET /api/scheme/transfers`, `GET /api/scheme/transfers/:reference` — scheme transfer history/status
+- `GET /api/scheme/transfers/:reference/iso20022?msg=pacs.008|pacs.002` — ISO 20022 XML for a transfer (sender/recipient only); builders in `services/scheme/iso20022.ts` also cover `pacs.004` returns
 - `POST /api/scheme/qr/generate`, `POST /api/scheme/qr/decode` — IAPAY QR
 - `GET /api/scheme/participants`, `GET /api/scheme/stats` — network registry & stats
 - Admin: `POST /api/scheme/participants`, `POST /api/scheme/settlement/close`, `GET /api/scheme/settlement/batches[/:id]`
@@ -162,6 +165,9 @@ Scheme routes (all under `/api`):
 DB tables: `scheme_participants`, `payment_aliases`, `scheme_transfers`, `settlement_batches`, `settlement_positions` (schema in `lib/db/src/schema/scheme.ts`; DDL also in deploy.sh migration block).
 Backend code: `api-server/src/services/scheme/` (directory.ts, switchEngine.ts, settlement.ts, qrStandard.ts, participants.ts) + `routes/scheme.ts`.
 Frontend: `/iapay` page (⚡ nav item) with tabs: Pay a key, My keys, Receive (IAPAY QR), Network.
+
+Bank-readiness strategy, gap assessment and roadmap: `docs/IAPAY-bank-strategy.md`.
+Participant gateway: `docs/IAPAY-participant-integration.md`. Deployment on any host (Docker Compose, operator onboarding API, certification tool): `docs/IAPAY-deployment.md`.
 
 ## Checkout API (Stripe-like)
 

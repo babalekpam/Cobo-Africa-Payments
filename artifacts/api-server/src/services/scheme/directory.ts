@@ -4,7 +4,8 @@
 
 import { randomUUID, randomInt, createHash } from "crypto";
 import { eq, and } from "drizzle-orm";
-import { safeEqual, isLockedOut, recordFailedAttempt, clearAttempts } from "../../lib/security.js";
+import { safeEqual } from "../../lib/security.js";
+import { isLockedOut, recordFailedAttempt, clearAttempts } from "../../lib/lockout.js";
 import {
   db,
   paymentAliasesTable,
@@ -175,18 +176,18 @@ export async function verifyAlias(userId: number, aliasId: number, code: string)
   // A 6-digit OTP is only safe with an attempt cap: 5 wrong guesses locks the
   // key for 15 minutes (and comparison is constant-time).
   const attemptKey = `otp:${alias.id}`;
-  if (isLockedOut(attemptKey)) {
+  if (await isLockedOut(attemptKey)) {
     return { ok: false, status: 429, message: "Too many wrong codes. Try again in 15 minutes." };
   }
   if (!safeEqual(hashOtp(String(code || "").trim()), alias.verificationCode)) {
-    const { locked, remaining } = recordFailedAttempt(attemptKey);
+    const { locked, remaining } = await recordFailedAttempt(attemptKey);
     return {
       ok: false,
       status: locked ? 429 : 400,
       message: locked ? "Too many wrong codes. Try again in 15 minutes." : `Incorrect verification code (${remaining} attempts left)`,
     };
   }
-  clearAttempts(attemptKey);
+  await clearAttempts(attemptKey);
 
   const [updated] = await db
     .update(paymentAliasesTable)
@@ -200,18 +201,33 @@ export interface ResolvedAlias {
   alias: PaymentAlias;
   participant: SchemeParticipant;
   holderName: string;
-  holderUserId: number;
+  /** Unmasked names for sanctions screening ONLY (each screened separately) — never include in any API response. */
+  holderScreenNames: string[];
+  /** Platform user who owns the key; null when the key is held by an external participant. */
+  holderUserId: number | null;
 }
 
-export async function resolveAlias(rawValue: string): Promise<ResolvedAlias | null> {
+export async function resolveAlias(rawValue: string, opts: { exact?: boolean } = {}): Promise<ResolvedAlias | null> {
   const value = String(rawValue || "").trim();
   if (!value) return null;
 
-  // Try each normalization so lookups work however the sender typed the key
-  const candidates = new Set<string>([value]);
-  for (const t of ["phone", "email", "national_id", "merchant_id"]) {
-    const n = normalizeAlias(t, value);
-    if (n) candidates.add(n);
+  // `exact` (bank messages): the key must match a stored value character for character.
+  // Otherwise (human-typed input) try interpretations in a fixed, safe order: phone and email
+  // BEFORE the raw string, so a registered numeric "national id" can never shadow the phone
+  // number a sender typed without its "+". Set preserves this insertion order.
+  const candidates = new Set<string>();
+  if (opts.exact) {
+    candidates.add(value);
+  } else {
+    for (const t of ["phone", "email"]) {
+      const n = normalizeAlias(t, value);
+      if (n) candidates.add(n);
+    }
+    candidates.add(value);
+    for (const t of ["merchant_id", "national_id"]) {
+      const n = normalizeAlias(t, value);
+      if (n) candidates.add(n);
+    }
   }
 
   let alias: PaymentAlias | undefined;
@@ -230,6 +246,18 @@ export async function resolveAlias(rawValue: string): Promise<ResolvedAlias | nu
     .where(eq(schemeParticipantsTable.id, alias.participantId));
   if (!participant || participant.status !== "active") return null;
 
+  // External participant key: no platform user, the participant supplied the holder name.
+  if (alias.userId === null) {
+    const parts = (alias.holderName || "").trim().split(/\s+/).filter(Boolean);
+    return {
+      alias,
+      participant,
+      holderName: maskName(parts[0], parts.length > 1 ? parts[parts.length - 1] : null),
+      holderScreenNames: parts.length ? [parts.join(" ")] : [],
+      holderUserId: null,
+    };
+  }
+
   const [holder] = await db.select().from(usersTable).where(eq(usersTable.id, alias.userId));
   if (!holder) return null;
 
@@ -237,6 +265,9 @@ export async function resolveAlias(rawValue: string): Promise<ResolvedAlias | nu
     alias,
     participant,
     holderName: maskName(holder.firstName, holder.lastName),
+    holderScreenNames: [holder.businessName, [holder.firstName, holder.lastName].filter(Boolean).join(" "), holder.name].filter(
+      (n, i, all): n is string => !!n && all.indexOf(n) === i
+    ),
     holderUserId: holder.id,
   };
 }

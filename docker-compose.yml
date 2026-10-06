@@ -1,0 +1,65 @@
+# IAPAY — one-command deployment.
+#   cp .env.example .env     # then fill in the REQUIRED values (see the file; it explains each one)
+#   docker compose up -d --build
+# Then open http://<host>/ . Put TLS in front (load balancer / Caddy / Traefik) before real use.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: iapay
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: iapay
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iapay -d iapay"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # Not published: only the other services can reach the database.
+
+  migrate:
+    build: { context: ., dockerfile: deploy/docker/Dockerfile, target: api }
+    image: iapay-api
+    command: ["sh", "deploy/docker/migrate.sh"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://iapay:${POSTGRES_PASSWORD}@db:5432/iapay
+    depends_on:
+      db: { condition: service_healthy }
+    restart: "no"
+
+  api:
+    image: iapay-api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://iapay:${POSTGRES_PASSWORD}@db:5432/iapay
+      CORS_ORIGINS: ${CORS_ORIGINS:-${PUBLIC_URL:?Set PUBLIC_URL in .env}}
+      CLIENT_URL: ${CLIENT_URL:-${PUBLIC_URL}}
+      WEBHOOK_BASE_URL: ${WEBHOOK_BASE_URL:-${PUBLIC_URL}}
+    volumes:
+      - objects:/data/objects
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/api/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    # Not published: reachable only through the web container.
+
+  web:
+    build: { context: ., dockerfile: deploy/docker/Dockerfile, target: web }
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    depends_on:
+      api: { condition: service_healthy }
+
+volumes:
+  pgdata:
+  objects:

@@ -4,6 +4,7 @@
 // remains available for out-of-cycle settlement.
 
 import { closeSettlementCycle } from "./settlement.js";
+import { sweepStalePending } from "./externalSwitch.js";
 import { logger } from "../../lib/logger.js";
 
 let timer: NodeJS.Timeout | null = null;
@@ -37,4 +38,24 @@ export function startSettlementScheduler(): void {
 export function stopSettlementScheduler(): void {
   if (timer) clearInterval(timer);
   timer = null;
+}
+
+// Reconciliation sweeper: a transfer left `pending` (the process died between debiting the
+// sender and recording the bank's answer) is parked as `unresolved` for operator review.
+// It is never auto-refunded — the bank may well have credited the recipient.
+let sweeper: NodeJS.Timeout | null = null;
+const STALE_PENDING_MS = 10 * 60 * 1000;
+
+export function startReconciliationSweeper(): void {
+  if (sweeper) return;
+  sweeper = setInterval(() => {
+    sweepStalePending(STALE_PENDING_MS).catch((err) => logger.error({ err }, "Reconciliation sweep failed"));
+  }, 60 * 1000);
+  sweeper.unref();
+  logger.info("IAPAY reconciliation sweeper started");
+}
+
+export function stopReconciliationSweeper(): void {
+  if (sweeper) clearInterval(sweeper);
+  sweeper = null;
 }

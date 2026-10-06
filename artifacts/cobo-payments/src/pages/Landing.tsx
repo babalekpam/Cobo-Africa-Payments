@@ -27,7 +27,7 @@ const STATS = [
   { value: "99.9%", label: "Uptime SLA" },
 ];
 
-const API_CODE = `const cobo = require('@cobo/checkout');
+const API_CODE = `const iapay = require('@iapay/checkout');
 
 const session = await iapay.sessions.create({
   currency: 'NGN',
@@ -63,7 +63,7 @@ export default function Landing() {
       }}>
         <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", height: 72 }}>
           <div style={{ display: "flex", alignItems: "center" }}>
-            <img src={`${import.meta.env.BASE_URL}iapay-logo.svg`} alt="IAPAY (Inter-Africa Pay)" style={{ height: 52, borderRadius: 8 }} />
+            <img src={`${import.meta.env.BASE_URL}iapay-logo.svg`} alt="IAPAY (Intra-African Payments)" style={{ height: 52, borderRadius: 8 }} />
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <button onClick={() => setLocation("/login")} className="btn btn-ghost" style={{ fontSize: 14, fontWeight: 500 }}>Sign In</button>
@@ -336,7 +336,7 @@ export default function Landing() {
           <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 40, marginBottom: 48 }}>
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-                <img src={`${import.meta.env.BASE_URL}iapay-logo-dark.svg`} alt="IAPAY (Inter-Africa Pay)" style={{ height: 40, borderRadius: 8 }} />
+                <img src={`${import.meta.env.BASE_URL}iapay-logo-dark.svg`} alt="IAPAY (Intra-African Payments)" style={{ height: 40, borderRadius: 8 }} />
               </div>
               <p style={{ fontSize: 14, lineHeight: 1.7, maxWidth: 280 }}>
                 Pan-African payments infrastructure connecting businesses and people across the continent.

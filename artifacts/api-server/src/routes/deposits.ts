@@ -4,20 +4,21 @@ import { db, depositRequestsTable, walletsTable, transactionsTable, notification
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
 import { checkAndCreateCTR } from "../lib/ctr";
 import { generateDepositRef } from "../lib/refgen";
+import { parseAmount, credit, walletFor } from "../lib/ledger.js";
 
 const router: IRouter = Router();
 
 router.post("/deposits", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
   const { currency, amount, method, bankName, senderName, senderAccount, proofUrl, notes } = req.body;
-  if (!currency || !amount || Number(amount) <= 0) {
-    res.status(400).json({ success: false, message: "Currency and amount are required" });
+  if (!currency || !parseAmount(amount)) {
+    res.status(400).json({ success: false, message: "Currency and an amount of at least 0.01 with at most 2 decimal places are required" });
     return;
   }
   const reference = generateDepositRef();
   const [deposit] = await db.insert(depositRequestsTable).values({
     userId: req.user!.id,
     currency: currency.toUpperCase(),
-    amount: String(amount),
+    amount: parseAmount(amount)!,
     method: method || "bank",
     reference,
     bankName,
@@ -60,26 +61,22 @@ router.post("/admin/deposits/:id/approve", requireAuth, async (req: Authenticate
   if (!deposit) { res.status(404).json({ success: false, message: "Deposit not found" }); return; }
   if (deposit.status !== "pending") { res.status(400).json({ success: false, message: "Deposit already processed" }); return; }
 
-  const [wallet] = await db.select().from(walletsTable)
-    .where(and(eq(walletsTable.userId, deposit.userId), eq(walletsTable.currency, deposit.currency)));
-
-  if (!wallet) {
-    const [newWallet] = await db.insert(walletsTable).values({
-      userId: deposit.userId, currency: deposit.currency,
-    }).returning();
-    await db.update(walletsTable).set({
-      balance: String(Number(deposit.amount)),
-    }).where(eq(walletsTable.id, newWallet.id));
-  } else {
-    const newBalance = Number(wallet.balance) + Number(deposit.amount);
-    await db.update(walletsTable).set({ balance: String(newBalance) }).where(eq(walletsTable.id, wallet.id));
-  }
-
-  await db.update(depositRequestsTable).set({
-    status: "approved",
-    reviewedBy: req.user!.id,
-    reviewedAt: new Date(),
-  }).where(eq(depositRequestsTable.id, id));
+  // Approve exactly once: the status flip and the credit commit together, and only the request that
+  // flips "pending" -> "approved" credits the wallet (a double-click or a second admin gets 400).
+  const amount = parseAmount(String(deposit.amount));
+  if (!amount) { res.status(400).json({ success: false, message: "Deposit amount is invalid" }); return; }
+  const approved = await db.transaction(async (tx) => {
+    const [row] = await tx.update(depositRequestsTable).set({
+      status: "approved",
+      reviewedBy: req.user!.id,
+      reviewedAt: new Date(),
+    }).where(and(eq(depositRequestsTable.id, id), eq(depositRequestsTable.status, "pending"))).returning();
+    if (!row) return false;
+    const wallet = await walletFor(tx, deposit.userId, deposit.currency);
+    await credit(tx, wallet.id, amount);
+    return true;
+  });
+  if (!approved) { res.status(400).json({ success: false, message: "Deposit already processed" }); return; }
 
   const ref = generateDepositRef() + "-CR";
   await db.insert(transactionsTable).values({
@@ -113,12 +110,13 @@ router.post("/admin/deposits/:id/reject", requireAuth, async (req: Authenticated
   if (!deposit) { res.status(404).json({ success: false, message: "Deposit not found" }); return; }
   if (deposit.status !== "pending") { res.status(400).json({ success: false, message: "Deposit already processed" }); return; }
 
-  await db.update(depositRequestsTable).set({
+  const rejected = await db.update(depositRequestsTable).set({
     status: "rejected",
     reviewedBy: req.user!.id,
     reviewedAt: new Date(),
     rejectionReason: reason || "Payment not verified",
-  }).where(eq(depositRequestsTable.id, id));
+  }).where(and(eq(depositRequestsTable.id, id), eq(depositRequestsTable.status, "pending"))).returning();
+  if (rejected.length === 0) { res.status(400).json({ success: false, message: "Deposit already processed" }); return; }
 
   await db.insert(notificationsTable).values({
     userId: deposit.userId,

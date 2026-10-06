@@ -1,4 +1,6 @@
-import { Router, type IRouter, type Request, type Response } from "express";
+import express, { Router, type IRouter, type Request, type Response } from "express";
+import { createLocalUploadURL, localStorageEnabled, openLocalObject, saveLocalUpload } from "../lib/localObjectStore";
+import { canReadObject, registerObject } from "../lib/storedObjects";
 import { Readable } from "stream";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
@@ -13,9 +15,21 @@ router.post("/storage/uploads/request-url", requireAuth, async (req: Authenticat
     return;
   }
 
+  if (localStorageEnabled()) {
+    try {
+      const ticket = createLocalUploadURL(String(contentType));
+      await registerObject(ticket.objectPath, req.user!.id); // the uploader owns the file
+      res.json(ticket);
+    } catch {
+      res.status(400).json({ error: "Unsupported content type. Use JPEG, PNG, WebP or PDF." });
+    }
+    return;
+  }
+
   try {
     const uploadURL = await objectStorageService.getObjectEntityUploadURL();
     const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+    await registerObject(objectPath, req.user!.id); // the uploader owns the file
 
     res.json({ uploadURL, objectPath });
   } catch (err: any) {
@@ -52,7 +66,45 @@ router.get("/storage/public-objects/*path", async (req: Request, res: Response) 
   }
 });
 
+// Local-disk backend: the signed, single-use, 15-minute upload URL handed out by request-url /
+// kyc/upload-url. No login is needed on this PUT — the signed token is the capability.
+router.put("/storage/local-upload/:token", express.raw({ type: () => true, limit: "10mb" }), async (req: Request, res: Response) => {
+  if (!localStorageEnabled()) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  const body = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+  const result = await saveLocalUpload(String(req.params.token), req.headers["content-type"], body);
+  const status = { ok: 200, bad_token: 403, type_mismatch: 415, too_large: 413, bad_content: 415, already_uploaded: 409 }[result];
+  res.status(status).json(result === "ok" ? { success: true } : { success: false, error: result });
+});
+
 router.get("/storage/objects/*path", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  // Authorization first, for BOTH storage backends: the owner or an administrator only. A file that
+  // belongs to someone else (or has no recorded owner) looks nonexistent to everyone else.
+  const requested = "/objects/" + ([] as string[]).concat(req.params.path as string | string[]).join("/");
+  if (!(await canReadObject(requested, req.user!))) {
+    res.status(404).json({ error: "Object not found" });
+    return;
+  }
+
+  if (localStorageEnabled()) {
+    const rel = ([] as string[]).concat(req.params.path as string | string[]).join("/");
+    const id = /^uploads\/([^/]+)$/.exec(rel)?.[1];
+    const obj = id ? await openLocalObject(id) : null;
+    if (!obj) {
+      res.status(404).json({ error: "Object not found" });
+      return;
+    }
+    res.setHeader("Content-Type", obj.contentType);
+    res.setHeader("Content-Length", String(obj.size));
+    res.setHeader("Cache-Control", "private, max-age=300");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Security-Policy", "sandbox; default-src 'none'");
+    obj.stream.pipe(res);
+    return;
+  }
+
   const objectPath = "/objects/" + req.params.path;
 
   try {

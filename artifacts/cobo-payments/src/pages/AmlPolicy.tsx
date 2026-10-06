@@ -6,7 +6,7 @@ export default function AmlPolicy() {
   const sections = [
     {
       title: "1. Introduction & Purpose",
-      content: `IAPAY (Inter-Africa Pay) Ltd ("IAPAY", "we", "our") is committed to preventing money laundering, terrorist financing, and other financial crimes. This Bank Secrecy Act (BSA) and Anti-Money Laundering (AML) Policy establishes the framework, procedures, and controls that IAPAY implements to comply with all applicable federal and state regulations, including the Bank Secrecy Act, the USA PATRIOT Act, and FinCEN regulations governing Money Services Businesses (MSBs).
+      content: `IAPAY (Intra-African Payments) Ltd ("IAPAY", "we", "our") is committed to preventing money laundering, terrorist financing, and other financial crimes. This Bank Secrecy Act (BSA) and Anti-Money Laundering (AML) Policy establishes the framework, procedures, and controls that IAPAY implements to comply with all applicable federal and state regulations, including the Bank Secrecy Act, the USA PATRIOT Act, and FinCEN regulations governing Money Services Businesses (MSBs).
 
 This policy applies to all IAPAY employees, officers, agents, and third-party service providers involved in the processing, transmission, or handling of funds.`
     },
@@ -205,7 +205,7 @@ For compliance inquiries, contact: compliance@iapay.africa`
           <p style={{ fontSize: 13, color: "var(--text-dim)", lineHeight: 1.7 }}>
             For questions about this policy or to report suspicious activity, contact the IAPAY Compliance Team:
             <br />Email: compliance@iapay.africa
-            <br />IAPAY (Inter-Africa Pay) Ltd
+            <br />IAPAY (Intra-African Payments) Ltd
           </p>
         </div>
       </main>
@@ -216,7 +216,7 @@ For compliance inquiries, contact: compliance@iapay.africa`
           <span onClick={() => setLocation("/privacy")} style={{ cursor: "pointer" }}>Privacy Policy</span>
           <span onClick={() => setLocation("/aml-policy")} style={{ cursor: "pointer", color: "var(--gold)" }}>BSA/AML Policy</span>
         </div>
-        <div style={{ marginTop: 12 }}>&copy; {new Date().getFullYear()} IAPAY (Inter-Africa Pay) Ltd. All rights reserved.</div>
+        <div style={{ marginTop: 12 }}>&copy; {new Date().getFullYear()} IAPAY (Intra-African Payments) Ltd. All rights reserved.</div>
       </footer>
     </div>
   );

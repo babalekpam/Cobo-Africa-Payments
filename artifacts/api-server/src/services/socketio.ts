@@ -1,7 +1,7 @@
 import { Server as SocketIOServer } from "socket.io";
 import type { Server as HTTPServer } from "http";
 import { logger } from "../lib/logger.js";
-import { verifyToken } from "../lib/auth.js";
+import { resolveSession } from "../middlewares/requireAuth.js";
 import { allowedOrigins } from "../lib/security.js";
 
 let io: SocketIOServer | null = null;
@@ -15,17 +15,23 @@ export function initSocketIO(httpServer: HTTPServer): SocketIOServer {
   // Authenticate every socket at the handshake: the client sends its JWT via
   // `auth: { token }` (or an Authorization header). The user id comes from the
   // VERIFIED token only — clients can never subscribe to someone else's room.
-  io.use((socket, next) => {
+  io.use(async (socket, next) => {
     const raw =
       (socket.handshake.auth?.token as string | undefined) ||
       (socket.handshake.headers.authorization || "").replace(/^Bearer\s+/i, "");
-    const payload = raw ? verifyToken(raw) : null;
-    if (!payload) {
+    // Same rule as the HTTP API (resolveSession): a valid signature is not enough — the account must
+    // be active RIGHT NOW and the token must not predate its last password change.
+    try {
+      const session = raw ? await resolveSession(raw) : null;
+      if (!session) {
+        next(new Error("Authentication required"));
+        return;
+      }
+      socket.data.userId = session.id;
+      next();
+    } catch {
       next(new Error("Authentication required"));
-      return;
     }
-    socket.data.userId = payload.id;
-    next();
   });
 
   io.on("connection", (socket) => {

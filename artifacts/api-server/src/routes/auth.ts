@@ -4,6 +4,8 @@ import { db, usersTable, walletsTable, transactionsTable, notificationsTable, ky
 import { LoginBody } from "@workspace/api-zod";
 import { hashPassword, comparePassword, signToken } from "../lib/auth";
 import { validatePassword } from "../lib/security.js";
+import { accountIsActive } from "../lib/accounts";
+import { isLockedOut, recordFailedAttempt, clearAttempts, LOCKOUT_MINUTES } from "../lib/lockout.js";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
 import { emailService } from "../services/email";
 import crypto from "crypto";
@@ -74,24 +76,36 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     await db.insert(notificationsTable).values({ userId: user.id, title: "Welcome to IAPAY!", message: "Your account is ready. Please verify your identity to unlock full features.", type: "success" });
   }
   const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, user.id));
-  const token = signToken({ id: user.id, email: user.email, role: user.role });
+  const token = signToken(user);
   await addAuditLog(user.id, "account_created", req.ip);
   emailService.sendWelcomeEmail(user).catch(() => {});
   res.status(201).json({ success: true, token, user: safeUser(user), wallets: wallets.map(w => ({ ...w, balance: Number(w.balance), lockedBalance: Number(w.lockedBalance) })) });
 });
+
+// Compared against when the email is unknown, so a wrong email costs the same time as a wrong password.
+const DUMMY_PASSWORD_HASH = hashPassword(crypto.randomBytes(16).toString("hex"));
 
 router.post("/auth/login", async (req, res): Promise<void> => {
   const parsed = LoginBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid request", message: parsed.error.message }); return; }
   const { email, password } = parsed.data;
   const totp_code = req.body.totp_code;
+  // Per-account lockout (shared by every API instance): 5 wrong passwords or 2FA codes lock sign-in
+  // for 15 minutes, on top of the per-IP rate limit. Unknown emails get the same treatment.
+  const lockKey = `login:${String(email).trim().toLowerCase()}`;
+  if (await isLockedOut(lockKey)) {
+    res.status(429).json({ success: false, message: `Too many failed sign-in attempts. Try again in ${LOCKOUT_MINUTES} minutes.` });
+    return;
+  }
   const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email));
-  if (!user || !comparePassword(password, user.passwordHash)) {
+  const passwordOk = comparePassword(password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
+  if (!user || !passwordOk) {
+    await recordFailedAttempt(lockKey);
     if (user) await addAuditLog(user.id, "login_failed", req.ip, { reason: "invalid_password" });
     res.status(401).json({ success: false, message: "Invalid credentials" });
     return;
   }
-  if (user.status !== "active" && user.isActive === "false") { res.status(401).json({ success: false, message: "Account is suspended" }); return; }
+  if (!accountIsActive(user)) { res.status(401).json({ success: false, message: "Account is suspended" }); return; }
 
   if (user.twoFaEnabled === "true") {
     if (!totp_code) {
@@ -100,13 +114,15 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     }
     const valid = speakeasy.totp.verify({ secret: user.twoFaSecret!, encoding: "base32", token: totp_code, window: 2 });
     if (!valid) {
+      await recordFailedAttempt(lockKey);
       await addAuditLog(user.id, "2fa_failed", req.ip);
       res.status(401).json({ success: false, message: "Invalid 2FA code" });
       return;
     }
   }
 
-  const token = signToken({ id: user.id, email: user.email, role: user.role });
+  await clearAttempts(lockKey);
+  const token = signToken(user);
   const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, user.id));
   await addAuditLog(user.id, "login_success", req.ip, { device: req.headers["user-agent"] });
   res.json({ success: true, token, user: safeUser(user), wallets: wallets.map(w => ({ ...w, balance: Number(w.balance), lockedBalance: Number(w.lockedBalance) })) });
@@ -140,9 +156,24 @@ router.post("/auth/change-password", requireAuth, async (req: AuthenticatedReque
   if (pwErr) { res.status(400).json({ success: false, message: pwErr }); return; }
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id));
   if (!comparePassword(current_password, user.passwordHash)) { res.status(400).json({ success: false, message: "Current password incorrect" }); return; }
-  await db.update(usersTable).set({ passwordHash: hashPassword(new_password) }).where(eq(usersTable.id, req.user!.id));
+  // Bumping the session version logs out every other device; this one gets a fresh token.
+  const [updated] = await db
+    .update(usersTable)
+    .set({ passwordHash: hashPassword(new_password), sessionVersion: sql`${usersTable.sessionVersion} + 1` })
+    .where(eq(usersTable.id, req.user!.id))
+    .returning();
   await addAuditLog(req.user!.id, "password_changed", req.ip);
-  res.json({ success: true, message: "Password changed successfully" });
+  res.json({ success: true, message: "Password changed successfully. Other devices have been signed out.", token: signToken(updated) });
+});
+
+// "Log out everywhere": every token issued so far (including this one) stops working immediately.
+router.post("/auth/logout-all", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+  await db
+    .update(usersTable)
+    .set({ sessionVersion: sql`${usersTable.sessionVersion} + 1` })
+    .where(eq(usersTable.id, req.user!.id));
+  await addAuditLog(req.user!.id, "logout_all_sessions", req.ip);
+  res.json({ success: true, message: "Signed out of all devices" });
 });
 
 router.post("/auth/forgot-password", async (req, res): Promise<void> => {
@@ -180,6 +211,7 @@ router.post("/auth/reset-password", async (req, res): Promise<void> => {
     passwordHash: hashPassword(new_password),
     passwordResetToken: null,
     passwordResetExpires: null,
+    sessionVersion: sql`${usersTable.sessionVersion} + 1`, // a reset revokes every existing session
   }).where(eq(usersTable.id, user.id));
   emailService.sendPasswordChangedEmail(user).catch(() => {});
   await addAuditLog(user.id, "password_reset_completed", req.ip);

@@ -1,12 +1,12 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, and, gte, sql, count } from "drizzle-orm";
 import { db, usersTable, kycDocumentsTable, transactionsTable, auditLogsTable, sanctionsScreeningTable, suspiciousActivityTable, ctrReportsTable, eddReviewsTable } from "@workspace/db";
-import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
+import { requireAuth, requireAdmin, type AuthenticatedRequest } from "../middlewares/requireAuth";
 import { screenAgainstOFAC, assessCountryRisk, HIGH_RISK_COUNTRIES, MEDIUM_RISK_COUNTRIES } from "../lib/ofac";
 
 const router: IRouter = Router();
 
-router.post("/compliance/screen", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+router.post("/compliance/screen", requireAuth, requireAdmin, async (req: AuthenticatedRequest, res): Promise<void> => {
   const { name, country, transaction_ref, screen_type } = req.body;
   if (!name) { res.status(400).json({ success: false, message: "Name is required" }); return; }
 

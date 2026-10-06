@@ -45,7 +45,8 @@ export default function Checkout() {
     try {
       const res = await fetch(`/api/pay/${sessionId}/complete`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        // Signed in to IAPAY? Pay from your wallet. (Without a sign-in only a sandbox accepts a simulated payment.)
+        headers: { "Content-Type": "application/json", ...(localStorage.getItem("iapay_token") ? { Authorization: `Bearer ${localStorage.getItem("iapay_token")}` } : {}) },
         body: JSON.stringify({ email, name, payment_method: "card" }),
       });
       const data = await res.json();
@@ -201,7 +202,7 @@ export default function Checkout() {
         <div style={styles.footer}>
           <span style={{ fontSize: 11, color: "#9A8F75" }}>Secured by</span>
           <span style={{ fontSize: 13, fontWeight: 700, color: "#C98A1A" }}>IAPAY</span>
-          <span style={{ fontSize: 11, color: "#9A8F75" }}>Inter-Africa Pay</span>
+          <span style={{ fontSize: 11, color: "#9A8F75" }}>Intra-African Payments</span>
         </div>
       </div>
     </div>

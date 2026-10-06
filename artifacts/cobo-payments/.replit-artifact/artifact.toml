@@ -1,6 +1,6 @@
 kind = "web"
 previewPath = "/"
-title = "COBO Africa Payments"
+title = "IAPAY"
 version = "1.0.0"
 id = "artifacts/cobo-payments"
 router = "path"

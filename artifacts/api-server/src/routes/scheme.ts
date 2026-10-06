@@ -13,7 +13,11 @@ import {
   settlementBatchesTable,
   schemeDisputesTable,
   notificationsTable,
+  auditLogsTable,
 } from "@workspace/db";
+import { isSafeOutboundUrl } from "../lib/urlSafety.js";
+import { isProduction } from "../lib/security.js";
+import { encryptSecret, generateParticipantSecret, secretBoxAvailable } from "../lib/secretBox.js";
 import type { NextFunction, Response } from "express";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth.js";
 import { idempotencyMiddleware } from "../middlewares/idempotency.js";
@@ -25,14 +29,18 @@ import {
   deleteAlias,
   resolveAlias,
   getHomeParticipant,
+  HOME_PARTICIPANT_CODE,
   ALIAS_TYPES,
 } from "../services/scheme/directory.js";
 import { sendSms } from "../services/sms.js";
 import { emailService } from "../services/email.js";
 import { processInstantPayment } from "../services/scheme/switchEngine.js";
 import { returnSchemeTransfer } from "../services/scheme/returns.js";
-import { closeSettlementCycle, getBatchPositions } from "../services/scheme/settlement.js";
+import { closeSettlementCycle, confirmSettlement, getBatchPositions, settlementRequiresConfirmation } from "../services/scheme/settlement.js";
 import { encodeIapayQr, decodeIapayQr } from "../services/scheme/qrStandard.js";
+import { buildPacs008, buildPacs002 } from "../services/scheme/iso20022.js";
+import { resolveUnresolvedTransfer } from "../services/scheme/externalSwitch.js";
+import { parseEd25519PublicKey } from "../services/scheme/gateway/signing.js";
 
 const router: IRouter = Router();
 
@@ -142,7 +150,16 @@ router.post("/scheme/pay", transferRateLimit, requireAuth, scopeIdempotencyKey, 
   });
 
   if (!result.ok) {
-    res.status(result.status).json({ success: false, message: result.message, code: result.code });
+    // A payment that reached an external bank but is not final (pending/declined) still has a
+    // transfer record: return its reference so the customer can track it.
+    res.status(result.status).json({
+      success: false,
+      message: result.message,
+      code: result.code,
+      ...(result.transfer
+        ? { reference: result.transfer.reference, end_to_end_id: result.transfer.endToEndId, status: result.transfer.status }
+        : {}),
+    });
     return;
   }
 
@@ -185,6 +202,96 @@ router.get("/scheme/transfers/:reference", requireAuth, async (req: Authenticate
     return;
   }
   res.json({ success: true, transfer });
+});
+
+// ---------- Operator reconciliation of unresolved bank payments ----------
+// A payment whose bank outcome is unknown (timeout, outage, interrupted process) keeps the
+// sender's money held. An operator confirms with the bank what actually happened and
+// settles it exactly once: "credited" clears it, "not_credited" refunds the sender.
+
+router.get("/scheme/unresolved", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+  if (!(await requireAdmin(req))) {
+    res.status(403).json({ success: false, message: "Admin access required" });
+    return;
+  }
+  const transfers = await db
+    .select()
+    .from(schemeTransfersTable)
+    .where(eq(schemeTransfersTable.status, "unresolved"))
+    .orderBy(desc(schemeTransfersTable.initiatedAt))
+    .limit(200);
+  res.json({ success: true, transfers });
+});
+
+router.post("/scheme/transfers/:reference/resolve", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+  if (!(await requireAdmin(req))) {
+    res.status(403).json({ success: false, message: "Admin access required" });
+    return;
+  }
+  const { outcome, note } = (req.body ?? {}) as { outcome?: string; note?: string };
+  if ((outcome !== "credited" && outcome !== "not_credited") || typeof note !== "string" || note.trim().length < 5) {
+    res.status(400).json({ success: false, message: 'Provide outcome ("credited" | "not_credited") and a note (min 5 chars) recording the bank confirmation' });
+    return;
+  }
+  const result = await resolveUnresolvedTransfer(String(req.params.reference), outcome, req.user!.id, note.trim());
+  res.status(result.status).json({ success: result.ok, message: result.message, status: result.transfer?.status });
+});
+
+// ISO 20022 view of a transfer (pacs.008 credit transfer / pacs.002 status report) —
+// the format participant banks integrate against. Same access rule as the detail route.
+router.get("/scheme/transfers/:reference/iso20022", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+  const msg = typeof req.query.msg === "string" ? req.query.msg : "pacs.008";
+  if (msg !== "pacs.008" && msg !== "pacs.002") {
+    res.status(400).json({ success: false, message: "msg must be pacs.008 or pacs.002" });
+    return;
+  }
+  const [transfer] = await db
+    .select()
+    .from(schemeTransfersTable)
+    .where(
+      and(
+        eq(schemeTransfersTable.reference, String(req.params.reference)),
+        or(eq(schemeTransfersTable.senderUserId, req.user!.id), eq(schemeTransfersTable.recipientUserId, req.user!.id))
+      )
+    );
+  if (!transfer) {
+    res.status(404).json({ success: false, message: "Transfer not found" });
+    return;
+  }
+
+  const [debtorAgent] = await db.select().from(schemeParticipantsTable).where(eq(schemeParticipantsTable.id, transfer.senderParticipantId));
+  const [creditorAgent] = await db.select().from(schemeParticipantsTable).where(eq(schemeParticipantsTable.id, transfer.recipientParticipantId));
+  const [sender] = transfer.senderUserId ? await db.select().from(usersTable).where(eq(usersTable.id, transfer.senderUserId)) : [];
+  const [recipient] = transfer.recipientUserId ? await db.select().from(usersTable).where(eq(usersTable.id, transfer.recipientUserId)) : [];
+  if (!debtorAgent || !creditorAgent) {
+    res.status(500).json({ success: false, message: "Participant record missing for transfer" });
+    return;
+  }
+
+  const fullName = (u?: { firstName?: string | null; lastName?: string | null; businessName?: string | null }) =>
+    u?.businessName || [u?.firstName, u?.lastName].filter(Boolean).join(" ") || "IAPAY customer";
+  const description = (transfer.metadata as { description?: string | null } | null)?.description ?? null;
+  const iso = {
+    reference: transfer.reference,
+    endToEndId: transfer.endToEndId,
+    amount: Number(transfer.amount),
+    currency: transfer.currency,
+    recipientAmount: Number(transfer.recipientAmount),
+    recipientCurrency: transfer.recipientCurrency,
+    fxRate: transfer.fxRate ? Number(transfer.fxRate) : null,
+    initiatedAt: transfer.initiatedAt,
+    clearedAt: transfer.clearedAt,
+    description,
+    creditorAlias: transfer.recipientAlias,
+    debtor: { name: fullName(sender), agentName: debtorAgent.name, participantCode: debtorAgent.code, country: debtorAgent.country },
+    creditor: { name: fullName(recipient), agentName: creditorAgent.name, participantCode: creditorAgent.code, country: creditorAgent.country },
+  };
+
+  const xml =
+    msg === "pacs.008"
+      ? buildPacs008(iso)
+      : buildPacs002(iso, transfer.status === "rejected" ? "RJCT" : "ACSC", transfer.statusReason ?? undefined);
+  res.type("application/xml").send(xml);
 });
 
 // ---------- Returns & disputes (Pix devolução + MED equivalent) ----------
@@ -351,10 +458,16 @@ router.get("/scheme/participants", requireAuth, async (_req: AuthenticatedReques
   });
 });
 
-router.get("/scheme/stats", requireAuth, async (_req: AuthenticatedRequest, res): Promise<void> => {
+router.get("/scheme/stats", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
   const participants = await db.select().from(schemeParticipantsTable);
-  const transfers = await db.select().from(schemeTransfersTable);
   const countries = new Set(participants.map((p) => p.country));
+  // Network coverage (how many institutions, in how many countries) is shown to every member.
+  // Network-wide payment counts and volumes are commercially sensitive: administrators only.
+  if (!(await requireAdmin(req))) {
+    res.json({ success: true, stats: { participants: participants.length, countries: countries.size } });
+    return;
+  }
+  const transfers = await db.select().from(schemeTransfersTable);
   const totalVolume = transfers.reduce((s, t) => s + Number(t.amount), 0);
   res.json({
     success: true,
@@ -370,27 +483,190 @@ router.get("/scheme/stats", requireAuth, async (_req: AuthenticatedRequest, res)
 
 // ---------- Settlement operations (scheme operator / admin) ----------
 
+// ---------- Operator onboarding of participants (banks, MNOs, PSPs) ----------
+// Everything an operator needs to bring an institution onto the scheme, with no server
+// restart or environment edit: create it (a gateway secret is generated and shown ONCE),
+// set its net-debit cap and endpoint, suspend/reactivate it, rotate its secret. Secrets are
+// stored AES-256-GCM encrypted (GATEWAY_SECRETS_KEY) and are never returned again.
+
+const PARTICIPANT_TYPES = ["bank", "mobile_money", "fintech", "central_bank"];
+
+function adminParticipantView(p: typeof schemeParticipantsTable.$inferSelect) {
+  return {
+    id: p.id,
+    code: p.code,
+    name: p.name,
+    type: p.type,
+    country: p.country,
+    currency: p.currency,
+    status: p.status,
+    api_url: p.apiUrl,
+    net_debit_cap_usd: p.netDebitCapUsd === null ? null : Number(p.netDebitCapUsd),
+    has_gateway_secret: !!p.gatewaySecretEnc,
+    signature_method: p.gatewayPublicKey ? "ed25519" : "hmac-sha256",
+    secret_rotated_at: p.secretRotatedAt,
+    joined_at: p.joinedAt,
+  };
+}
+
+async function adminAudit(adminId: number, action: string, meta: Record<string, unknown>): Promise<void> {
+  await db.insert(auditLogsTable).values({ userId: adminId, action, ip: "admin", meta });
+}
+
+function validApiUrl(url: unknown): url is string {
+  return typeof url === "string" && isSafeOutboundUrl(url, { requireHttps: isProduction() });
+}
+
+function parseCap(value: unknown): number | null | undefined {
+  if (value === null) return null;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1e12) return undefined;
+  return Math.round(value * 100) / 100;
+}
+
+router.get("/scheme/admin/participants", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+  if (!(await requireAdmin(req))) { res.status(403).json({ success: false, message: "Admin access required" }); return; }
+  const rows = await db.select().from(schemeParticipantsTable).orderBy(schemeParticipantsTable.code);
+  res.json({ success: true, participants: rows.map(adminParticipantView) });
+});
+
 router.post("/scheme/participants", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
   if (!(await requireAdmin(req))) { res.status(403).json({ success: false, message: "Admin access required" }); return; }
-  const { code, name, type, country, currency, api_url } = req.body as Record<string, string>;
-  if (!code || !name || !country || !currency) {
-    res.status(400).json({ success: false, message: "code, name, country and currency are required" });
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const code = typeof b.code === "string" ? b.code.trim().toUpperCase() : "";
+  const name = typeof b.name === "string" ? b.name.trim() : "";
+  const type = typeof b.type === "string" ? b.type : "bank";
+  const country = typeof b.country === "string" ? b.country.trim().toUpperCase() : "";
+  const currency = typeof b.currency === "string" ? b.currency.trim().toUpperCase() : "";
+  if (!/^[A-Z0-9]{3,20}$/.test(code) || code === HOME_PARTICIPANT_CODE) {
+    res.status(400).json({ success: false, message: "code must be 3-20 characters A-Z/0-9 and not the operator's own code" });
     return;
   }
-  const [existing] = await db.select().from(schemeParticipantsTable).where(eq(schemeParticipantsTable.code, code.toUpperCase()));
+  if (name.length < 2 || name.length > 100 || !PARTICIPANT_TYPES.includes(type) || !/^[A-Z]{2}$/.test(country) || !/^[A-Z]{3}$/.test(currency)) {
+    res.status(400).json({ success: false, message: `name, country (ISO-2), currency (ISO-4217) are required; type one of ${PARTICIPANT_TYPES.join(", ")}` });
+    return;
+  }
+  if (b.api_url !== undefined && b.api_url !== null && !validApiUrl(b.api_url)) {
+    res.status(400).json({ success: false, message: "api_url must be a public https URL" });
+    return;
+  }
+  const cap = b.net_debit_cap_usd === undefined ? null : parseCap(b.net_debit_cap_usd);
+  if (cap === undefined) {
+    res.status(400).json({ success: false, message: "net_debit_cap_usd must be a number >= 0" });
+    return;
+  }
+  const [existing] = await db.select().from(schemeParticipantsTable).where(eq(schemeParticipantsTable.code, code));
   if (existing) { res.status(409).json({ success: false, message: "Participant code already exists" }); return; }
+
+  const secret = secretBoxAvailable() ? generateParticipantSecret() : null;
   const [participant] = await db
     .insert(schemeParticipantsTable)
-    .values({ code: code.toUpperCase(), name, type: type || "bank", country: country.toUpperCase(), currency: currency.toUpperCase(), apiUrl: api_url || null })
+    .values({
+      code,
+      name,
+      type,
+      country,
+      currency,
+      apiUrl: (b.api_url as string | null | undefined) ?? null,
+      netDebitCapUsd: cap === null ? null : String(cap),
+      gatewaySecretEnc: secret ? encryptSecret(secret) : null,
+      secretRotatedAt: secret ? new Date() : null,
+    })
     .returning();
-  res.status(201).json({ success: true, participant });
+  await adminAudit(req.user!.id, "iapay_participant_created", { code, type, country, currency, cap, secretIssued: !!secret });
+  res.status(201).json({
+    success: true,
+    participant: adminParticipantView(participant),
+    // Shown exactly once. Hand it to the institution over a secure channel.
+    gateway_secret: secret,
+    note: secret
+      ? "Store this gateway secret now; it cannot be shown again. The participant cannot send until you set net_debit_cap_usd."
+      : "No gateway secret was issued: set GATEWAY_SECRETS_KEY (>= 32 chars) on the server, then call rotate-secret.",
+  });
+});
+
+router.put("/scheme/participants/:code", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+  if (!(await requireAdmin(req))) { res.status(403).json({ success: false, message: "Admin access required" }); return; }
+  const code = String(req.params.code).toUpperCase();
+  const [p] = await db.select().from(schemeParticipantsTable).where(eq(schemeParticipantsTable.code, code));
+  if (!p) { res.status(404).json({ success: false, message: "Participant not found" }); return; }
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const patch: Partial<typeof schemeParticipantsTable.$inferInsert> = {};
+  if (b.net_debit_cap_usd !== undefined) {
+    const cap = parseCap(b.net_debit_cap_usd);
+    if (cap === undefined) { res.status(400).json({ success: false, message: "net_debit_cap_usd must be a number >= 0 or null" }); return; }
+    patch.netDebitCapUsd = cap === null ? null : String(cap);
+  }
+  if (b.status !== undefined) {
+    if ((b.status !== "active" && b.status !== "suspended") || code === HOME_PARTICIPANT_CODE) {
+      res.status(400).json({ success: false, message: 'status must be "active" or "suspended" (the operator itself cannot be suspended)' });
+      return;
+    }
+    patch.status = b.status;
+  }
+  if (b.api_url !== undefined) {
+    if (b.api_url !== null && !validApiUrl(b.api_url)) { res.status(400).json({ success: false, message: "api_url must be a public https URL or null" }); return; }
+    patch.apiUrl = b.api_url as string | null;
+  }
+  if (b.public_key_pem !== undefined) {
+    // Register the bank's Ed25519 public key: from then on it must sign with it (HMAC refused).
+    // null switches the participant back to its shared secret.
+    if (code === HOME_PARTICIPANT_CODE) { res.status(400).json({ success: false, message: "The operator signs with GATEWAY_SIGNING_PRIVATE_KEY" }); return; }
+    if (b.public_key_pem !== null && (typeof b.public_key_pem !== "string" || !parseEd25519PublicKey(b.public_key_pem))) {
+      res.status(400).json({ success: false, message: "public_key_pem must be an Ed25519 public key in PEM (SPKI) format, or null" });
+      return;
+    }
+    patch.gatewayPublicKey = b.public_key_pem as string | null;
+  }
+  if (Object.keys(patch).length === 0) { res.status(400).json({ success: false, message: "Nothing to update" }); return; }
+  const [updated] = await db.update(schemeParticipantsTable).set(patch).where(eq(schemeParticipantsTable.id, p.id)).returning();
+  await adminAudit(req.user!.id, "iapay_participant_updated", { code, changes: Object.keys(patch), cap: b.net_debit_cap_usd, status: b.status, signature_method: patch.gatewayPublicKey === undefined ? undefined : patch.gatewayPublicKey ? "ed25519" : "hmac-sha256" });
+  res.json({ success: true, participant: adminParticipantView(updated) });
+});
+
+router.post("/scheme/participants/:code/rotate-secret", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+  if (!(await requireAdmin(req))) { res.status(403).json({ success: false, message: "Admin access required" }); return; }
+  const code = String(req.params.code).toUpperCase();
+  if (code === HOME_PARTICIPANT_CODE) { res.status(400).json({ success: false, message: "The operator has no gateway secret" }); return; }
+  if (!secretBoxAvailable()) {
+    res.status(503).json({ success: false, message: "GATEWAY_SECRETS_KEY (>= 32 chars) is not configured on the server" });
+    return;
+  }
+  const [p] = await db.select().from(schemeParticipantsTable).where(eq(schemeParticipantsTable.code, code));
+  if (!p) { res.status(404).json({ success: false, message: "Participant not found" }); return; }
+  const secret = generateParticipantSecret();
+  await db.update(schemeParticipantsTable).set({ gatewaySecretEnc: encryptSecret(secret), secretRotatedAt: new Date() }).where(eq(schemeParticipantsTable.id, p.id));
+  await adminAudit(req.user!.id, "iapay_participant_secret_rotated", { code });
+  res.json({
+    success: true,
+    gateway_secret: secret,
+    note: "The previous secret stopped working immediately. Store this one now; it cannot be shown again.",
+  });
 });
 
 router.post("/scheme/settlement/close", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
   if (!(await requireAdmin(req))) { res.status(403).json({ success: false, message: "Admin access required" }); return; }
   const summary = await closeSettlementCycle();
   if (!summary) { res.json({ success: true, message: "No open settlement cycle" }); return; }
-  res.json({ success: true, message: `Settlement cycle closed — ${summary.transferCount} transfers netted`, batch: summary.batch, positions: summary.positions });
+  res.json({
+    success: true,
+    message: summary.batch.status === "settled"
+      ? `Settlement cycle closed and settled — ${summary.transferCount} transfers netted`
+      : `Settlement cycle closed — ${summary.transferCount} transfers netted. Pay the net positions, then confirm with the settlement reference.`,
+    batch: summary.batch,
+    positions: summary.positions,
+  });
+});
+
+// Phase 2 (live installations): record that the net positions were actually paid. Only then are the
+// batch's transfers settled and each bank's exposure released. Exactly once.
+router.post("/scheme/settlement/batches/:id/confirm", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {
+  if (!(await requireAdmin(req))) { res.status(403).json({ success: false, message: "Admin access required" }); return; }
+  const reference = typeof req.body?.settlement_reference === "string" ? req.body.settlement_reference.trim().slice(0, 200) : "";
+  if (!reference) { res.status(400).json({ success: false, message: "settlement_reference (the settlement bank / RTGS reference) is required" }); return; }
+  const batch = await confirmSettlement(Number(req.params.id), { reference, confirmedBy: req.user!.id });
+  if (!batch) { res.status(409).json({ success: false, message: "Batch not found or not awaiting settlement" }); return; }
+  await adminAudit(req.user!.id, "iapay_settlement_confirmed", { batch_id: batch.id, batch_ref: batch.batchRef, settlement_reference: reference });
+  res.json({ success: true, message: "Settlement confirmed; exposure released", batch, requires_confirmation: settlementRequiresConfirmation() });
 });
 
 router.get("/scheme/settlement/batches", requireAuth, async (req: AuthenticatedRequest, res): Promise<void> => {

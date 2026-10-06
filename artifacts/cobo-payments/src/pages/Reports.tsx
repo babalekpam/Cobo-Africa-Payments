@@ -67,7 +67,7 @@ export default function Reports() {
 
   const exportReport = () => {
     const lines = [
-      "IAPAY (Inter-Africa Pay) - Report",
+      "IAPAY (Intra-African Payments) - Report",
       `Generated: ${new Date().toLocaleString()}`,
       "",
       "=== Summary ===",
@@ -86,7 +86,7 @@ export default function Reports() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `cobo-report-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.download = `iapay-report-${new Date().toISOString().slice(0, 10)}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   };

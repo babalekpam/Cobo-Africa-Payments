@@ -12,7 +12,7 @@ function TermsContent() {
       </div>
       <div className="card-lg" style={{ maxWidth: 720, lineHeight: 1.8, fontSize: 14, color: "var(--text)" }}>
         <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 18, margin: "0 0 12px", color: "var(--gold)" }}>1. Acceptance of Terms</h3>
-        <p style={{ marginBottom: 20 }}>By accessing or using the IAPAY (Inter-Africa Pay) platform ("Service"), you agree to be bound by these Terms of Service. If you do not agree, do not use the Service.</p>
+        <p style={{ marginBottom: 20 }}>By accessing or using the IAPAY (Intra-African Payments) platform ("Service"), you agree to be bound by these Terms of Service. If you do not agree, do not use the Service.</p>
         <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 18, margin: "0 0 12px", color: "var(--gold)" }}>2. Eligibility</h3>
         <p style={{ marginBottom: 20 }}>You must be at least 18 years old and legally able to enter into contracts. You must provide accurate and complete registration information.</p>
         <h3 style={{ fontFamily: "var(--font-heading)", fontWeight: 700, fontSize: 18, margin: "0 0 12px", color: "var(--gold)" }}>3. Account & KYC</h3>
